@@ -79,16 +79,11 @@ fn impl_method(
         },
     });
 
-    match sig.asyncness {
-        Some(_) => quote! {
-            #sig {
-                self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident(#(#parameters),*).await
-            }
-        },
-        None => quote! {
-            #sig {
-                self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident(#(#parameters),*)
-            }
-        },
+    let dot_await = sig.asyncness.map(|_| quote! { .await });
+
+    quote! {
+        #sig {
+            self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident(#(#parameters),*) #dot_await
+        }
     }
 }
