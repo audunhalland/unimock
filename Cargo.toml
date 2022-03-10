@@ -1,0 +1,16 @@
+[package]
+name = "mocpose"
+version = "0.0.1"
+edition = "2021"
+authors = ["Audun Halland <audun.halldand@pm.me>"]
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mocpose_macros = { path = "mocpose_macros", version = "0.0.1" }
+
+[dev-dependencies]
+mockall = "0.11"
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }

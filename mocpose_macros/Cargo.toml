@@ -1,0 +1,17 @@
+[package]
+name = "mocpose_macros"
+version = "0.0.1"
+authors = ["Audun Halland <audun.halldand@pm.me>"]
+edition = "2021"
+license = "MIT"
+description = "Procedural macros used by mocpose"
+repository = "https://github.com/audunhalland/mocpose/"
+keywords = []
+
+[dependencies]
+syn = { version = "1.0.75", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
+
+[lib]
+proc-macro = true
