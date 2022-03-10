@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use quote::quote;
+use syn::spanned::Spanned;
 
 extern crate proc_macro;
 
@@ -12,7 +13,6 @@ pub fn mocpose(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    // let attr = syn::parse_macro_input!(attr as EntraitAttr);
     let item_trait = syn::parse_macro_input!(input as syn::ItemTrait);
 
     let trait_ident = &item_trait.ident;
@@ -46,11 +46,11 @@ pub fn mocpose(
     });
 
     let output = quote! {
-        #[mockall::automock]
+        #[::mockall::automock]
         #item_trait
 
         #(#impl_attributes)*
-        impl #trait_ident for mocpose::Mocpose {
+        impl #trait_ident for ::mocpose::Mocpose {
             #(#method_impls)*
         }
     };
@@ -69,15 +69,25 @@ fn impl_method(
 
     let method_ident = &sig.ident;
 
+    let parameters = sig.inputs.iter().filter_map(|fn_arg| match fn_arg {
+        syn::FnArg::Receiver(_) => None,
+        syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
+            syn::Pat::Ident(ident) => Some(quote! { #ident }),
+            _ => {
+                Some(syn::Error::new(pat_type.span(), "Unprocessable argument").to_compile_error())
+            }
+        },
+    });
+
     match sig.asyncness {
         Some(_) => quote! {
             #sig {
-                self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident().await
+                self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident(#(#parameters),*).await
             }
         },
         None => quote! {
             #sig {
-                self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident()
+                self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident(#(#parameters),*)
             }
         },
     }

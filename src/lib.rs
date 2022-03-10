@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 // Composed mocks
 pub use mocpose_macros::mocpose;
 
@@ -19,8 +21,7 @@ impl Mocpose {
             f(m);
         } else {
             self.insert_default::<M>();
-            let m = self.find_mut::<M>().unwrap();
-            f(m);
+            f(self.find_mut().unwrap());
         }
         self
     }
