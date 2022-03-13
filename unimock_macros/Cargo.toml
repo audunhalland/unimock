@@ -1,10 +1,10 @@
 [package]
-name = "mocpose_macros"
-version = "0.0.1"
+name = "unimock_macros"
+version = "0.1.0"
 authors = ["Audun Halland <audun.halldand@pm.me>"]
 edition = "2021"
 license = "MIT"
-description = "Procedural macros used by mocpose"
+description = "Procedural macros used by unimock"
 repository = "https://github.com/audunhalland/mocpose/"
 keywords = []
 
@@ -12,6 +12,9 @@ keywords = []
 syn = { version = "1.0.75", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
+
+[dev-dependencies]
+mockall = "0.11"
 
 [lib]
 proc-macro = true

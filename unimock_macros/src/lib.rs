@@ -1,3 +1,5 @@
+//! The unimock procedural macro.
+
 #![forbid(unsafe_code)]
 
 use quote::quote;
@@ -6,10 +8,12 @@ use syn::spanned::Spanned;
 extern crate proc_macro;
 
 ///
-/// Implement some trait for Mocpose.
+///
+/// # Attributes
+/// currently no attribute parameters are supported by this macro.
 ///
 #[proc_macro_attribute]
-pub fn mocpose(
+pub fn unimock(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
@@ -50,12 +54,10 @@ pub fn mocpose(
         #item_trait
 
         #(#impl_attributes)*
-        impl #trait_ident for ::mocpose::Mocpose {
+        impl #trait_ident for ::unimock::Unimock {
             #(#method_impls)*
         }
     };
-
-    // println!("{output}");
 
     proc_macro::TokenStream::from(output)
 }
@@ -83,7 +85,7 @@ fn impl_method(
 
     quote! {
         #sig {
-            self.get_trait::<#mock_ident>(#trait_name_literal).#method_ident(#(#parameters),*) #dot_await
+            self.get::<#mock_ident>(#trait_name_literal).#method_ident(#(#parameters),*) #dot_await
         }
     }
 }
