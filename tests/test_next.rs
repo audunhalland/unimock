@@ -16,7 +16,9 @@ fn owned_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &Owned_foo.mock(|any| { any.call(|_| true).answers(|(a, b)| format!("{a}{b}")) }),
+            &Owned_foo.mock(|each| {
+                each.call(matching!(_)).answers(|(a, b)| format!("{a}{b}"));
+            }),
             "a",
             "b",
         )
@@ -38,7 +40,9 @@ fn referenced_works() {
     assert_eq!(
         "answer",
         takes_referenced(
-            &Referenced_foo.mock(|any| { any.call(matching!("a")).answers(|_| "answer") }),
+            &Referenced_foo.mock(|each| {
+                each.call(matching!("a")).answers(|_| "answer");
+            }),
             "a",
         )
     );
@@ -64,13 +68,22 @@ fn test_join() {
     assert_eq!(
         "success",
         takes_single_multi(&Unimock::union([
-            SingleArg_method1.mock(|any| {
-                any.call(matching!("b")).once().answers(|_| "B");
+            SingleArg_method1.mock(|each| {
+                each.call(matching!("b")).answers(|_| "B").once();
             }),
-            MultiArg_method2.mock(|any| {
-                any.call(matching!("a", "b")).never().answers(|_| "fail");
-                any.call(matching!("B", "B")).once().answers(|_| "success");
+            MultiArg_method2.mock(|each| {
+                each.call(matching!("a", _)).never().answers(|_| "fail");
+                each.call(matching!("B", "B")).answers(|_| "success").once();
             }),
         ]))
     );
 }
+
+// natural language
+// each call matching x returns y
+// each call matching x once returns y << BAD GRAMMAR
+// every call returns y
+
+// it returns x when matching y << BAD ORDER
+
+//

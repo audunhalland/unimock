@@ -1,88 +1,87 @@
-use crate::verify::*;
+use crate::counter::*;
 use crate::*;
 
-/// Builder for setting up a mock interaction
-pub struct MockBuilder<M: Mock> {
-    _sig: std::marker::PhantomData<M>,
-    candidates: Vec<MockCandidate<M>>,
+///
+/// Builder for creating call pattern that will be recognized on a mock.
+///
+pub struct Each<M: Mock> {
+    patterns: Vec<CallPattern<M>>,
 }
 
-impl<M: Mock + 'static> MockBuilder<M> {
+impl<M: Mock + 'static> Each<M> {
     pub(crate) fn new() -> Self {
-        Self {
-            _sig: std::marker::PhantomData,
-            candidates: vec![],
-        }
+        Self { patterns: vec![] }
     }
 
-    pub fn call<'b, F>(&'b mut self, matcher: F) -> CallBuilder<'b, M>
+    /// Set up a call pattern.
+    pub fn call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
     where
         F: (for<'i> Fn(&M::Args<'i>) -> bool) + Send + Sync + 'static,
     {
-        let candidate_index = self.candidates.len();
-        self.candidates.push(MockCandidate {
-            arg_matcher: Some(Box::new(matcher)),
-            count_verifier: None,
-            answer_factory: None,
+        let pat_index = self.patterns.len();
+        self.patterns.push(CallPattern {
+            pat_index,
+            arg_matcher: Some(Box::new(matching)),
+            call_counter: counter::CallCounter::new(counter::CountExpectation::None),
+            output_factory: None,
         });
 
-        CallBuilder {
-            candidate: self.candidates.last_mut().unwrap(),
-            candidate_index,
+        Call {
+            pattern: self.patterns.last_mut().unwrap(),
         }
     }
 
     pub(crate) fn to_mock_impl(self) -> MockImpl<M> {
         MockImpl {
-            candidates: self.candidates,
+            patterns: self.patterns,
         }
     }
 }
 
-pub struct CallBuilder<'b, M: Mock> {
-    candidate: &'b mut MockCandidate<M>,
-    candidate_index: usize,
+pub struct Call<'b, M: Mock> {
+    pattern: &'b mut CallPattern<M>,
 }
 
-impl<'b, M: Mock + 'static> CallBuilder<'b, M> {
-    /// Expect this mock candidate to never be called.
-    pub fn never(mut self) -> Self {
-        self.setup_count_expectation(CountExpectation::Exactly(0));
-        self
-    }
-
-    /// Expect this mock candidate to be called exactly once.
-    pub fn once(mut self) -> Self {
-        self.setup_count_expectation(CountExpectation::Exactly(1));
-        self
-    }
-
-    /// Expect this mock candidate to be called exactly the specified number of times.
-    pub fn times(mut self, times: usize) -> Self {
-        self.setup_count_expectation(CountExpectation::Exactly(times));
-        self
-    }
-
-    /// Expect this mock candidate to be called at least the specified number of times.
-    pub fn at_least(mut self, times: usize) -> Self {
-        self.setup_count_expectation(CountExpectation::AtLeast(times));
-        self
-    }
-
-    /// Specify the mock candidate's answer by invoking the given closure that
+impl<'b, M: Mock + 'static> Call<'b, M> {
+    /// Specify the call pattern's answer by invoking the given closure that
     /// may compute it based on input parameters.
-    pub fn answers<F>(mut self, f: F)
+    pub fn answers<F>(self, f: F) -> Self
     where
         F: (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync + 'static,
     {
-        self.candidate.answer_factory = Some(Box::new(f));
+        self.pattern.output_factory = Some(Box::new(f));
+        self
     }
 
-    fn setup_count_expectation(&mut self, expectation: CountExpectation) {
-        self.candidate.count_verifier = Some(CountVerifier::new(
-            M::NAME,
-            self.candidate_index,
-            expectation,
-        ));
+    /// Expect this call pattern to never be called.
+    pub fn never(self) -> Self {
+        self.pattern
+            .call_counter
+            .set_expectation(CountExpectation::Exactly(0));
+        self
+    }
+
+    /// Expect this call pattern to be called exactly once.
+    pub fn once(self) -> Self {
+        self.pattern
+            .call_counter
+            .set_expectation(CountExpectation::Exactly(1));
+        self
+    }
+
+    /// Expect this call pattern to be called exactly the specified number of times.
+    pub fn times(self, times: usize) -> Self {
+        self.pattern
+            .call_counter
+            .set_expectation(CountExpectation::Exactly(times));
+        self
+    }
+
+    /// Expect this call pattern to be called at least the specified number of times.
+    pub fn at_least(self, times: usize) -> Self {
+        self.pattern
+            .call_counter
+            .set_expectation(CountExpectation::AtLeast(times));
+        self
     }
 }

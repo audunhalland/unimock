@@ -54,7 +54,7 @@
 #![feature(generic_associated_types)]
 
 mod builders;
-mod verify;
+mod counter;
 
 pub use builders::*;
 
@@ -254,17 +254,17 @@ pub trait Mock: Sized {
     fn mock<F>(self, f: F) -> Unimock
     where
         Self: 'static,
-        F: FnOnce(&mut MockBuilder<Self>),
+        F: FnOnce(&mut Each<Self>),
     {
-        let mut builder = MockBuilder::<Self>::new();
-        f(&mut builder);
+        let mut each = Each::<Self>::new();
+        f(&mut each);
 
         Unimock {
             fallback_mode: FallbackMode::Panic,
             mocks: HashMap::new(),
             impls: [(
                 TypeId::of::<Self>(),
-                DynImpl::Mock(Box::new(builder.to_mock_impl())),
+                DynImpl::Mock(Box::new(each.to_mock_impl())),
             )]
             .into(),
         }
@@ -332,30 +332,32 @@ enum DynImpl {
 }
 
 pub struct MockImpl<M: Mock> {
-    candidates: Vec<MockCandidate<M>>,
+    patterns: Vec<CallPattern<M>>,
 }
 
 impl<M: Mock> MockImpl<M> {
     pub fn invoke<'i>(&self, args: M::Args<'i>) -> M::Output {
-        if self.candidates.is_empty() {
-            panic!("No registered mock implementation for {}", M::NAME);
+        if self.patterns.is_empty() {
+            panic!("No registered call patterns for {}", M::NAME);
         }
 
-        for candidate in self.candidates.iter() {
-            if let Some(arg_matcher) = candidate.arg_matcher.as_ref() {
+        for pattern in self.patterns.iter() {
+            if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
                 if !arg_matcher(&args) {
                     continue;
                 }
             }
 
-            if let Some(count_verifier) = candidate.count_verifier.as_ref() {
-                count_verifier.tick();
-            }
+            pattern.call_counter.tick();
 
-            if let Some(answer_factory) = candidate.answer_factory.as_ref() {
-                return answer_factory(args);
+            if let Some(output_factory) = pattern.output_factory.as_ref() {
+                return output_factory(args);
             } else {
-                panic!("No answer for call to {}(..)", M::NAME);
+                panic!(
+                    "No output available for matching call to {}[#{}]",
+                    M::NAME,
+                    pattern.pat_index
+                );
             }
         }
 
@@ -363,11 +365,17 @@ impl<M: Mock> MockImpl<M> {
     }
 }
 
-pub(crate) struct MockCandidate<M: Mock> {
-    pub(crate) arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Args<'i>) -> bool) + Send + Sync>>,
-    pub(crate) count_verifier: Option<verify::CountVerifier>,
-    pub(crate) answer_factory:
-        Option<Box<dyn (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync>>,
+pub(crate) struct CallPattern<M: Mock> {
+    pat_index: usize,
+    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Args<'i>) -> bool) + Send + Sync>>,
+    pub call_counter: counter::CallCounter,
+    pub output_factory: Option<Box<dyn (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync>>,
+}
+
+impl<M: Mock> Drop for CallPattern<M> {
+    fn drop(&mut self) {
+        self.call_counter.verify(M::NAME, self.pat_index);
+    }
 }
 
 ///
