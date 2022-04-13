@@ -25,7 +25,7 @@ fn owned_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &Unimock::new().mock_fn(OwnedSig, |(a, b)| format!("{a}{b}")),
+            &Unimock::new().mock_fn(Owned_owned, |(a, b)| format!("{a}{b}")),
             "a",
             "b",
         )
@@ -35,8 +35,7 @@ fn owned_works() {
 #[unimock_next]
 trait Referenced {
     fn referenced(&self, a: &str) -> &str;
-    // BUG:
-    //fn referenced2(&self, a: &str, b: &str) -> &str;
+    fn referenced2(&self, a: &str, b: &str) -> &str;
 }
 
 fn takes_referenced<'s>(r: &'s impl Referenced, a: &str) -> &'s str {
@@ -48,7 +47,7 @@ fn referenced_works() {
     assert_eq!(
         "answer",
         takes_referenced(
-            &Unimock::new().mock_fn(ReferencedSig, |arg| match arg {
+            &Unimock::new().mock_fn(Referenced_referenced, |arg| match arg {
                 "a" => "answer",
                 _ => "",
             }),
@@ -59,12 +58,12 @@ fn referenced_works() {
 
 #[unimock_next]
 trait SingleArg {
-    fn single_arg(&self, a: &str) -> &str;
+    fn method(&self, a: &str) -> &str;
 }
 
 #[unimock_next]
 trait MultiArg {
-    fn multi_arg(&self, a: &str, b: &str) -> &str;
+    fn method(&self, a: &str, b: &str) -> &str;
 }
 
 fn takes_single_multi(_: &(impl SingleArg + MultiArg)) {}
@@ -73,10 +72,10 @@ fn takes_single_multi(_: &(impl SingleArg + MultiArg)) {}
 fn mock_builder() {
     takes_single_multi(
         &[
-            MultiArgSig.mock(|any| {
+            MultiArg_method.mock(|any| {
                 any.call(matching! { ("a", "b") }).once().answers(|_| "A");
             }),
-            SingleArgSig.mock(|any| {
+            SingleArg_method.mock(|any| {
                 any.call(matching! { "b" }).once().answers(|_| "B");
             }),
         ]

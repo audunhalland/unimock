@@ -39,25 +39,14 @@ pub fn unimock_next(
             syn::AttrStyle::Inner(_) => None,
         });
 
+    let methods = extract_methods(&item_trait);
     let input_lifetime = syn::Lifetime::new("'__i", proc_macro2::Span::call_site());
-    let signature_ident = quote::format_ident!("{}Sig", item_trait.ident);
-    let trait_name_literal = syn::LitStr::new(&format!("{trait_ident}"), trait_ident.span());
 
-    let signature_defs = item_trait.items.iter().filter_map(|item| match item {
-        syn::TraitItem::Method(method) => Some(def_unimock_signature(
-            method,
-            &signature_ident,
-            &input_lifetime,
-        )),
-        _ => None,
-    });
+    let signature_defs = methods
+        .iter()
+        .map(|method| def_unimock_signature(method, &input_lifetime));
 
-    let method_impls = item_trait.items.iter().filter_map(|item| match item {
-        syn::TraitItem::Method(method) => {
-            Some(impl_method(method, &signature_ident, &trait_name_literal))
-        }
-        _ => None,
-    });
+    let method_impls = methods.iter().map(|method| impl_method(method));
 
     let output = quote! {
         #item_trait
@@ -75,12 +64,40 @@ pub fn unimock_next(
     proc_macro::TokenStream::from(output)
 }
 
+struct Method<'s> {
+    method: &'s syn::TraitItemMethod,
+    signature_ident: syn::Ident,
+    signature_name: syn::LitStr,
+}
+
+fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> Vec<Method<'s>> {
+    let mut ret = vec![];
+
+    for item in item_trait.items.iter() {
+        if let syn::TraitItem::Method(method) = item {
+            let signature_ident = quote::format_ident!("{}_{}", item_trait.ident, method.sig.ident);
+            let signature_name = syn::LitStr::new(
+                &format!("{}::{}, ", item_trait.ident, method.sig.ident),
+                item_trait.ident.span(),
+            );
+
+            ret.push(Method {
+                method,
+                signature_ident,
+                signature_name,
+            })
+        }
+    }
+
+    ret
+}
+
 fn def_unimock_signature(
-    method: &syn::TraitItemMethod,
-    signature_ident: &syn::Ident,
+    method: &Method,
     input_lifetime: &syn::Lifetime,
 ) -> proc_macro2::TokenStream {
-    let sig = &method.sig;
+    let sig = &method.method.sig;
+    let signature_ident = &method.signature_ident;
 
     fn arg_ty(ty: &syn::Type, input_lifetime: &syn::Lifetime) -> proc_macro2::TokenStream {
         match ty {
@@ -112,6 +129,7 @@ fn def_unimock_signature(
     };
 
     quote! {
+        #[allow(non_camel_case_types)]
         struct #signature_ident;
 
         impl ::unimock::Signature for #signature_ident {
@@ -121,12 +139,10 @@ fn def_unimock_signature(
     }
 }
 
-fn impl_method(
-    method: &syn::TraitItemMethod,
-    signature_ident: &syn::Ident,
-    api_name: &syn::LitStr,
-) -> proc_macro2::TokenStream {
-    let sig = &method.sig;
+fn impl_method(method: &Method) -> proc_macro2::TokenStream {
+    let sig = &method.method.sig;
+    let signature_ident = &method.signature_ident;
+    let signature_name = &method.signature_name;
 
     let parameters = sig.inputs.iter().filter_map(|fn_arg| match fn_arg {
         syn::FnArg::Receiver(_) => None,
@@ -142,7 +158,7 @@ fn impl_method(
 
     quote! {
         #sig {
-            match self.get_impl::<#signature_ident>(#api_name) {
+            match self.get_impl::<#signature_ident>(#signature_name) {
                 ::unimock::Impl::ReturnDefault => Default::default(),
                 ::unimock::Impl::CallOriginal => panic!("no original to call"),
                 ::unimock::Impl::MockFn(__f_) => __f_((#(#parameters),*))
