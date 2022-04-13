@@ -105,9 +105,19 @@ pub use unimock_macros::unimock;
 pub use unimock_macros::unimock_next;
 
 enum FallbackMode {
+    Panic,
     ReturnDefault,
     CallOriginal,
-    Panic,
+}
+
+impl FallbackMode {
+    fn union(self, other: FallbackMode) -> Self {
+        match (self, other) {
+            (Self::Panic, other) => other,
+            (other, Self::Panic) => other,
+            (_, other) => other,
+        }
+    }
 }
 
 /// Unimock stores a collection of mock objects, with the end goal of implementing
@@ -115,7 +125,7 @@ enum FallbackMode {
 pub struct Unimock {
     fallback_mode: FallbackMode,
     mocks: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    impls: HashMap<TypeId, ImplStorage>,
+    impls: HashMap<TypeId, DynImpl>,
 }
 
 impl Unimock {
@@ -128,17 +138,40 @@ impl Unimock {
         }
     }
 
-    pub fn join<const N: usize>(mocks: [Unimock; N]) -> Self {
+    ///
+    /// Compose a new unimock by consuming an array of simpler unimocks by a union operation.
+    /// The passed unimocks
+    ///
+    pub fn union<const N: usize>(unimocks: [Unimock; N]) -> Self {
         let mut impls = HashMap::new();
+        let mut fallback_mode = FallbackMode::Panic;
 
-        for mock in mocks.into_iter() {
-            impls.extend(mock.impls);
+        for unimock in unimocks.into_iter() {
+            fallback_mode = fallback_mode.union(unimock.fallback_mode);
+            impls.extend(unimock.impls);
         }
 
         Self {
-            fallback_mode: FallbackMode::Panic,
+            fallback_mode,
             mocks: HashMap::new(),
             impls,
+        }
+    }
+
+    /// Create a unimock that instead of trying to mock, tries to call some original implementation of any API.
+    ///
+    /// What is considered an original implementation, is not something that unimock concerns itself with,
+    /// the behaviour is completely customized for each trait and it is also opt-in.
+    ///
+    /// If some implementation has no way to call an "original implementation", it should panic.
+    ///
+    /// A call-original unimock may be `union`ed together with normal mocks, effectively
+    /// creating a mix of real and mocked APIs, allowing deeper tests than mock-only mode can provide.
+    pub fn call_original() -> Self {
+        Self {
+            fallback_mode: FallbackMode::CallOriginal,
+            mocks: HashMap::new(),
+            impls: HashMap::new(),
         }
     }
 
@@ -175,15 +208,6 @@ impl Unimock {
         self
     }
 
-    pub fn call_original<M>(mut self, _: M) -> Self
-    where
-        M: Mock + 'static,
-    {
-        self.impls
-            .insert(TypeId::of::<M>(), ImplStorage::CallOriginal);
-        self
-    }
-
     /// Get a specific mock created with `mock`. Panics at runtime if the type is not registered.
     pub fn get<T: std::any::Any>(&self, trait_name: &'static str) -> &T {
         self.mocks
@@ -201,6 +225,16 @@ impl Unimock {
 
     fn missing_trait_error(&self, trait_name: &'static str) -> String {
         format!("Missing mock for trait {trait_name}")
+    }
+}
+
+impl Default for Unimock {
+    fn default() -> Self {
+        Unimock {
+            fallback_mode: FallbackMode::ReturnDefault,
+            mocks: HashMap::new(),
+            impls: HashMap::new(),
+        }
     }
 }
 
@@ -230,25 +264,52 @@ pub trait Mock: Sized {
             mocks: HashMap::new(),
             impls: [(
                 TypeId::of::<Self>(),
-                ImplStorage::Mock(Box::new(builder.to_mock_impl())),
+                DynImpl::Mock(Box::new(builder.to_mock_impl())),
             )]
             .into(),
         }
     }
 }
 
+pub trait ReturnDefault {
+    fn return_default() -> Unimock
+    where
+        Self: 'static,
+    {
+        Unimock {
+            fallback_mode: FallbackMode::Panic,
+            mocks: HashMap::new(),
+            impls: [(TypeId::of::<Self>(), DynImpl::ReturnDefault)].into(),
+        }
+    }
+}
+
+pub trait CallOriginal {
+    // Call the original implementation of this API
+    fn call_original() -> Unimock
+    where
+        Self: 'static,
+    {
+        Unimock {
+            fallback_mode: FallbackMode::Panic,
+            mocks: HashMap::new(),
+            impls: [(TypeId::of::<Self>(), DynImpl::CallOriginal)].into(),
+        }
+    }
+}
+
 pub enum Impl<'s, M: Mock + 'static> {
+    Mock(&'s MockImpl<M>),
     ReturnDefault,
     CallOriginal,
-    Mock(&'s MockImpl<M>),
 }
 
 impl<'s, M: Mock + 'static> Impl<'s, M> {
-    fn from_storage(storage: &'s ImplStorage) -> Self {
+    fn from_storage(storage: &'s DynImpl) -> Self {
         match storage {
-            ImplStorage::ReturnDefault => Self::ReturnDefault,
-            ImplStorage::CallOriginal => Self::CallOriginal,
-            ImplStorage::Mock(any) => {
+            DynImpl::ReturnDefault => Self::ReturnDefault,
+            DynImpl::CallOriginal => Self::CallOriginal,
+            DynImpl::Mock(any) => {
                 let mock_impl = any.downcast_ref::<MockImpl<M>>().unwrap();
                 Self::Mock(&mock_impl)
             }
@@ -264,10 +325,10 @@ impl<'s, M: Mock + 'static> Impl<'s, M> {
     }
 }
 
-enum ImplStorage {
+enum DynImpl {
+    Mock(Box<dyn std::any::Any + Send + Sync + 'static>),
     ReturnDefault,
     CallOriginal,
-    Mock(Box<dyn std::any::Any + Send + Sync + 'static>),
 }
 
 pub struct MockImpl<M: Mock> {

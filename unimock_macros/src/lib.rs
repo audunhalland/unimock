@@ -161,9 +161,9 @@ fn impl_method(method: &Method) -> proc_macro2::TokenStream {
     quote! {
         #sig {
             match self.get_impl::<#mock_ident>() {
+                ::unimock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*)),
                 ::unimock::Impl::ReturnDefault => Default::default(),
-                ::unimock::Impl::CallOriginal => panic!("no original to call for {}", #mock_ident::NAME),
-                ::unimock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*))
+                ::unimock::Impl::CallOriginal => panic!("no original to call for {}", #mock_ident::NAME)
             }
         }
     }

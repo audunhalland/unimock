@@ -63,7 +63,7 @@ fn takes_single_multi(t: &(impl SingleArg + MultiArg)) -> &str {
 fn test_join() {
     assert_eq!(
         "success",
-        takes_single_multi(&Unimock::join([
+        takes_single_multi(&Unimock::union([
             SingleArg_method1.mock(|any| {
                 any.call(matching!("b")).once().answers(|_| "B");
             }),
