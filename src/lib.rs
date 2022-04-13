@@ -127,11 +127,17 @@ impl Unimock {
         }
     }
 
-    pub fn mock_with<const N: usize>(_: [DynSignatureImpl; N]) -> Self {
+    pub fn mock_with<const N: usize>(dyn_impls: [DynMockImpl; N]) -> Self {
+        let mut impls = HashMap::new();
+
+        for dyn_impl in dyn_impls.into_iter() {
+            impls.insert(dyn_impl.id, dyn_impl.storage);
+        }
+
         Self {
             fallback_mode: FallbackMode::Panic,
             mocks: HashMap::new(),
-            impls: HashMap::new(),
+            impls,
         }
     }
 
@@ -168,28 +174,12 @@ impl Unimock {
         self
     }
 
-    pub fn mock_fn<S, F>(mut self, _: S, f: F) -> Self
+    pub fn call_original<M>(mut self, _: M) -> Self
     where
-        S: Signature + 'static,
-        F: (for<'s> Fn(<S as Signature>::Args<'s>) -> <S as Signature>::Output)
-            + Send
-            + Sync
-            + 'static,
-    {
-        let boxed_mock = BoxedMockFn(Box::new(f));
-
-        self.impls
-            .insert(TypeId::of::<S>(), ImplStorage::MockFn(Box::new(boxed_mock)));
-
-        self
-    }
-
-    pub fn call_original<S>(mut self, _: S) -> Self
-    where
-        S: Signature + 'static,
+        M: Mock + 'static,
     {
         self.impls
-            .insert(TypeId::of::<S>(), ImplStorage::CallOriginal);
+            .insert(TypeId::of::<M>(), ImplStorage::CallOriginal);
         self
     }
 
@@ -201,11 +191,11 @@ impl Unimock {
             .unwrap_or_else(|| panic!("{}", self.missing_trait_error(trait_name)))
     }
 
-    pub fn get_impl<'s, S: Signature + 'static>(&'s self, api_name: &'static str) -> Impl<'s, S> {
+    pub fn get_impl<'s, M: Mock + 'static>(&'s self) -> Impl<'s, M> {
         self.impls
-            .get(&TypeId::of::<S>())
+            .get(&TypeId::of::<M>())
             .map(Impl::from_storage)
-            .unwrap_or_else(|| Impl::from_fallback(&self.fallback_mode, api_name))
+            .unwrap_or_else(|| Impl::from_fallback(&self.fallback_mode))
     }
 
     fn missing_trait_error(&self, trait_name: &'static str) -> String {
@@ -217,23 +207,26 @@ pub trait IntoUnimock {
     fn unimock(self) -> Unimock;
 }
 
-impl<const N: usize> IntoUnimock for [DynSignatureImpl; N] {
+impl<const N: usize> IntoUnimock for [DynMockImpl; N] {
     fn unimock(self) -> Unimock {
-        Unimock::new()
+        Unimock::mock_with(self)
     }
 }
 
 ///
-/// The `Sig` trait describes some function signature that may be mocked by unimock.
-/// The types that implement this trait act as stand-ins to represent some mockable API.
+/// Trait describing a single mockable item.
+/// The trait needs to be implemented by some type. That type will be defined
+/// by the macro, and will act as the entrypoint for configuring the mock.
 ///
-pub trait Signature: Sized {
+pub trait Mock: Sized {
     /// The arguments to the mock function
     type Args<'i>;
     /// The output of the mock function
     type Output;
 
-    fn mock<F>(self, f: F) -> DynSignatureImpl
+    const NAME: &'static str;
+
+    fn mock<F>(self, f: F) -> DynMockImpl
     where
         Self: 'static,
         F: FnOnce(&mut MockBuilder<Self>),
@@ -241,41 +234,45 @@ pub trait Signature: Sized {
         let mut builder = MockBuilder::<Self>::new();
         f(&mut builder);
 
-        DynSignatureImpl {
-            signature: TypeId::of::<Self>(),
-            storage: ImplStorage::ReturnDefault,
+        DynMockImpl {
+            id: TypeId::of::<Self>(),
+            storage: ImplStorage::Mock(Box::new(builder.to_mock_impl())),
         }
     }
 }
 
-pub struct DynSignatureImpl {
-    signature: TypeId,
+///
+/// A single dynamic mock implementation with all generics erased.
+///
+pub struct DynMockImpl {
+    id: TypeId,
     storage: ImplStorage,
 }
 
-pub enum Impl<'s, S: Signature + 'static> {
+pub enum Impl<'s, M: Mock + 'static> {
     ReturnDefault,
     CallOriginal,
-    MockFn(&'s dyn for<'i> Fn(S::Args<'i>) -> S::Output),
+    //MockFn(&'s dyn for<'i> Fn(M::Args<'i>) -> M::Output),
+    Mock(&'s MockImpl<M>),
 }
 
-impl<'s, S: Signature + 'static> Impl<'s, S> {
+impl<'s, M: Mock + 'static> Impl<'s, M> {
     fn from_storage(storage: &'s ImplStorage) -> Self {
         match storage {
             ImplStorage::ReturnDefault => Self::ReturnDefault,
             ImplStorage::CallOriginal => Self::CallOriginal,
-            ImplStorage::MockFn(any) => {
-                let boxed_mock = any.downcast_ref::<BoxedMockFn<S>>().unwrap();
-                Self::MockFn(&boxed_mock.0)
+            ImplStorage::Mock(any) => {
+                let mock_impl = any.downcast_ref::<MockImpl<M>>().unwrap();
+                Self::Mock(&mock_impl)
             }
         }
     }
 
-    fn from_fallback(fallback_mode: &FallbackMode, api_name: &'static str) -> Self {
+    fn from_fallback(fallback_mode: &FallbackMode) -> Self {
         match fallback_mode {
             FallbackMode::ReturnDefault => Self::ReturnDefault,
             FallbackMode::CallOriginal => Self::CallOriginal,
-            FallbackMode::Panic => panic!("No mock implementation found for {api_name}"),
+            FallbackMode::Panic => panic!("No mock implementation found for {}", M::NAME),
         }
     }
 }
@@ -283,7 +280,39 @@ impl<'s, S: Signature + 'static> Impl<'s, S> {
 enum ImplStorage {
     ReturnDefault,
     CallOriginal,
-    MockFn(Box<dyn std::any::Any + Send + Sync + 'static>),
+    Mock(Box<dyn std::any::Any + Send + Sync + 'static>),
 }
 
-struct BoxedMockFn<S: Signature>(Box<dyn (for<'s> Fn(S::Args<'s>) -> S::Output) + Send + Sync>);
+pub struct MockImpl<M: Mock> {
+    candidates: Vec<MockCandidate<M>>,
+}
+
+impl<M: Mock> MockImpl<M> {
+    pub fn invoke<'i>(&self, args: M::Args<'i>) -> M::Output {
+        if self.candidates.is_empty() {
+            panic!("No registered mock implementation for {}", M::NAME);
+        }
+
+        for candidate in self.candidates.iter() {
+            if let Some(arg_matcher) = candidate.arg_matcher.as_ref() {
+                if !arg_matcher(&args) {
+                    continue;
+                }
+            }
+
+            if let Some(answer_factory) = candidate.answer_factory.as_ref() {
+                return answer_factory(args);
+            } else {
+                panic!("No answer for call to {}(..)", M::NAME);
+            }
+        }
+
+        panic!("No matching mocks for call to {}(..)", M::NAME);
+    }
+}
+
+pub(crate) struct MockCandidate<M: Mock> {
+    pub(crate) arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Args<'i>) -> bool) + Send + Sync>>,
+    pub(crate) answer_factory:
+        Option<Box<dyn (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync>>,
+}

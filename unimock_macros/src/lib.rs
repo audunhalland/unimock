@@ -59,15 +59,15 @@ pub fn unimock_next(
         }
     };
 
-    println!("{output}");
+    // println!("{output}");
 
     proc_macro::TokenStream::from(output)
 }
 
 struct Method<'s> {
     method: &'s syn::TraitItemMethod,
-    signature_ident: syn::Ident,
-    signature_name: syn::LitStr,
+    mock_ident: syn::Ident,
+    api_name: syn::LitStr,
 }
 
 fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> Vec<Method<'s>> {
@@ -75,16 +75,16 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> Vec<Method<'s>> {
 
     for item in item_trait.items.iter() {
         if let syn::TraitItem::Method(method) = item {
-            let signature_ident = quote::format_ident!("{}_{}", item_trait.ident, method.sig.ident);
-            let signature_name = syn::LitStr::new(
-                &format!("{}::{}, ", item_trait.ident, method.sig.ident),
+            let mock_ident = quote::format_ident!("{}_{}", item_trait.ident, method.sig.ident);
+            let api_name = syn::LitStr::new(
+                &format!("{}::{}", item_trait.ident, method.sig.ident),
                 item_trait.ident.span(),
             );
 
             ret.push(Method {
                 method,
-                signature_ident,
-                signature_name,
+                mock_ident,
+                api_name,
             })
         }
     }
@@ -97,7 +97,8 @@ fn def_unimock_signature(
     input_lifetime: &syn::Lifetime,
 ) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let signature_ident = &method.signature_ident;
+    let mock_ident = &method.mock_ident;
+    let api_name = &method.api_name;
 
     fn arg_ty(ty: &syn::Type, input_lifetime: &syn::Lifetime) -> proc_macro2::TokenStream {
         match ty {
@@ -130,19 +131,20 @@ fn def_unimock_signature(
 
     quote! {
         #[allow(non_camel_case_types)]
-        struct #signature_ident;
+        struct #mock_ident;
 
-        impl ::unimock::Signature for #signature_ident {
+        impl ::unimock::Mock for #mock_ident {
             type Args<#input_lifetime> = (#(#args_tuple),*);
             type Output = #output;
+
+            const NAME: &'static str = #api_name;
         }
     }
 }
 
 fn impl_method(method: &Method) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let signature_ident = &method.signature_ident;
-    let signature_name = &method.signature_name;
+    let mock_ident = &method.mock_ident;
 
     let parameters = sig.inputs.iter().filter_map(|fn_arg| match fn_arg {
         syn::FnArg::Receiver(_) => None,
@@ -158,10 +160,10 @@ fn impl_method(method: &Method) -> proc_macro2::TokenStream {
 
     quote! {
         #sig {
-            match self.get_impl::<#signature_ident>(#signature_name) {
+            match self.get_impl::<#mock_ident>() {
                 ::unimock::Impl::ReturnDefault => Default::default(),
-                ::unimock::Impl::CallOriginal => panic!("no original to call"),
-                ::unimock::Impl::MockFn(__f_) => __f_((#(#parameters),*))
+                ::unimock::Impl::CallOriginal => panic!("no original to call for {}", #mock_ident::NAME),
+                ::unimock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*))
             }
         }
     }

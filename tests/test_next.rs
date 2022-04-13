@@ -25,7 +25,8 @@ fn owned_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &Unimock::new().mock_fn(Owned_owned, |(a, b)| format!("{a}{b}")),
+            &[Owned_owned.mock(|any| { any.call(|_| true).answers(|(a, b)| format!("{a}{b}")) })]
+                .unimock(),
             "a",
             "b",
         )
@@ -47,10 +48,9 @@ fn referenced_works() {
     assert_eq!(
         "answer",
         takes_referenced(
-            &Unimock::new().mock_fn(Referenced_referenced, |arg| match arg {
-                "a" => "answer",
-                _ => "",
-            }),
+            &[Referenced_referenced
+                .mock(|any| { any.call(matching! { "a" }).answers(|_| "answer") })]
+            .unimock(),
             "a",
         )
     );
@@ -58,27 +58,36 @@ fn referenced_works() {
 
 #[unimock_next]
 trait SingleArg {
-    fn method(&self, a: &str) -> &str;
+    fn method1(&self, a: &str) -> &str;
 }
 
 #[unimock_next]
 trait MultiArg {
-    fn method(&self, a: &str, b: &str) -> &str;
+    fn method2(&self, a: &str, b: &str) -> &str;
 }
 
-fn takes_single_multi(_: &(impl SingleArg + MultiArg)) {}
+fn takes_single_multi(t: &(impl SingleArg + MultiArg)) -> &str {
+    let tmp = t.method1("b");
+    t.method2(tmp, tmp)
+}
 
 #[test]
 fn mock_builder() {
-    takes_single_multi(
-        &[
-            MultiArg_method.mock(|any| {
-                any.call(matching! { ("a", "b") }).once().answers(|_| "A");
-            }),
-            SingleArg_method.mock(|any| {
-                any.call(matching! { "b" }).once().answers(|_| "B");
-            }),
-        ]
-        .unimock(),
+    assert_eq!(
+        "success",
+        takes_single_multi(
+            &[
+                SingleArg_method1.mock(|any| {
+                    any.call(matching! { "b" }).once().answers(|_| "B");
+                }),
+                MultiArg_method2.mock(|any| {
+                    any.call(matching! { ("a", "b") }).answers(|_| "fail");
+                    any.call(matching! { ("B", "B") })
+                        .once()
+                        .answers(|_| "success");
+                }),
+            ]
+            .unimock(),
+        )
     );
 }
