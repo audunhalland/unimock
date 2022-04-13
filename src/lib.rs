@@ -54,6 +54,7 @@
 #![feature(generic_associated_types)]
 
 mod builders;
+mod verify;
 
 pub use builders::*;
 
@@ -127,11 +128,11 @@ impl Unimock {
         }
     }
 
-    pub fn mock_with<const N: usize>(dyn_impls: [DynMockImpl; N]) -> Self {
+    pub fn join<const N: usize>(mocks: [Unimock; N]) -> Self {
         let mut impls = HashMap::new();
 
-        for dyn_impl in dyn_impls.into_iter() {
-            impls.insert(dyn_impl.id, dyn_impl.storage);
+        for mock in mocks.into_iter() {
+            impls.extend(mock.impls);
         }
 
         Self {
@@ -203,16 +204,6 @@ impl Unimock {
     }
 }
 
-pub trait IntoUnimock {
-    fn unimock(self) -> Unimock;
-}
-
-impl<const N: usize> IntoUnimock for [DynMockImpl; N] {
-    fn unimock(self) -> Unimock {
-        Unimock::mock_with(self)
-    }
-}
-
 ///
 /// Trait describing a single mockable item.
 /// The trait needs to be implemented by some type. That type will be defined
@@ -226,7 +217,7 @@ pub trait Mock: Sized {
 
     const NAME: &'static str;
 
-    fn mock<F>(self, f: F) -> DynMockImpl
+    fn mock<F>(self, f: F) -> Unimock
     where
         Self: 'static,
         F: FnOnce(&mut MockBuilder<Self>),
@@ -234,25 +225,21 @@ pub trait Mock: Sized {
         let mut builder = MockBuilder::<Self>::new();
         f(&mut builder);
 
-        DynMockImpl {
-            id: TypeId::of::<Self>(),
-            storage: ImplStorage::Mock(Box::new(builder.to_mock_impl())),
+        Unimock {
+            fallback_mode: FallbackMode::Panic,
+            mocks: HashMap::new(),
+            impls: [(
+                TypeId::of::<Self>(),
+                ImplStorage::Mock(Box::new(builder.to_mock_impl())),
+            )]
+            .into(),
         }
     }
-}
-
-///
-/// A single dynamic mock implementation with all generics erased.
-///
-pub struct DynMockImpl {
-    id: TypeId,
-    storage: ImplStorage,
 }
 
 pub enum Impl<'s, M: Mock + 'static> {
     ReturnDefault,
     CallOriginal,
-    //MockFn(&'s dyn for<'i> Fn(M::Args<'i>) -> M::Output),
     Mock(&'s MockImpl<M>),
 }
 
@@ -300,6 +287,10 @@ impl<M: Mock> MockImpl<M> {
                 }
             }
 
+            if let Some(count_verifier) = candidate.count_verifier.as_ref() {
+                count_verifier.tick();
+            }
+
             if let Some(answer_factory) = candidate.answer_factory.as_ref() {
                 return answer_factory(args);
             } else {
@@ -313,6 +304,26 @@ impl<M: Mock> MockImpl<M> {
 
 pub(crate) struct MockCandidate<M: Mock> {
     pub(crate) arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Args<'i>) -> bool) + Send + Sync>>,
+    pub(crate) count_verifier: Option<verify::CountVerifier>,
     pub(crate) answer_factory:
         Option<Box<dyn (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync>>,
+}
+
+///
+/// Macro to ease argument matching.
+/// This macro will produce a closure expression to use for mock matching.
+///
+#[macro_export]
+macro_rules! matching {
+    // Special syntax for matching several arguments without requiring tuple syntax:
+    // `matching!("a", "b")` becomes `matching!(("a", "b"))`:
+    ($arg0:pat_param, $( $argn:pat_param ),*) => {
+        matching!(($arg0, $( $argn ),*))
+    };
+    ($(|)? $( $pattern:pat_param )|+ $( if $guard: expr )? $(,)?) => {
+        |args| match *args {
+            $( $pattern )|+ $( if $guard )? => true,
+            _ => false
+        }
+    };
 }
