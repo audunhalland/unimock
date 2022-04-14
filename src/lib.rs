@@ -244,12 +244,16 @@ impl Default for Unimock {
 /// by the macro, and will act as the entrypoint for configuring the mock.
 ///
 pub trait Mock: Sized {
-    /// The arguments to the mock function
-    type Args<'i>;
+    /// The direct inputs to the mock function
+    type Inputs<'i>;
+    /// The inputs as references for matching
+    type InputRefs<'i>;
     /// The output of the mock function
     type Output;
 
     const NAME: &'static str;
+
+    fn input_refs<'i, 'o>(inputs: &'o Self::Inputs<'i>) -> Self::InputRefs<'o>;
 
     fn mock<F>(self, f: F) -> Unimock
     where
@@ -336,14 +340,18 @@ pub struct MockImpl<M: Mock> {
 }
 
 impl<M: Mock> MockImpl<M> {
-    pub fn invoke<'i>(&self, args: M::Args<'i>) -> M::Output {
+    pub fn invoke<'i>(&'i self, inputs: M::Inputs<'i>) -> M::Output {
         if self.patterns.is_empty() {
             panic!("No registered call patterns for {}", M::NAME);
         }
 
+        {
+            let input_refs = M::input_refs(&inputs);
+        }
+
         for pattern in self.patterns.iter() {
             if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
-                if !arg_matcher(&args) {
+                if !arg_matcher(&inputs) {
                     continue;
                 }
             }
@@ -351,7 +359,7 @@ impl<M: Mock> MockImpl<M> {
             pattern.call_counter.tick();
 
             if let Some(output_factory) = pattern.output_factory.as_ref() {
-                return output_factory(args);
+                return output_factory(inputs);
             } else {
                 panic!(
                     "No output available for matching call to {}[#{}]",
@@ -367,9 +375,9 @@ impl<M: Mock> MockImpl<M> {
 
 pub(crate) struct CallPattern<M: Mock> {
     pat_index: usize,
-    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Args<'i>) -> bool) + Send + Sync>>,
+    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Inputs<'i>) -> bool) + Send + Sync>>,
     pub call_counter: counter::CallCounter,
-    pub output_factory: Option<Box<dyn (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync>>,
+    pub output_factory: Option<Box<dyn (for<'i> Fn(M::Inputs<'i>) -> M::Output) + Send + Sync>>,
 }
 
 impl<M: Mock> Drop for CallPattern<M> {

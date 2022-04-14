@@ -16,7 +16,7 @@ impl<M: Mock + 'static> Each<M> {
     /// Set up a call pattern.
     pub fn call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
     where
-        F: (for<'i> Fn(&M::Args<'i>) -> bool) + Send + Sync + 'static,
+        F: (for<'i> Fn(&M::Inputs<'i>) -> bool) + Send + Sync + 'static,
     {
         let pat_index = self.patterns.len();
         self.patterns.push(CallPattern {
@@ -66,7 +66,7 @@ impl<'b, M: Mock + 'static> Call<'b, M> {
     /// can then compute it based on input parameters.
     pub fn answers<F>(self, f: F) -> Self
     where
-        F: (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync + 'static,
+        F: (for<'i> Fn(M::Inputs<'i>) -> M::Output) + Send + Sync + 'static,
     {
         self.pattern.output_factory = Some(Box::new(f));
         self
