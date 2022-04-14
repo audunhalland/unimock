@@ -21,8 +21,6 @@ pub fn unimock_next(
 
     let output = render_output(item_trait);
 
-    println!("{}", output);
-
     proc_macro::TokenStream::from(output)
 }
 
@@ -99,27 +97,31 @@ enum PrimitiveTy {
 }
 
 fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> syn::Result<Vec<Method<'s>>> {
-    let mut ret = vec![];
+    item_trait
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::TraitItem::Method(method) => Some(method),
+            _ => None,
+        })
+        .map(|method| {
+            let mock_ident = quote::format_ident!("{}_{}", item_trait.ident, method.sig.ident);
+            let api_name = syn::LitStr::new(
+                &format!("{}::{}", item_trait.ident, method.sig.ident),
+                item_trait.ident.span(),
+            );
 
-    fn extract_method_inputs<'s>(sig: &'s syn::Signature) -> syn::Result<Vec<MethodInput<'s>>> {
-        sig.inputs
-            .iter()
-            .filter_map(|input| match input {
-                syn::FnArg::Receiver(_) => None,
-                syn::FnArg::Typed(pat_type) => Some(&pat_type.ty),
+            Ok(Method {
+                method,
+                mock_ident,
+                api_name,
+                inputs: extract_method_inputs(&method.sig)?,
             })
-            .enumerate()
-            .map(|(index, ty)| {
-                let (kind, ty) = analyze_input(ty)?;
-                Ok(MethodInput {
-                    kind,
-                    ty,
-                    index_ident: quote::format_ident!("a{index}"),
-                })
-            })
-            .collect()
-    }
+        })
+        .collect()
+}
 
+fn extract_method_inputs<'s>(sig: &'s syn::Signature) -> syn::Result<Vec<MethodInput<'s>>> {
     fn analyze_input<'s>(ty: &'s syn::Type) -> syn::Result<(InputKind, &'s syn::TypePath)> {
         match ty {
             syn::Type::Path(type_path) => Ok((
@@ -150,24 +152,22 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> syn::Result<Vec<Method
         }
     }
 
-    for item in item_trait.items.iter() {
-        if let syn::TraitItem::Method(method) = item {
-            let mock_ident = quote::format_ident!("{}_{}", item_trait.ident, method.sig.ident);
-            let api_name = syn::LitStr::new(
-                &format!("{}::{}", item_trait.ident, method.sig.ident),
-                item_trait.ident.span(),
-            );
-
-            ret.push(Method {
-                method,
-                mock_ident,
-                api_name,
-                inputs: extract_method_inputs(&method.sig)?,
+    sig.inputs
+        .iter()
+        .filter_map(|input| match input {
+            syn::FnArg::Receiver(_) => None,
+            syn::FnArg::Typed(pat_type) => Some(&pat_type.ty),
+        })
+        .enumerate()
+        .map(|(index, ty)| {
+            let (kind, ty) = analyze_input(ty)?;
+            Ok(MethodInput {
+                kind,
+                ty,
+                index_ident: quote::format_ident!("a{index}"),
             })
-        }
-    }
-
-    Ok(ret)
+        })
+        .collect()
 }
 
 fn def_unimock_signature(

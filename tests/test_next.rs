@@ -23,18 +23,16 @@ fn owned_works() {
             "b",
         )
     );
-    /*
     assert_eq!(
         "",
         takes_owned(
             &Owned_foo.mock(|each| {
-                each.call(matching!("#", "$")).returns_default();
+                each.call(matching!("a", "b")).returns_default();
             }),
             "a",
             "b",
         )
     );
-    */
 }
 
 #[unimock_next]

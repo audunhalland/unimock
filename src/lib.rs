@@ -345,13 +345,9 @@ impl<M: Mock> MockImpl<M> {
             panic!("No registered call patterns for {}", M::NAME);
         }
 
-        {
-            let input_refs = M::input_refs(&inputs);
-        }
-
         for pattern in self.patterns.iter() {
             if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
-                if !arg_matcher(&inputs) {
+                if !arg_matcher(&M::input_refs(&inputs)) {
                     continue;
                 }
             }
@@ -369,13 +365,13 @@ impl<M: Mock> MockImpl<M> {
             }
         }
 
-        panic!("No matching mocks for call to {}(..)", M::NAME);
+        panic!("No matching patterns for call to {}(..)", M::NAME);
     }
 }
 
 pub(crate) struct CallPattern<M: Mock> {
     pat_index: usize,
-    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Inputs<'i>) -> bool) + Send + Sync>>,
+    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync>>,
     pub call_counter: counter::CallCounter,
     pub output_factory: Option<Box<dyn (for<'i> Fn(M::Inputs<'i>) -> M::Output) + Send + Sync>>,
 }

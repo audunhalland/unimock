@@ -16,7 +16,7 @@ impl<M: Mock + 'static> Each<M> {
     /// Set up a call pattern.
     pub fn call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
     where
-        F: (for<'i> Fn(&M::Inputs<'i>) -> bool) + Send + Sync + 'static,
+        F: (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync + 'static,
     {
         let pat_index = self.patterns.len();
         self.patterns.push(CallPattern {
