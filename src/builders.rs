@@ -22,7 +22,8 @@ impl<M: Mock + 'static> Each<M> {
     /// The `matching` function receives a tuple representing the call arguments
     /// at hand. Its return value determines whether the defined call pattern matches the given arguments.
     ///
-    /// Designed to work well with the [matching] macro.
+    /// Designed to work well with the [matching] macro. This version requires all inputs to implement [Debug],
+    /// in order to print useful error messages.
     ///
     /// # Example
     ///
@@ -50,6 +51,19 @@ impl<M: Mock + 'static> Each<M> {
         F: (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync + 'static,
         for<'i> M::InputRefs<'i>: std::fmt::Debug,
     {
+        if self.input_debugger.func.is_none() {
+            self.input_debugger.func = Some(Box::new(|args| format!("{:?}", args)));
+        }
+
+        self.nodebug_call(matching)
+    }
+
+    /// Set up a call pattern, without requiring inputs to implement [Debug].
+    /// As a result, mocking runtime errors will contain less useful information.
+    pub fn nodebug_call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
+    where
+        F: (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync + 'static,
+    {
         let pat_index = self.patterns.len();
         self.patterns.push(mock::CallPattern {
             pat_index,
@@ -57,10 +71,6 @@ impl<M: Mock + 'static> Each<M> {
             call_counter: counter::CallCounter::new(counter::CountExpectation::None),
             output_factory: None,
         });
-
-        if self.input_debugger.func.is_none() {
-            self.input_debugger.func = Some(Box::new(|args| format!("{:?}", args)));
-        }
 
         Call {
             pattern: self.patterns.last_mut().unwrap(),

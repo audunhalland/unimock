@@ -3,14 +3,12 @@ use crate::*;
 #[doc(hidden)]
 pub enum Impl<'s, M: Mock + 'static> {
     Mock(&'s MockImpl<M>),
-    ReturnDefault,
     CallOriginal,
 }
 
 impl<'s, M: Mock + 'static> Impl<'s, M> {
     pub(crate) fn from_storage(storage: &'s DynImpl) -> Self {
         match storage {
-            DynImpl::ReturnDefault => Self::ReturnDefault,
             DynImpl::CallOriginal => Self::CallOriginal,
             DynImpl::Mock(any) => {
                 let mock_impl = any.downcast_ref::<MockImpl<M>>().unwrap();
@@ -21,7 +19,6 @@ impl<'s, M: Mock + 'static> Impl<'s, M> {
 
     pub(crate) fn from_fallback(fallback_mode: &FallbackMode) -> Self {
         match fallback_mode {
-            FallbackMode::ReturnDefault => Self::ReturnDefault,
             FallbackMode::CallOriginal => Self::CallOriginal,
             FallbackMode::Panic => panic!("No mock implementation found for {}", M::NAME),
         }
@@ -30,7 +27,6 @@ impl<'s, M: Mock + 'static> Impl<'s, M> {
 
 pub(crate) enum DynImpl {
     Mock(Box<dyn std::any::Any + Send + Sync + 'static>),
-    ReturnDefault,
     CallOriginal,
 }
 

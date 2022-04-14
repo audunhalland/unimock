@@ -3,6 +3,11 @@
 use cool_asserts::*;
 use unimock::*;
 
+enum PrimitiveEnum {
+    Foo,
+    Bar,
+}
+
 #[unimock_next]
 trait NoArg {
     fn no_arg(&self) -> i32;
@@ -208,5 +213,36 @@ fn should_panic_with_explicit_message() {
                 .method1("b");
         },
         includes("foobar!")
+    );
+}
+
+#[unimock_next]
+trait VeryPrimitive {
+    fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
+}
+
+#[test]
+fn primitive_mocking_without_debug() {
+    match VeryPrimitive_primitive
+        .mock(|each| {
+            each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
+                .answers(|_| PrimitiveEnum::Foo);
+        })
+        .primitive(PrimitiveEnum::Bar, "")
+    {
+        PrimitiveEnum::Foo => {}
+        PrimitiveEnum::Bar => panic!(),
+    }
+
+    assert_panics!(
+        {
+            VeryPrimitive_primitive
+                .mock(|each| {
+                    each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
+                        .answers(|_| PrimitiveEnum::Foo);
+                })
+                .primitive(PrimitiveEnum::Foo, "");
+        },
+        includes("VeryPrimitive::primitive(_, _): No matching call patterns.")
     );
 }

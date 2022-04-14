@@ -123,7 +123,6 @@ pub use unimock_macros::unimock_next;
 
 enum FallbackMode {
     Panic,
-    ReturnDefault,
     CallOriginal,
 }
 
@@ -253,16 +252,6 @@ impl Unimock {
     }
 }
 
-impl Default for Unimock {
-    fn default() -> Self {
-        Unimock {
-            fallback_mode: FallbackMode::ReturnDefault,
-            mocks: HashMap::new(),
-            impls: HashMap::new(),
-        }
-    }
-}
-
 impl std::ops::Add<Unimock> for Unimock {
     type Output = Unimock;
 
@@ -334,19 +323,6 @@ pub trait Mock: Sized {
             TypeId::of::<Self>(),
             mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
         )
-    }
-}
-
-pub trait ReturnDefault {
-    fn return_default() -> Unimock
-    where
-        Self: 'static,
-    {
-        Unimock {
-            fallback_mode: FallbackMode::Panic,
-            mocks: HashMap::new(),
-            impls: [(TypeId::of::<Self>(), mock::DynImpl::ReturnDefault)].into(),
-        }
     }
 }
 
