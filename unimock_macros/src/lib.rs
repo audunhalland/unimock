@@ -53,16 +53,13 @@ fn render_output(item_trait: syn::ItemTrait) -> proc_macro2::TokenStream {
     let inp = syn::Lifetime::new("'__i", proc_macro2::Span::call_site());
     let out = syn::Lifetime::new("'__o", proc_macro2::Span::call_site());
 
-    let signature_defs = methods
-        .iter()
-        .map(|method| def_unimock_signature(method, &inp, &out));
-
-    let method_impls = methods.iter().map(|method| impl_method(method));
+    let mock_defs = methods.iter().map(|method| def_mock(method, &inp, &out));
+    let method_impls = methods.iter().map(|method| def_method_impl(method));
 
     quote! {
         #item_trait
 
-        #(#signature_defs)*
+        #(#mock_defs)*
 
         #(#impl_attributes)*
         impl #trait_ident for ::unimock::Unimock {
@@ -172,11 +169,7 @@ fn extract_method_inputs<'s>(sig: &'s syn::Signature) -> syn::Result<Vec<MethodI
         .collect()
 }
 
-fn def_unimock_signature(
-    method: &Method,
-    inp: &syn::Lifetime,
-    out: &syn::Lifetime,
-) -> proc_macro2::TokenStream {
+fn def_mock(method: &Method, inp: &syn::Lifetime, out: &syn::Lifetime) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let mock_ident = &method.mock_ident;
     let api_name = &method.api_name;
@@ -241,7 +234,7 @@ fn def_unimock_signature(
     }
 }
 
-fn impl_method(method: &Method) -> proc_macro2::TokenStream {
+fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let mock_ident = &method.mock_ident;
 

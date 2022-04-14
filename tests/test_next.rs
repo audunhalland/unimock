@@ -4,6 +4,23 @@ use cool_asserts::*;
 use unimock::*;
 
 #[unimock_next]
+trait NoArg {
+    fn no_arg(&self) -> i32;
+}
+
+#[test]
+fn noarg_works() {
+    assert_eq!(
+        42,
+        NoArg_no_arg
+            .mock(|each| {
+                each.call(matching!()).returns(42);
+            })
+            .no_arg()
+    );
+}
+
+#[unimock_next]
 trait Owned {
     fn foo(&self, a: String, b: String) -> String;
 }
@@ -89,18 +106,31 @@ fn takes_single_multi(t: &(impl SingleArg + MultiArg)) -> &str {
 }
 
 #[test]
-fn test_join() {
+fn test_union() {
     assert_eq!(
         "success",
-        takes_single_multi(&Unimock::union([
-            SingleArg_method1.mock(|each| {
-                each.call(matching!("b")).returns("B").once();
-            }),
-            MultiArg_method2.mock(|each| {
-                each.call(matching!("a", _)).never().returns("fail");
-                each.call(matching!("B", "B")).returns("success").once();
-            }),
-        ]))
+        takes_single_multi(
+            &[
+                SingleArg_method1.mock(|each| {
+                    each.call(matching!("b")).returns("B").once();
+                }),
+                MultiArg_method2.mock(|each| {
+                    each.call(matching!("a", _)).never().returns("fail");
+                    each.call(matching!("B", "B")).returns("success").once();
+                })
+            ]
+            .union()
+        )
+    );
+}
+
+#[test]
+fn should_panic_for_nonexisting_mock() {
+    assert_panics!(
+        {
+            Unimock::new().method1("hoi");
+        },
+        includes("No mock implementation found for SingleArg::method1")
     );
 }
 

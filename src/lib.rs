@@ -4,13 +4,14 @@
 //! unimock exports a single type, [Unimock], that will implement all your annotated traits:
 //!
 //! ```rust
+//! #![feature(generic_associated_types)]
 //! use unimock::*;
-//! #[unimock]
+//! #[unimock_next]
 //! trait Foo {
 //!     fn foo(&self) -> i32;
 //! }
 //!
-//! #[unimock]
+//! #[unimock_next]
 //! trait Bar {
 //!     fn bar(&self) -> i32;
 //! }
@@ -19,6 +20,7 @@
 //!     foobar.foo() + foobar.bar()
 //! }
 //!
+//! /*
 //! fn test() {
 //!     let unimock = Unimock::new()
 //!         .mock(|foo: &mut MockFoo| {
@@ -30,6 +32,20 @@
 //!
 //!     let answer = sum(unimock);
 //!     assert_eq!(42, answer);
+//! }
+//! */
+//!
+//! fn test_next() {
+//!     let unimock = Unimock::union([
+//!         Foo_foo.mock(|each| {
+//!             each.call(matching!()).returns(40);
+//!         }),
+//!         Bar_bar.mock(|each| {
+//!             each.call(matching!()).returns(2);
+//!         })
+//!     ]);
+//!
+//!     assert_eq!(42, sum(unimock));
 //! }
 //! ```
 //!
@@ -246,6 +262,31 @@ impl Default for Unimock {
     }
 }
 
+impl std::ops::Add<Unimock> for Unimock {
+    type Output = Unimock;
+
+    fn add(self, rhs: Unimock) -> Self::Output {
+        Unimock::union([self, rhs])
+    }
+}
+
+impl<const N: usize> From<[Unimock; N]> for Unimock {
+    fn from(array: [Unimock; N]) -> Self {
+        Unimock::union(array)
+    }
+}
+
+/// Union mocks together to create a single mock object
+pub trait Union {
+    fn union(self) -> Unimock;
+}
+
+impl<const N: usize> Union for [Unimock; N] {
+    fn union(self) -> Unimock {
+        Unimock::union(self)
+    }
+}
+
 ///
 /// Trait describing a single mockable item.
 ///
@@ -457,6 +498,8 @@ impl<M: Mock> Drop for CallPattern<M> {
 ///
 #[macro_export]
 macro_rules! matching {
+    // Special syntax for functions taking no arguments:
+    () => { |()| true };
     // Special syntax for matching several arguments without requiring tuple syntax:
     // `matching!("a", "b")` becomes `matching!(("a", "b"))`:
     ($arg0:pat_param, $( $argn:pat_param ),*) => {
