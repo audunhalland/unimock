@@ -43,13 +43,39 @@ pub struct Call<'b, M: Mock> {
 }
 
 impl<'b, M: Mock + 'static> Call<'b, M> {
-    /// Specify the call pattern's answer by invoking the given closure that
-    /// may compute it based on input parameters.
+    /// Specify the output of the call pattern by providing a value.
+    /// The output type must implement `Clone` and cannot contain non-static references.
+    pub fn returns(self, value: M::Output) -> Self
+    where
+        M::Output: Send + Sync + Clone + 'static,
+    {
+        self.pattern.output_factory = Some(Box::new(move |_| value.clone()));
+        self
+    }
+
+    /// Specify the output of the call pattern by calling `Default::default()`.
+    pub fn returns_default(self) -> Self
+    where
+        M::Output: Default,
+    {
+        self.pattern.output_factory = Some(Box::new(|_| Default::default()));
+        self
+    }
+
+    /// Specify the output of the call pattern by invoking the given closure that
+    /// can then compute it based on input parameters.
     pub fn answers<F>(self, f: F) -> Self
     where
         F: (for<'i> Fn(M::Args<'i>) -> M::Output) + Send + Sync + 'static,
     {
         self.pattern.output_factory = Some(Box::new(f));
+        self
+    }
+
+    /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
+    pub fn panics(self, message: impl Into<String>) -> Self {
+        let message = message.into();
+        self.pattern.output_factory = Some(Box::new(move |_| panic!("{}", message)));
         self
     }
 

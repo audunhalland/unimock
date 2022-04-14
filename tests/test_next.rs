@@ -23,6 +23,18 @@ fn owned_works() {
             "b",
         )
     );
+    /*
+    assert_eq!(
+        "",
+        takes_owned(
+            &Owned_foo.mock(|each| {
+                each.call(matching!("#", "$")).returns_default();
+            }),
+            "a",
+            "b",
+        )
+    );
+    */
 }
 
 #[unimock_next]
@@ -36,12 +48,26 @@ fn takes_referenced<'s>(r: &'s impl Referenced, a: &str) -> &'s str {
 }
 
 #[test]
-fn referenced_works() {
+fn referenced_with_static_return_value_works() {
     assert_eq!(
         "answer",
         takes_referenced(
             &Referenced_foo.mock(|each| {
-                each.call(matching!("a")).answers(|_| "answer");
+                each.call(matching!("a")).returns("answer");
+            }),
+            "a",
+        )
+    );
+}
+
+#[test]
+fn referenced_with_default_return_value_works() {
+    assert_eq!(
+        "",
+        takes_referenced(
+            &Referenced_foo.mock(|each| {
+                each.call(matching!("Æ")).panics("Should not be called");
+                each.call(matching!("a")).returns_default();
             }),
             "a",
         )
@@ -69,21 +95,12 @@ fn test_join() {
         "success",
         takes_single_multi(&Unimock::union([
             SingleArg_method1.mock(|each| {
-                each.call(matching!("b")).answers(|_| "B").once();
+                each.call(matching!("b")).returns("B").once();
             }),
             MultiArg_method2.mock(|each| {
-                each.call(matching!("a", _)).never().answers(|_| "fail");
-                each.call(matching!("B", "B")).answers(|_| "success").once();
+                each.call(matching!("a", _)).never().returns("fail");
+                each.call(matching!("B", "B")).returns("success").once();
             }),
         ]))
     );
 }
-
-// natural language
-// each call matching x returns y
-// each call matching x once returns y << BAD GRAMMAR
-// every call returns y
-
-// it returns x when matching y << BAD ORDER
-
-//
