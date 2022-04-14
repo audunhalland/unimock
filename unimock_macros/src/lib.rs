@@ -191,7 +191,7 @@ fn def_unimock_signature(
         }
     });
 
-    let inputs_ref_tuple = method.inputs.iter().map(|input| {
+    let input_refs_tuple = method.inputs.iter().map(|input| {
         let ty = &input.ty;
         match &input.kind {
             InputKind(_, String) => quote! { & #inp str },
@@ -227,7 +227,7 @@ fn def_unimock_signature(
 
         impl ::unimock::Mock for #mock_ident {
             type Inputs<#inp> = (#(#inputs_tuple),*);
-            type InputRefs<#inp> = (#(#inputs_ref_tuple),*);
+            type InputRefs<#inp> = (#(#input_refs_tuple),*);
             type Output = #output;
 
             fn input_refs<#inp, #out>((#(#inputs_pat),*): & #out Self::Inputs<#inp>) -> Self::InputRefs<#out> {

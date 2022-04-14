@@ -2,7 +2,7 @@ use crate::counter::*;
 use crate::*;
 
 ///
-/// Builder for creating call pattern that will be recognized on a mock.
+/// Builder for defining call patterns that will be recognized on a mock.
 ///
 pub struct Each<M: Mock> {
     patterns: Vec<CallPattern<M>>,
@@ -14,6 +14,32 @@ impl<M: Mock + 'static> Each<M> {
     }
 
     /// Set up a call pattern.
+    /// The `matching` function receives a tuple representing the call arguments
+    /// at hand. Its return value determines whether the defined call pattern matches the given arguments.
+    ///
+    /// Designed to work well with the [matching] macro.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// #![feature(generic_associated_types)]
+    /// use unimock::*;
+    /// struct Foo;
+    /// impl Mock for Foo {
+    ///     /* ... */
+    ///     # type Inputs<'i> = (String);
+    ///     # type InputRefs<'i> = (&'i str);
+    ///     # type Output = ();
+    ///     # const NAME: &'static str = "Foo";
+    ///     # fn input_refs<'i, 'o>((a0): &'o Self::Inputs<'i>) -> Self::InputRefs<'o> {
+    ///     #     (a0.as_ref())
+    ///     # }
+    /// }
+    ///
+    /// fn test() {
+    ///     let mock = Foo.mock(|each| { each.call(matching!("value")).returns_default(); });
+    /// }
+    /// ```
     pub fn call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
     where
         F: (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync + 'static,
@@ -31,18 +57,22 @@ impl<M: Mock + 'static> Each<M> {
         }
     }
 
-    pub(crate) fn to_mock_impl(self) -> MockImpl<M> {
-        MockImpl {
-            patterns: self.patterns,
-        }
+    pub(crate) fn build(self) -> Vec<CallPattern<M>> {
+        self.patterns
     }
 }
 
+///
+/// Builder for configuring a specific call pattern.
+///
 pub struct Call<'b, M: Mock> {
     pattern: &'b mut CallPattern<M>,
 }
 
-impl<'b, M: Mock + 'static> Call<'b, M> {
+impl<'b, M> Call<'b, M>
+where
+    M: Mock + 'static,
+{
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement `Clone` and cannot contain non-static references.
     pub fn returns(self, value: M::Output) -> Self
