@@ -29,12 +29,12 @@ impl CallCounter {
             CountExpectation::None => {}
             CountExpectation::Exactly(target) => {
                 if actual_count != target {
-                    panic!("Expected {name}[#{pat_index}] to be called exactly {target} times, but was actually called {actual_count} times.");
+                    panic!("Expected {name}[#{pat_index}] to be called exactly {target} time(s), but was actually called {actual_count} time(s).");
                 }
             }
             CountExpectation::AtLeast(target) => {
                 if actual_count < target {
-                    panic!("Expected {name}[#{pat_index}] to be called at least {target} times, but was actually called {actual_count} times.");
+                    panic!("Expected {name}[#{pat_index}] to be called at least {target} time(s), but was actually called {actual_count} time(s).");
                 }
             }
         }

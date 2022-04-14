@@ -12,6 +12,8 @@ extern crate proc_macro;
 /// # Attributes
 /// currently no attribute parameters are supported by this macro.
 ///
+/// TODO
+///
 #[proc_macro_attribute]
 pub fn unimock_next(
     _attr: proc_macro::TokenStream,

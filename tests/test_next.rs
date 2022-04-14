@@ -1,5 +1,6 @@
 #![feature(generic_associated_types)]
 
+use cool_asserts::*;
 use unimock::*;
 
 #[unimock_next]
@@ -100,5 +101,66 @@ fn test_join() {
                 each.call(matching!("B", "B")).returns("success").once();
             }),
         ]))
+    );
+}
+
+#[test]
+fn should_panic_for_unused_mock() {
+    assert_panics!(
+        {
+            SingleArg_method1.mock(|_| {});
+        },
+        includes("Mock for SingleArg::method1 was unused. Dead mocks should be removed.")
+    );
+}
+
+#[test]
+fn should_panic_for_call_with_no_accepted_patterns() {
+    assert_panics!(
+        {
+            SingleArg_method1.mock(|_| {}).method1("b");
+        },
+        includes("No registered call patterns for SingleArg::method1")
+    );
+}
+
+#[test]
+fn call_pattern_without_return_factory_should_crash() {
+    assert_panics!(
+        {
+            SingleArg_method1
+                .mock(|each| {
+                    each.call(matching!(_));
+                })
+                .method1("whatever");
+        },
+        includes("No output available for matching call to SingleArg::method1[#0]")
+    );
+}
+
+#[test]
+fn call_pattern_with_count_expectation_should_panic_if_not_met() {
+    assert_panics!(
+        {
+            SingleArg_method1.mock(|each| {
+                each.call(matching!("a")).once().returns_default();
+                each.call(matching!(_)).returns_default();
+            }).method1("b");
+        },
+        includes("Expected SingleArg::method1[#0] to be called exactly 1 time(s), but was actually called 0 time(s).")
+    );
+}
+
+#[test]
+fn should_panic_with_explicit_message() {
+    assert_panics!(
+        {
+            SingleArg_method1
+                .mock(|each| {
+                    each.call(matching!(_)).panics("foobar!");
+                })
+                .method1("b");
+        },
+        includes("foobar!")
     );
 }
