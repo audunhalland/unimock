@@ -70,6 +70,7 @@
 #![feature(generic_associated_types)]
 
 pub mod builders;
+pub mod mock;
 
 mod counter;
 
@@ -141,7 +142,7 @@ impl FallbackMode {
 pub struct Unimock {
     fallback_mode: FallbackMode,
     mocks: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    impls: HashMap<TypeId, DynImpl>,
+    impls: HashMap<TypeId, mock::DynImpl>,
 }
 
 impl Unimock {
@@ -191,7 +192,7 @@ impl Unimock {
         }
     }
 
-    pub(crate) fn with_single_mock(type_id: TypeId, dyn_impl: DynImpl) -> Self {
+    pub(crate) fn with_single_mock(type_id: TypeId, dyn_impl: mock::DynImpl) -> Self {
         Self {
             fallback_mode: FallbackMode::Panic,
             mocks: HashMap::new(),
@@ -240,11 +241,11 @@ impl Unimock {
             .unwrap_or_else(|| panic!("{}", self.missing_trait_error(trait_name)))
     }
 
-    pub fn get_impl<'s, M: Mock + 'static>(&'s self) -> Impl<'s, M> {
+    pub fn get_impl<'s, M: Mock + 'static>(&'s self) -> mock::Impl<'s, M> {
         self.impls
             .get(&TypeId::of::<M>())
-            .map(Impl::from_storage)
-            .unwrap_or_else(|| Impl::from_fallback(&self.fallback_mode))
+            .map(mock::Impl::from_storage)
+            .unwrap_or_else(|| mock::Impl::from_fallback(&self.fallback_mode))
     }
 
     fn missing_trait_error(&self, trait_name: &'static str) -> String {
@@ -318,8 +319,8 @@ pub trait Mock: Sized {
     /// The name to use for runtime errors.
     const NAME: &'static str;
 
-    /// Convert input arguments to references.
-    fn input_refs<'i, 'o>(inputs: &'o Self::Inputs<'i>) -> Self::InputRefs<'o>;
+    /// Convert input arguments to references, along with the argument count.
+    fn input_refs<'i, 'o>(inputs: &'o Self::Inputs<'i>) -> (Self::InputRefs<'o>, usize);
 
     /// Create a unimock instance mocking this API.
     fn mock<F>(self, f: F) -> Unimock
@@ -331,7 +332,7 @@ pub trait Mock: Sized {
         f(&mut each);
         Unimock::with_single_mock(
             TypeId::of::<Self>(),
-            DynImpl::Mock(Box::new(MockImpl::new(each.build()))),
+            mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
         )
     }
 }
@@ -344,7 +345,7 @@ pub trait ReturnDefault {
         Unimock {
             fallback_mode: FallbackMode::Panic,
             mocks: HashMap::new(),
-            impls: [(TypeId::of::<Self>(), DynImpl::ReturnDefault)].into(),
+            impls: [(TypeId::of::<Self>(), mock::DynImpl::ReturnDefault)].into(),
         }
     }
 }
@@ -358,113 +359,8 @@ pub trait CallOriginal {
         Unimock {
             fallback_mode: FallbackMode::Panic,
             mocks: HashMap::new(),
-            impls: [(TypeId::of::<Self>(), DynImpl::CallOriginal)].into(),
+            impls: [(TypeId::of::<Self>(), mock::DynImpl::CallOriginal)].into(),
         }
-    }
-}
-
-#[doc(hidden)]
-pub enum Impl<'s, M: Mock + 'static> {
-    Mock(&'s MockImpl<M>),
-    ReturnDefault,
-    CallOriginal,
-}
-
-impl<'s, M: Mock + 'static> Impl<'s, M> {
-    fn from_storage(storage: &'s DynImpl) -> Self {
-        match storage {
-            DynImpl::ReturnDefault => Self::ReturnDefault,
-            DynImpl::CallOriginal => Self::CallOriginal,
-            DynImpl::Mock(any) => {
-                let mock_impl = any.downcast_ref::<MockImpl<M>>().unwrap();
-                Self::Mock(&mock_impl)
-            }
-        }
-    }
-
-    fn from_fallback(fallback_mode: &FallbackMode) -> Self {
-        match fallback_mode {
-            FallbackMode::ReturnDefault => Self::ReturnDefault,
-            FallbackMode::CallOriginal => Self::CallOriginal,
-            FallbackMode::Panic => panic!("No mock implementation found for {}", M::NAME),
-        }
-    }
-}
-
-enum DynImpl {
-    Mock(Box<dyn std::any::Any + Send + Sync + 'static>),
-    ReturnDefault,
-    CallOriginal,
-}
-
-#[doc(hidden)]
-pub struct MockImpl<M: Mock> {
-    patterns: Vec<CallPattern<M>>,
-    call_counter: AtomicUsize,
-}
-
-impl<M: Mock> MockImpl<M> {
-    pub(crate) fn new(patterns: Vec<CallPattern<M>>) -> Self {
-        Self {
-            patterns,
-            call_counter: AtomicUsize::new(0),
-        }
-    }
-
-    pub fn invoke<'i>(&'i self, inputs: M::Inputs<'i>) -> M::Output {
-        self.call_counter
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-        if self.patterns.is_empty() {
-            panic!("No registered call patterns for {}", M::NAME);
-        }
-
-        for pattern in self.patterns.iter() {
-            if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
-                if !arg_matcher(&M::input_refs(&inputs)) {
-                    continue;
-                }
-            }
-
-            pattern.call_counter.tick();
-
-            if let Some(output_factory) = pattern.output_factory.as_ref() {
-                return output_factory(inputs);
-            } else {
-                panic!(
-                    "No output available for matching call to {}[#{}]",
-                    M::NAME,
-                    pattern.pat_index
-                );
-            }
-        }
-
-        panic!("No matching patterns for call to {}(..)", M::NAME);
-    }
-}
-
-impl<M: Mock> Drop for MockImpl<M> {
-    fn drop(&mut self) {
-        let call_count = self.call_counter.load(std::sync::atomic::Ordering::Relaxed);
-        if call_count == 0 {
-            panic!(
-                "Mock for {} was unused. Dead mocks should be removed.",
-                M::NAME
-            );
-        }
-    }
-}
-
-pub(crate) struct CallPattern<M: Mock> {
-    pat_index: usize,
-    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync>>,
-    pub call_counter: counter::CallCounter,
-    pub output_factory: Option<Box<dyn (for<'i> Fn(M::Inputs<'i>) -> M::Output) + Send + Sync>>,
-}
-
-impl<M: Mock> Drop for CallPattern<M> {
-    fn drop(&mut self) {
-        self.call_counter.verify(M::NAME, self.pat_index);
     }
 }
 

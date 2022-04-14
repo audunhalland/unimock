@@ -1,16 +1,21 @@
 use crate::counter::*;
+use crate::mock;
 use crate::*;
 
 ///
 /// Builder for defining call patterns that will be recognized on a mock.
 ///
 pub struct Each<M: Mock> {
-    patterns: Vec<CallPattern<M>>,
+    pub(crate) patterns: Vec<mock::CallPattern<M>>,
+    pub(crate) input_debugger: mock::InputDebugger<M>,
 }
 
 impl<M: Mock + 'static> Each<M> {
     pub(crate) fn new() -> Self {
-        Self { patterns: vec![] }
+        Self {
+            patterns: vec![],
+            input_debugger: mock::InputDebugger::new(),
+        }
     }
 
     /// Set up a call pattern.
@@ -31,8 +36,8 @@ impl<M: Mock + 'static> Each<M> {
     ///     # type InputRefs<'i> = (&'i str);
     ///     # type Output = ();
     ///     # const NAME: &'static str = "Foo";
-    ///     # fn input_refs<'i, 'o>((a0): &'o Self::Inputs<'i>) -> Self::InputRefs<'o> {
-    ///     #     (a0.as_ref())
+    ///     # fn input_refs<'i, 'o>((a0): &'o Self::Inputs<'i>) -> (Self::InputRefs<'o>, usize) {
+    ///     #     ((a0.as_ref()), 1)
     ///     # }
     /// }
     ///
@@ -43,22 +48,23 @@ impl<M: Mock + 'static> Each<M> {
     pub fn call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
     where
         F: (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync + 'static,
+        for<'i> M::InputRefs<'i>: std::fmt::Debug,
     {
         let pat_index = self.patterns.len();
-        self.patterns.push(CallPattern {
+        self.patterns.push(mock::CallPattern {
             pat_index,
             arg_matcher: Some(Box::new(matching)),
             call_counter: counter::CallCounter::new(counter::CountExpectation::None),
             output_factory: None,
         });
 
+        if self.input_debugger.func.is_none() {
+            self.input_debugger.func = Some(Box::new(|args| format!("{:?}", args)));
+        }
+
         Call {
             pattern: self.patterns.last_mut().unwrap(),
         }
-    }
-
-    pub(crate) fn build(self) -> Vec<CallPattern<M>> {
-        self.patterns
     }
 }
 
@@ -66,7 +72,7 @@ impl<M: Mock + 'static> Each<M> {
 /// Builder for configuring a specific call pattern.
 ///
 pub struct Call<'b, M: Mock> {
-    pattern: &'b mut CallPattern<M>,
+    pattern: &'b mut mock::CallPattern<M>,
 }
 
 impl<'b, M> Call<'b, M>

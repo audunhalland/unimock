@@ -140,7 +140,7 @@ fn should_panic_for_unused_mock() {
         {
             SingleArg_method1.mock(|_| {});
         },
-        includes("Mock for SingleArg::method1 was unused. Dead mocks should be removed.")
+        includes("Mock for SingleArg::method1 was never called. Dead mocks should be removed.")
     );
 }
 
@@ -150,7 +150,7 @@ fn should_panic_for_call_with_no_accepted_patterns() {
         {
             SingleArg_method1.mock(|_| {}).method1("b");
         },
-        includes("No registered call patterns for SingleArg::method1")
+        includes("SingleArg::method1(_): No registered call patterns")
     );
 }
 
@@ -164,7 +164,23 @@ fn call_pattern_without_return_factory_should_crash() {
                 })
                 .method1("whatever");
         },
-        includes("No output available for matching call to SingleArg::method1[#0]")
+        includes(
+            "SingleArg::method1(\"whatever\"): No output available for matching call pattern #0"
+        )
+    );
+}
+
+#[test]
+fn should_panic_if_no_call_patterns_are_matched() {
+    assert_panics!(
+        {
+            SingleArg_method1
+                .mock(|each| {
+                    each.call(matching!("something"));
+                })
+                .method1("anything");
+        },
+        includes("SingleArg::method1(\"anything\"): No matching call patterns.")
     );
 }
 
@@ -177,7 +193,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
                 each.call(matching!(_)).returns_default();
             }).method1("b");
         },
-        includes("Expected SingleArg::method1[#0] to be called exactly 1 time(s), but was actually called 0 time(s).")
+        includes("SingleArg::method1: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
     );
 }
 

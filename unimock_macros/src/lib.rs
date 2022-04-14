@@ -194,6 +194,7 @@ fn def_mock(method: &Method, inp: &syn::Lifetime, out: &syn::Lifetime) -> proc_m
         }
     });
 
+    let n_args = method.inputs.len();
     let inputs_pat = method.inputs.iter().map(|input| &input.index_ident);
     let to_ref_expr = method.inputs.iter().map(|input| {
         let index_ident = &input.index_ident;
@@ -225,8 +226,8 @@ fn def_mock(method: &Method, inp: &syn::Lifetime, out: &syn::Lifetime) -> proc_m
             type InputRefs<#inp> = (#(#input_refs_tuple),*);
             type Output = #output;
 
-            fn input_refs<#inp, #out>((#(#inputs_pat),*): & #out Self::Inputs<#inp>) -> Self::InputRefs<#out> {
-                (#(#to_ref_expr),*)
+            fn input_refs<#inp, #out>((#(#inputs_pat),*): & #out Self::Inputs<#inp>) -> (Self::InputRefs<#out>, usize) {
+                ((#(#to_ref_expr),*), #n_args)
             }
 
             const NAME: &'static str = #api_name;
@@ -253,9 +254,9 @@ fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
     quote! {
         #sig {
             match self.get_impl::<#mock_ident>() {
-                ::unimock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*)),
-                ::unimock::Impl::ReturnDefault => Default::default(),
-                ::unimock::Impl::CallOriginal => panic!("no original to call for {}", #mock_ident::NAME)
+                ::unimock::mock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*)),
+                ::unimock::mock::Impl::ReturnDefault => Default::default(),
+                ::unimock::mock::Impl::CallOriginal => panic!("no original to call for {}", #mock_ident::NAME)
             }
         }
     }

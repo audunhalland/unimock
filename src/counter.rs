@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicUsize;
+use std::{fmt::Display, sync::atomic::AtomicUsize};
 
 pub(crate) struct CallCounter {
     actual_count: AtomicUsize,
@@ -23,18 +23,20 @@ impl CallCounter {
     }
 
     pub fn verify(&self, name: &'static str, pat_index: usize) {
-        let actual_count = self.actual_count.load(std::sync::atomic::Ordering::Relaxed);
+        let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::Relaxed));
 
         match self.expectation {
             CountExpectation::None => {}
             CountExpectation::Exactly(target) => {
-                if actual_count != target {
-                    panic!("Expected {name}[#{pat_index}] to be called exactly {target} time(s), but was actually called {actual_count} time(s).");
+                if actual_calls.0 != target {
+                    let target_calls = NCalls(target);
+                    panic!("{name}: Expected call pattern #{pat_index} to match exactly {target_calls}, but it actually matched {actual_calls}.");
                 }
             }
             CountExpectation::AtLeast(target) => {
-                if actual_count < target {
-                    panic!("Expected {name}[#{pat_index}] to be called at least {target} time(s), but was actually called {actual_count} time(s).");
+                if actual_calls.0 < target {
+                    let target_calls = NCalls(target);
+                    panic!("{name}: Expected call pattern #{pat_index} to match at least {target_calls}, but it actually matched {actual_calls}.");
                 }
             }
         }
@@ -45,4 +47,16 @@ pub(crate) enum CountExpectation {
     None,
     Exactly(usize),
     AtLeast(usize),
+}
+
+struct NCalls(usize);
+
+impl Display for NCalls {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            0 => write!(f, "no calls"),
+            1 => write!(f, "1 call"),
+            _ => write!(f, "{} calls", self.0),
+        }
+    }
 }
