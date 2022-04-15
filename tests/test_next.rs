@@ -1,12 +1,8 @@
 #![feature(generic_associated_types)]
 
-use cool_asserts::*;
 use unimock::*;
 
-enum PrimitiveEnum {
-    Foo,
-    Bar,
-}
+use cool_asserts::*;
 
 #[unimock_next]
 trait NoArg {
@@ -30,12 +26,12 @@ trait Owned {
     fn foo(&self, a: String, b: String) -> String;
 }
 
-fn takes_owned(o: &impl Owned, a: impl Into<String>, b: impl Into<String>) -> String {
-    o.foo(a.into(), b.into())
-}
-
 #[test]
 fn owned_works() {
+    fn takes_owned(o: &impl Owned, a: impl Into<String>, b: impl Into<String>) -> String {
+        o.foo(a.into(), b.into())
+    }
+
     assert_eq!(
         "ab",
         takes_owned(
@@ -105,13 +101,13 @@ trait MultiArg {
     fn method2(&self, a: &str, b: &str) -> &str;
 }
 
-fn takes_single_multi(t: &(impl SingleArg + MultiArg)) -> &str {
-    let tmp = t.method1("b");
-    t.method2(tmp, tmp)
-}
-
 #[test]
 fn test_union() {
+    fn takes_single_multi(t: &(impl SingleArg + MultiArg)) -> &str {
+        let tmp = t.method1("b");
+        t.method2(tmp, tmp)
+    }
+
     assert_eq!(
         "success",
         takes_single_multi(
@@ -216,6 +212,11 @@ fn should_panic_with_explicit_message() {
     );
 }
 
+enum PrimitiveEnum {
+    Foo,
+    Bar,
+}
+
 #[unimock_next]
 trait VeryPrimitive {
     fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
@@ -244,5 +245,37 @@ fn primitive_mocking_without_debug() {
                 .primitive(PrimitiveEnum::Foo, "");
         },
         includes("VeryPrimitive::primitive(_, _): No matching call patterns.")
+    );
+}
+
+#[unimock_next]
+trait Borrowing {
+    fn borrow<'s>(&'s self, input: String) -> &'s String;
+}
+
+#[test]
+fn borrowing_with_memory_leak() {
+    fn get_str<'s>(t: &'s impl Borrowing, input: &str) -> &'s str {
+        t.borrow(input.to_string()).as_str()
+    }
+
+    assert_eq!(
+        "foo",
+        get_str(
+            &Borrowing_borrow.mock(|each| {
+                each.call(matching!(_)).returns_leak("foo".to_string());
+            }),
+            ""
+        )
+    );
+    assert_eq!(
+        "yoyo",
+        get_str(
+            &Borrowing_borrow.mock(|each| {
+                each.call(matching!(_))
+                    .answers_leak(|input| format!("{input}{input}"));
+            }),
+            "yo"
+        )
     );
 }

@@ -384,3 +384,24 @@ macro_rules! matching {
         }
     };
 }
+
+///
+/// Internal trait implemented by references that allows transforming from `&T` to `&'static T`
+/// by leaking memory.
+/// The trait is implemented for all `&T`. It allows functions to refer to the non-referenced owned value `T`,
+/// and leak that.
+///
+#[doc(hidden)]
+pub trait LeakOutput {
+    type Owned: 'static;
+
+    fn leak(value: Self::Owned) -> Self;
+}
+
+impl<T: 'static> LeakOutput for &T {
+    type Owned = T;
+
+    fn leak(value: Self::Owned) -> Self {
+        Box::leak(Box::new(value))
+    }
+}

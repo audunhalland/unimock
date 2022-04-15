@@ -118,6 +118,32 @@ where
         self
     }
 
+    /// Specify the output of the call pattern to be a static reference to the
+    /// passed owned value, by leaking its memory. This version leaks the value once.
+    pub fn returns_leak<T>(self, value: T) -> Self
+    where
+        M::Output: Send + Sync + Copy + LeakOutput<Owned = T> + 'static,
+    {
+        let leaked = <M::Output as LeakOutput>::leak(value);
+        self.pattern.output_factory = Some(Box::new(move |_| leaked));
+        self
+    }
+
+    /// Specify the output of the call pattern by invoking the given closure that
+    /// can then compute it based on input parameters, then create a static reference
+    /// to it by leaking it.
+    pub fn answers_leak<F, T>(self, f: F) -> Self
+    where
+        F: (for<'i> Fn(M::Inputs<'i>) -> T) + Send + Sync + 'static,
+        M::Output: Send + Sync + Copy + LeakOutput<Owned = T> + 'static,
+    {
+        self.pattern.output_factory = Some(Box::new(move |args| {
+            let owned_output = f(args);
+            <M::Output as LeakOutput>::leak(owned_output)
+        }));
+        self
+    }
+
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
     pub fn panics(self, message: impl Into<String>) -> Self {
         let message = message.into();
