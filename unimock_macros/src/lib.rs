@@ -65,11 +65,14 @@ enum UnimockInnerAttr {
 
 impl syn::parse::Parse for UnimockInnerAttr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let keyword: syn::Ident = input.parse()?;
-        let _: syn::token::Eq = input.parse()?;
+        let content;
+        let _ = syn::parenthesized!(content in input);
+
+        let keyword: syn::Ident = content.parse()?;
+        let _: syn::token::Eq = content.parse()?;
         match keyword.to_string().as_str() {
             "name" => {
-                let name: syn::Ident = input.parse()?;
+                let name: syn::Ident = content.parse()?;
                 Ok(Self::Name(name))
             }
             _ => Err(syn::Error::new(keyword.span(), "unrecognized keyword")),
@@ -78,11 +81,11 @@ impl syn::parse::Parse for UnimockInnerAttr {
 }
 
 fn render_output(cfg: Cfg, item_trait: syn::ItemTrait) -> proc_macro2::TokenStream {
-    let (item_trait, method_attrs) = match interpret_trait_attrs(item_trait) {
+    let (item_trait, method_attrs_by_index) = match extract_inner_attrs(item_trait) {
         Ok(result) => result,
         Err(err) => return err.to_compile_error(),
     };
-    let methods = match extract_methods(&item_trait, &cfg) {
+    let methods = match extract_methods(&item_trait, &cfg, method_attrs_by_index) {
         Ok(methods) => methods,
         Err(err) => return err.to_compile_error(),
     };
@@ -148,6 +151,12 @@ struct MethodAttrs {
     mock_ident: Option<proc_macro2::Ident>,
 }
 
+impl Default for MethodAttrs {
+    fn default() -> Self {
+        Self { mock_ident: None }
+    }
+}
+
 struct MethodInput<'s> {
     kind: InputKind,
     ty: &'s syn::TypePath,
@@ -168,7 +177,7 @@ enum PrimitiveTy {
     Other,
 }
 
-fn interpret_trait_attrs(
+fn extract_inner_attrs(
     mut item_trait: syn::ItemTrait,
 ) -> syn::Result<(syn::ItemTrait, HashMap<usize, MethodAttrs>)> {
     fn parse_inner_attr(attr: &syn::Attribute) -> syn::Result<Option<UnimockInnerAttr>> {
@@ -198,22 +207,36 @@ fn interpret_trait_attrs(
         .map(|(index, method)| {
             let mut mock_ident = None;
 
-            method.attrs.retain(|attr| match parse_inner_attr(attr) {
-                Ok(Some(UnimockInnerAttr::Name(ident))) => {
-                    mock_ident = Some(ident);
-                    false
-                }
-                _ => true,
-            });
+            let mut attr_index = 0;
 
-            (index, MethodAttrs { mock_ident })
+            while attr_index < method.attrs.len() {
+                match parse_inner_attr(&method.attrs[attr_index])? {
+                    Some(attr) => {
+                        match attr {
+                            UnimockInnerAttr::Name(ident) => {
+                                mock_ident = Some(ident);
+                            }
+                        };
+                        method.attrs.remove(attr_index);
+                    }
+                    None => {
+                        attr_index += 1;
+                    }
+                }
+            }
+
+            Ok((index, MethodAttrs { mock_ident }))
         })
-        .collect();
+        .collect::<syn::Result<HashMap<usize, MethodAttrs>>>()?;
 
     Ok((item_trait, method_attrs))
 }
 
-fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result<Vec<Method<'s>>> {
+fn extract_methods<'s>(
+    item_trait: &'s syn::ItemTrait,
+    cfg: &Cfg,
+    mut method_attrs_by_index: HashMap<usize, MethodAttrs>,
+) -> syn::Result<Vec<Method<'s>>> {
     item_trait
         .items
         .iter()
@@ -222,16 +245,18 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
             _ => None,
         })
         .enumerate()
-        .map(|(_, method)| {
+        .map(|(index, method)| {
             let api_name = syn::LitStr::new(
                 &format!("{}::{}", item_trait.ident, method.sig.ident),
                 item_trait.ident.span(),
             );
 
-            let attrs = TraitMethodAttrs::parse(method);
+            let attrs = method_attrs_by_index
+                .remove(&index)
+                .unwrap_or_else(Default::default);
 
-            let mock_ident_method_part = if let Some(custom) = attrs.mock_ident.as_ref() {
-                custom
+            let mock_ident_method_part = if let Some(custom_ident) = attrs.mock_ident.as_ref() {
+                custom_ident
             } else {
                 &method.sig.ident
             };
@@ -250,16 +275,6 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
             })
         })
         .collect()
-}
-
-struct TraitMethodAttrs {
-    mock_ident: Option<proc_macro2::Ident>,
-}
-
-impl TraitMethodAttrs {
-    fn parse(method: &syn::TraitItemMethod) -> Self {
-        Self { mock_ident: None }
-    }
 }
 
 fn extract_method_inputs<'s>(sig: &'s syn::Signature) -> syn::Result<Vec<MethodInput<'s>>> {

@@ -112,11 +112,12 @@ where
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters.
-    pub fn answers<F>(self, f: F) -> Self
+    pub fn answers<F, A>(self, f: F) -> Self
     where
-        F: (for<'i> Fn(M::Inputs<'i>) -> M::Output) + Send + Sync + 'static,
+        F: (for<'i> Fn(M::Inputs<'i>) -> A) + Send + Sync + 'static,
+        A: Into<M::Output>,
     {
-        self.pattern.output_factory = Some(Box::new(f));
+        self.pattern.output_factory = Some(Box::new(move |inputs| f(inputs).into()));
         self
     }
 
@@ -135,14 +136,14 @@ where
     /// can then compute it based on input parameters, then create a static reference
     /// to it by leaking. Note that this version will produce a new memory leak for
     /// _every invocation_ of the answer function.
-    pub fn answers_leak<V, O, F>(self, f: F) -> Self
+    pub fn answers_leak<F, A, O>(self, f: F) -> Self
     where
-        V: Into<O>,
-        F: (for<'i> Fn(M::Inputs<'i>) -> V) + Send + Sync + 'static,
+        F: (for<'i> Fn(M::Inputs<'i>) -> A) + Send + Sync + 'static,
+        A: Into<O>,
         M::Output: LeakOutput<Owned = O>,
     {
-        self.pattern.output_factory = Some(Box::new(move |args| {
-            let owned_output = f(args).into();
+        self.pattern.output_factory = Some(Box::new(move |inputs| {
+            let owned_output = f(inputs).into();
             <M::Output as LeakOutput>::leak(owned_output)
         }));
         self

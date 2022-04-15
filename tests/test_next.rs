@@ -293,14 +293,14 @@ fn borrowing_with_memory_leak() {
 
 #[unimock_next(mod=with_module)]
 trait WithModule {
-    // #[unimock(name=Foo)] BUG: does not work yet
+    #[unimock(name=Funk)]
     fn func<'s>(&'s self, input: String) -> &'s String;
 }
 
 #[test]
 fn test_with_module() {
     assert_panics!({
-        let _ = with_module::func.mock(|_| {});
+        let _ = with_module::Funk.mock(|_| {});
     });
 }
 
