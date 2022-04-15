@@ -90,11 +90,13 @@ where
     M: Mock + 'static,
 {
     /// Specify the output of the call pattern by providing a value.
-    /// The output type must implement `Clone` and cannot contain non-static references.
-    pub fn returns(self, value: M::Output) -> Self
+    /// The output type must implement [Clone] and cannot contain non-static references.
+    /// It must also be [Send] and [Sync] because unimock needs to store it.
+    pub fn returns(self, value: impl Into<M::Output>) -> Self
     where
         M::Output: Send + Sync + Clone + 'static,
     {
+        let value = value.into();
         self.pattern.output_factory = Some(Box::new(move |_| value.clone()));
         self
     }
@@ -120,25 +122,27 @@ where
 
     /// Specify the output of the call pattern to be a static reference to the
     /// passed owned value, by leaking its memory. This version leaks the value once.
-    pub fn returns_leak<T>(self, value: T) -> Self
+    pub fn returns_leak<T>(self, value: impl Into<T>) -> Self
     where
         M::Output: Send + Sync + Copy + LeakOutput<Owned = T> + 'static,
     {
-        let leaked = <M::Output as LeakOutput>::leak(value);
+        let leaked = <M::Output as LeakOutput>::leak(value.into());
         self.pattern.output_factory = Some(Box::new(move |_| leaked));
         self
     }
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters, then create a static reference
-    /// to it by leaking it.
-    pub fn answers_leak<F, T>(self, f: F) -> Self
+    /// to it by leaking. Note that this version will produce a new memory leak for
+    /// _every invocation_ of the answer function.
+    pub fn answers_leak<V, O, F>(self, f: F) -> Self
     where
-        F: (for<'i> Fn(M::Inputs<'i>) -> T) + Send + Sync + 'static,
-        M::Output: Send + Sync + Copy + LeakOutput<Owned = T> + 'static,
+        V: Into<O>,
+        F: (for<'i> Fn(M::Inputs<'i>) -> V) + Send + Sync + 'static,
+        M::Output: LeakOutput<Owned = O>,
     {
         self.pattern.output_factory = Some(Box::new(move |args| {
-            let owned_output = f(args);
+            let owned_output = f(args).into();
             <M::Output as LeakOutput>::leak(owned_output)
         }));
         self

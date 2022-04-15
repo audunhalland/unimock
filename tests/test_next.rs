@@ -2,6 +2,7 @@
 
 use unimock::*;
 
+use async_trait::async_trait;
 use cool_asserts::*;
 
 #[unimock_next]
@@ -12,10 +13,10 @@ trait NoArg {
 #[test]
 fn noarg_works() {
     assert_eq!(
-        42,
-        NoArg_no_arg
+        1_000_000,
+        NoArg__no_arg
             .mock(|each| {
-                each.call(matching!()).returns(42);
+                each.call(matching!()).returns(1_000_000);
             })
             .no_arg()
     );
@@ -35,8 +36,18 @@ fn owned_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &Owned_foo.mock(|each| {
+            &Owned__foo.mock(|each| {
                 each.call(matching!(_)).answers(|(a, b)| format!("{a}{b}"));
+            }),
+            "a",
+            "b",
+        )
+    );
+    assert_eq!(
+        "lol",
+        takes_owned(
+            &Owned__foo.mock(|each| {
+                each.call(matching!(_)).returns("lol");
             }),
             "a",
             "b",
@@ -45,7 +56,7 @@ fn owned_works() {
     assert_eq!(
         "",
         takes_owned(
-            &Owned_foo.mock(|each| {
+            &Owned__foo.mock(|each| {
                 each.call(matching!("a", "b")).returns_default();
             }),
             "a",
@@ -69,7 +80,7 @@ fn referenced_with_static_return_value_works() {
     assert_eq!(
         "answer",
         takes_referenced(
-            &Referenced_foo.mock(|each| {
+            &Referenced__foo.mock(|each| {
                 each.call(matching!("a")).returns("answer");
             }),
             "a",
@@ -82,7 +93,7 @@ fn referenced_with_default_return_value_works() {
     assert_eq!(
         "",
         takes_referenced(
-            &Referenced_foo.mock(|each| {
+            &Referenced__foo.mock(|each| {
                 each.call(matching!("Æ")).panics("Should not be called");
                 each.call(matching!("a")).returns_default();
             }),
@@ -112,10 +123,10 @@ fn test_union() {
         "success",
         takes_single_multi(
             &[
-                SingleArg_method1.mock(|each| {
+                SingleArg__method1.mock(|each| {
                     each.call(matching!("b")).returns("B").once();
                 }),
-                MultiArg_method2.mock(|each| {
+                MultiArg__method2.mock(|each| {
                     each.call(matching!("a", _)).never().returns("fail");
                     each.call(matching!("B", "B")).returns("success").once();
                 })
@@ -139,7 +150,7 @@ fn should_panic_for_nonexisting_mock() {
 fn should_panic_for_unused_mock() {
     assert_panics!(
         {
-            SingleArg_method1.mock(|_| {});
+            SingleArg__method1.mock(|_| {});
         },
         includes("Mock for SingleArg::method1 was never called. Dead mocks should be removed.")
     );
@@ -149,7 +160,7 @@ fn should_panic_for_unused_mock() {
 fn should_panic_for_call_with_no_accepted_patterns() {
     assert_panics!(
         {
-            SingleArg_method1.mock(|_| {}).method1("b");
+            SingleArg__method1.mock(|_| {}).method1("b");
         },
         includes("SingleArg::method1(_): No registered call patterns")
     );
@@ -159,7 +170,7 @@ fn should_panic_for_call_with_no_accepted_patterns() {
 fn call_pattern_without_return_factory_should_crash() {
     assert_panics!(
         {
-            SingleArg_method1
+            SingleArg__method1
                 .mock(|each| {
                     each.call(matching!(_));
                 })
@@ -175,7 +186,7 @@ fn call_pattern_without_return_factory_should_crash() {
 fn should_panic_if_no_call_patterns_are_matched() {
     assert_panics!(
         {
-            SingleArg_method1
+            SingleArg__method1
                 .mock(|each| {
                     each.call(matching!("something"));
                 })
@@ -189,7 +200,7 @@ fn should_panic_if_no_call_patterns_are_matched() {
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     assert_panics!(
         {
-            SingleArg_method1.mock(|each| {
+            SingleArg__method1.mock(|each| {
                 each.call(matching!("a")).once().returns_default();
                 each.call(matching!(_)).returns_default();
             }).method1("b");
@@ -202,7 +213,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
 fn should_panic_with_explicit_message() {
     assert_panics!(
         {
-            SingleArg_method1
+            SingleArg__method1
                 .mock(|each| {
                     each.call(matching!(_)).panics("foobar!");
                 })
@@ -224,7 +235,7 @@ trait VeryPrimitive {
 
 #[test]
 fn primitive_mocking_without_debug() {
-    match VeryPrimitive_primitive
+    match VeryPrimitive__primitive
         .mock(|each| {
             each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
@@ -237,7 +248,7 @@ fn primitive_mocking_without_debug() {
 
     assert_panics!(
         {
-            VeryPrimitive_primitive
+            VeryPrimitive__primitive
                 .mock(|each| {
                     each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
                         .answers(|_| PrimitiveEnum::Foo);
@@ -262,8 +273,8 @@ fn borrowing_with_memory_leak() {
     assert_eq!(
         "foo",
         get_str(
-            &Borrowing_borrow.mock(|each| {
-                each.call(matching!(_)).returns_leak("foo".to_string());
+            &Borrowing__borrow.mock(|each| {
+                each.call(matching!(_)).returns_leak("foo");
             }),
             ""
         )
@@ -271,11 +282,48 @@ fn borrowing_with_memory_leak() {
     assert_eq!(
         "yoyo",
         get_str(
-            &Borrowing_borrow.mock(|each| {
+            &Borrowing__borrow.mock(|each| {
                 each.call(matching!(_))
                     .answers_leak(|input| format!("{input}{input}"));
             }),
             "yo"
         )
+    );
+}
+
+#[unimock_next(mod=with_module)]
+trait WithModule {
+    // #[unimock(name=Foo)] BUG: does not work yet
+    fn func<'s>(&'s self, input: String) -> &'s String;
+}
+
+#[test]
+fn test_with_module() {
+    assert_panics!({
+        let _ = with_module::func.mock(|_| {});
+    });
+}
+
+#[unimock_next]
+#[async_trait]
+trait Async {
+    async fn func(&self, arg: i32) -> String;
+}
+
+#[tokio::test]
+async fn test_async_trait() {
+    async fn takes_async(a: &impl Async, arg: i32) -> String {
+        a.func(arg).await
+    }
+
+    assert_eq!(
+        "42",
+        takes_async(
+            &Async__func.mock(|each| {
+                each.call(matching!(_)).returns("42");
+            }),
+            21
+        )
+        .await
     );
 }

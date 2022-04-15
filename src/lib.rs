@@ -37,10 +37,10 @@
 //!
 //! fn test_next() {
 //!     let unimock = Unimock::union([
-//!         Foo_foo.mock(|each| {
+//!         Foo__foo.mock(|each| {
 //!             each.call(matching!()).returns(40);
 //!         }),
-//!         Bar_bar.mock(|each| {
+//!         Bar__bar.mock(|each| {
 //!             each.call(matching!()).returns(2);
 //!         })
 //!     ]);
@@ -278,7 +278,7 @@ impl<const N: usize> Union for [Unimock; N] {
 }
 
 ///
-/// Trait describing a single mockable item.
+/// Trait describing a single mockable function interface.
 ///
 /// To be useful, traits need to be implemented by types. But things we want to
 /// mock are _functions_, not types. Unimock works by defining an empty struct
@@ -311,13 +311,13 @@ pub trait Mock: Sized {
     /// Convert input arguments to references, along with the argument count.
     fn input_refs<'i, 'o>(inputs: &'o Self::Inputs<'i>) -> (Self::InputRefs<'o>, usize);
 
-    /// Create a unimock instance mocking this API.
+    /// Create a unimock instance that mocks this function.
     fn mock<F>(self, f: F) -> Unimock
     where
         Self: 'static,
         F: FnOnce(&mut builders::Each<Self>),
     {
-        let mut each = builders::Each::<Self>::new();
+        let mut each = builders::Each::new();
         f(&mut each);
         Unimock::with_single_mock(
             TypeId::of::<Self>(),
@@ -391,7 +391,6 @@ macro_rules! matching {
 /// The trait is implemented for all `&T`. It allows functions to refer to the non-referenced owned value `T`,
 /// and leak that.
 ///
-#[doc(hidden)]
 pub trait LeakOutput {
     type Owned: 'static;
 
