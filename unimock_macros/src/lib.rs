@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 use quote::quote;
+use std::collections::HashMap;
 use syn::spanned::Spanned;
 
 extern crate proc_macro;
@@ -16,17 +17,76 @@ extern crate proc_macro;
 ///
 #[proc_macro_attribute]
 pub fn unimock_next(
-    _attr: proc_macro::TokenStream,
+    attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
+    let attrs = syn::parse_macro_input!(attr as Cfg);
     let item_trait = syn::parse_macro_input!(input as syn::ItemTrait);
 
-    let output = render_output(item_trait);
+    let output = render_output(attrs, item_trait);
+
+    // println!("{output}");
 
     proc_macro::TokenStream::from(output)
 }
 
-fn render_output(item_trait: syn::ItemTrait) -> proc_macro2::TokenStream {
+struct Cfg {
+    module: Option<syn::Ident>,
+    inp: syn::Lifetime,
+    out: syn::Lifetime,
+}
+
+impl syn::parse::Parse for Cfg {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut module = None;
+
+        while !input.is_empty() {
+            if input.peek(syn::token::Mod) {
+                let _: syn::token::Mod = input.parse()?;
+                let _: syn::token::Eq = input.parse()?;
+                module = Some(input.parse()?);
+            } else {
+                let keyword: syn::Ident = input.parse()?;
+                return Err(syn::Error::new(keyword.span(), "Unrecognized keyword"));
+            }
+        }
+
+        Ok(Self {
+            module,
+            inp: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
+            out: syn::Lifetime::new("'__o", proc_macro2::Span::call_site()),
+        })
+    }
+}
+
+enum UnimockInnerAttr {
+    Name(syn::Ident),
+}
+
+impl syn::parse::Parse for UnimockInnerAttr {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let keyword: syn::Ident = input.parse()?;
+        let _: syn::token::Eq = input.parse()?;
+        match keyword.to_string().as_str() {
+            "name" => {
+                let name: syn::Ident = input.parse()?;
+                Ok(Self::Name(name))
+            }
+            _ => Err(syn::Error::new(keyword.span(), "unrecognized keyword")),
+        }
+    }
+}
+
+fn render_output(cfg: Cfg, item_trait: syn::ItemTrait) -> proc_macro2::TokenStream {
+    let (item_trait, method_attrs) = match interpret_trait_attrs(item_trait) {
+        Ok(result) => result,
+        Err(err) => return err.to_compile_error(),
+    };
+    let methods = match extract_methods(&item_trait, &cfg) {
+        Ok(methods) => methods,
+        Err(err) => return err.to_compile_error(),
+    };
+
     let trait_ident = &item_trait.ident;
     let impl_attributes = item_trait
         .attrs
@@ -46,24 +106,33 @@ fn render_output(item_trait: syn::ItemTrait) -> proc_macro2::TokenStream {
             syn::AttrStyle::Inner(_) => None,
         });
 
-    let methods = match extract_methods(&item_trait) {
-        Ok(methods) => methods,
-        Err(err) => return err.to_compile_error(),
-    };
-    let inp = syn::Lifetime::new("'__i", proc_macro2::Span::call_site());
-    let out = syn::Lifetime::new("'__o", proc_macro2::Span::call_site());
-
-    let mock_defs = methods.iter().map(|method| def_mock(method, &inp, &out));
+    let mock_defs = methods
+        .iter()
+        .map(|method| def_mock(&item_trait, method, &cfg));
     let method_impls = methods.iter().map(|method| def_method_impl(method));
 
-    quote! {
-        #item_trait
+    if let Some(module) = &cfg.module {
+        let vis = &item_trait.vis;
+        quote! {
+            #item_trait
+            #vis mod #module {
+                #(#mock_defs)*
 
-        #(#mock_defs)*
+                #(#impl_attributes)*
+                impl super::#trait_ident for ::unimock::Unimock {
+                    #(#method_impls)*
+                }
+            }
+        }
+    } else {
+        quote! {
+            #item_trait
+            #(#mock_defs)*
 
-        #(#impl_attributes)*
-        impl #trait_ident for ::unimock::Unimock {
-            #(#method_impls)*
+            #(#impl_attributes)*
+            impl #trait_ident for ::unimock::Unimock {
+                #(#method_impls)*
+            }
         }
     }
 }
@@ -73,6 +142,10 @@ struct Method<'s> {
     mock_ident: syn::Ident,
     api_name: syn::LitStr,
     inputs: Vec<MethodInput<'s>>,
+}
+
+struct MethodAttrs {
+    mock_ident: Option<proc_macro2::Ident>,
 }
 
 struct MethodInput<'s> {
@@ -95,7 +168,52 @@ enum PrimitiveTy {
     Other,
 }
 
-fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> syn::Result<Vec<Method<'s>>> {
+fn interpret_trait_attrs(
+    mut item_trait: syn::ItemTrait,
+) -> syn::Result<(syn::ItemTrait, HashMap<usize, MethodAttrs>)> {
+    fn parse_inner_attr(attr: &syn::Attribute) -> syn::Result<Option<UnimockInnerAttr>> {
+        let path = &attr.path;
+        if path.segments.len() != 1 {
+            return Ok(None);
+        }
+
+        let segment = path.segments.last().unwrap();
+        match segment.ident.to_string().as_str() {
+            "unimock" => match syn::parse2::<UnimockInnerAttr>(attr.tokens.clone()) {
+                Ok(inner_attr) => Ok(Some(inner_attr)),
+                Err(err) => Err(err),
+            },
+            _ => Ok(None),
+        }
+    }
+
+    let method_attrs = item_trait
+        .items
+        .iter_mut()
+        .filter_map(|item| match item {
+            syn::TraitItem::Method(method) => Some(method),
+            _ => None,
+        })
+        .enumerate()
+        .map(|(index, method)| {
+            let mut mock_ident = None;
+
+            method.attrs.retain(|attr| match parse_inner_attr(attr) {
+                Ok(Some(UnimockInnerAttr::Name(ident))) => {
+                    mock_ident = Some(ident);
+                    false
+                }
+                _ => true,
+            });
+
+            (index, MethodAttrs { mock_ident })
+        })
+        .collect();
+
+    Ok((item_trait, method_attrs))
+}
+
+fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result<Vec<Method<'s>>> {
     item_trait
         .items
         .iter()
@@ -103,12 +221,26 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> syn::Result<Vec<Method
             syn::TraitItem::Method(method) => Some(method),
             _ => None,
         })
-        .map(|method| {
-            let mock_ident = quote::format_ident!("{}_{}", item_trait.ident, method.sig.ident);
+        .enumerate()
+        .map(|(_, method)| {
             let api_name = syn::LitStr::new(
                 &format!("{}::{}", item_trait.ident, method.sig.ident),
                 item_trait.ident.span(),
             );
+
+            let attrs = TraitMethodAttrs::parse(method);
+
+            let mock_ident_method_part = if let Some(custom) = attrs.mock_ident.as_ref() {
+                custom
+            } else {
+                &method.sig.ident
+            };
+
+            let mock_ident = if cfg.module.is_some() {
+                mock_ident_method_part.clone()
+            } else {
+                quote::format_ident!("{}__{}", item_trait.ident, mock_ident_method_part)
+            };
 
             Ok(Method {
                 method,
@@ -118,6 +250,16 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait) -> syn::Result<Vec<Method
             })
         })
         .collect()
+}
+
+struct TraitMethodAttrs {
+    mock_ident: Option<proc_macro2::Ident>,
+}
+
+impl TraitMethodAttrs {
+    fn parse(method: &syn::TraitItemMethod) -> Self {
+        Self { mock_ident: None }
+    }
 }
 
 fn extract_method_inputs<'s>(sig: &'s syn::Signature) -> syn::Result<Vec<MethodInput<'s>>> {
@@ -169,10 +311,21 @@ fn extract_method_inputs<'s>(sig: &'s syn::Signature) -> syn::Result<Vec<MethodI
         .collect()
 }
 
-fn def_mock(method: &Method, inp: &syn::Lifetime, out: &syn::Lifetime) -> proc_macro2::TokenStream {
+fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let mock_ident = &method.mock_ident;
     let api_name = &method.api_name;
+
+    let mock_visibility = if let Some(_) = &cfg.module {
+        syn::Visibility::Public(syn::VisPublic {
+            pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
+        })
+    } else {
+        item_trait.vis.clone()
+    };
+
+    let inp = &cfg.inp;
+    let out = &cfg.out;
 
     use Ownership::*;
     use PrimitiveTy::*;
@@ -219,7 +372,7 @@ fn def_mock(method: &Method, inp: &syn::Lifetime, out: &syn::Lifetime) -> proc_m
 
     quote! {
         #[allow(non_camel_case_types)]
-        struct #mock_ident;
+        #mock_visibility struct #mock_ident;
 
         impl ::unimock::Mock for #mock_ident {
             type Inputs<#inp> = (#(#inputs_tuple),*);
@@ -255,7 +408,7 @@ fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
         #sig {
             match self.get_impl::<#mock_ident>() {
                 ::unimock::mock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*)),
-                ::unimock::mock::Impl::CallOriginal => panic!("no original to call for {}", #mock_ident::NAME)
+                ::unimock::mock::Impl::CallOriginal => panic!("no original to call for {}", <#mock_ident as ::unimock::Mock>::NAME)
             }
         }
     }
