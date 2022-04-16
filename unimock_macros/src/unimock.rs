@@ -4,8 +4,7 @@ use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
-    inp: syn::Lifetime,
-    out: syn::Lifetime,
+    input_lifetime: syn::Lifetime,
 }
 
 impl syn::parse::Parse for Cfg {
@@ -25,8 +24,7 @@ impl syn::parse::Parse for Cfg {
 
         Ok(Self {
             module,
-            inp: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
-            out: syn::Lifetime::new("'__o", proc_macro2::Span::call_site()),
+            input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
         })
     }
 }
@@ -52,10 +50,7 @@ impl syn::parse::Parse for UnimockInnerAttr {
     }
 }
 
-pub fn render_output(
-    cfg: Cfg,
-    item_trait: syn::ItemTrait,
-) -> syn::Result<proc_macro2::TokenStream> {
+pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let (item_trait, method_attrs_by_index) = extract_inner_attrs(item_trait)?;
     let methods = extract_methods(&item_trait, &cfg, method_attrs_by_index)?;
 
@@ -113,7 +108,6 @@ struct Method<'s> {
     method: &'s syn::TraitItemMethod,
     mock_ident: syn::Ident,
     api_name: syn::LitStr,
-    inputs: Vec<MethodInput<'s>>,
 }
 
 struct MethodAttrs {
@@ -124,27 +118,6 @@ impl Default for MethodAttrs {
     fn default() -> Self {
         Self { mock_ident: None }
     }
-}
-
-struct MethodInput<'s> {
-    kind: InputKind,
-    ty: &'s syn::TypePath,
-    index_ident: syn::Ident,
-}
-
-struct InputKind(Ownership, PrimitiveTy);
-
-enum Ownership {
-    Owned,
-    Ref,
-    RefMut,
-}
-
-enum PrimitiveTy {
-    String,
-    Str,
-    Cow,
-    Other,
 }
 
 fn extract_inner_attrs(
@@ -241,56 +214,6 @@ fn extract_methods<'s>(
                 method,
                 mock_ident,
                 api_name,
-                inputs: extract_method_inputs(&method.sig)?,
-            })
-        })
-        .collect()
-}
-
-fn extract_method_inputs<'s>(sig: &'s syn::Signature) -> syn::Result<Vec<MethodInput<'s>>> {
-    fn analyze_input<'s>(ty: &'s syn::Type) -> syn::Result<(InputKind, &'s syn::TypePath)> {
-        match ty {
-            syn::Type::Path(type_path) => Ok((
-                InputKind(Ownership::Owned, analyze_primitive_ty(type_path)),
-                type_path,
-            )),
-            syn::Type::Reference(type_reference) => {
-                let (InputKind(_, primitive), type_path) = analyze_input(&type_reference.elem)?;
-                Ok((InputKind(Ownership::Ref, primitive), type_path))
-            }
-            _ => Err(syn::Error::new(ty.span(), "Unprocessable argument")),
-        }
-    }
-
-    fn analyze_primitive_ty<'s>(type_path: &'s syn::TypePath) -> PrimitiveTy {
-        if type_path.qself.is_some() {
-            return PrimitiveTy::Other;
-        }
-
-        if let Some(last_segment) = type_path.path.segments.last() {
-            match last_segment.ident.to_string().as_ref() {
-                "String" => PrimitiveTy::String,
-                "Cow" => PrimitiveTy::Cow,
-                _ => PrimitiveTy::Other,
-            }
-        } else {
-            PrimitiveTy::Other
-        }
-    }
-
-    sig.inputs
-        .iter()
-        .filter_map(|input| match input {
-            syn::FnArg::Receiver(_) => None,
-            syn::FnArg::Typed(pat_type) => Some(&pat_type.ty),
-        })
-        .enumerate()
-        .map(|(index, ty)| {
-            let (kind, ty) = analyze_input(ty)?;
-            Ok(MethodInput {
-                kind,
-                ty,
-                index_ident: quote::format_ident!("a{index}"),
             })
         })
         .collect()
@@ -309,22 +232,36 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
         item_trait.vis.clone()
     };
 
-    let inp = &cfg.inp;
-    let out = &cfg.out;
+    let input_lifetime = &cfg.input_lifetime;
+    let mut n_args: u8 = 0;
 
-    use Ownership::*;
-    use PrimitiveTy::*;
+    let inputs_tuple = method
+        .method
+        .sig
+        .inputs
+        .iter()
+        .filter_map(|input| match input {
+            syn::FnArg::Receiver(_) => None,
+            syn::FnArg::Typed(pat_type) => Some(pat_type.ty.as_ref()),
+        })
+        .map(|ty| {
+            n_args += 1;
+            match ty {
+                syn::Type::Reference(reference) => {
+                    let syn::TypeReference {
+                        and_token,
+                        lifetime: _,
+                        mutability,
+                        elem,
+                    } = reference;
+                    quote! {
+                        #and_token #input_lifetime #mutability #elem
+                    }
+                }
+                ty => quote! { #ty },
+            }
+        });
 
-    let inputs_tuple = method.inputs.iter().map(|input| {
-        let ty = &input.ty;
-        match input.kind {
-            InputKind(Owned, _) => quote! { #ty },
-            InputKind(Ref, _) => quote! { & #inp #ty },
-            InputKind(RefMut, _) => quote! { & #inp mut #ty },
-        }
-    });
-
-    let n_args = method.inputs.len();
     let output = match &sig.output {
         syn::ReturnType::Default => quote! { () },
         syn::ReturnType::Type(_, ty) => match ty.as_ref() {
@@ -343,9 +280,9 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
         #mock_visibility struct #mock_ident;
 
         impl ::unimock::Mock for #mock_ident {
-            type Inputs<#inp> = (#(#inputs_tuple),*);
+            type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #output;
-            const N_ARGS: usize = #n_args;
+            const N_ARGS: u8 = #n_args;
             const NAME: &'static str = #api_name;
         }
     }
@@ -364,8 +301,6 @@ fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
             }
         },
     });
-
-    // let dot_await = sig.asyncness.map(|_| quote! { .await });
 
     quote! {
         #sig {

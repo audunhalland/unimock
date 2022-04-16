@@ -331,7 +331,7 @@ pub trait Mock: Sized {
     /// The output of the mock function.
     type Output;
 
-    const N_ARGS: usize;
+    const N_ARGS: u8;
 
     /// The name to use for runtime errors.
     const NAME: &'static str;

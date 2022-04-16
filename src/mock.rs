@@ -125,7 +125,7 @@ impl<M: Mock> InputDebugger<M> {
         Self { func: None }
     }
 
-    pub fn debug<'i>(&self, inputs: &M::Inputs<'i>, n_args: usize) -> String {
+    pub fn debug<'i>(&self, inputs: &M::Inputs<'i>, n_args: u8) -> String {
         if let Some(func) = self.func.as_ref() {
             let debug = func(inputs);
             match n_args {
@@ -138,7 +138,7 @@ impl<M: Mock> InputDebugger<M> {
     }
 }
 
-fn anonymous_inputs_debug(n_args: usize) -> String {
+fn anonymous_inputs_debug(n_args: u8) -> String {
     let inner = (0..n_args)
         .into_iter()
         .map(|_| "_")

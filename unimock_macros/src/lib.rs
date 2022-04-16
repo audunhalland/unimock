@@ -25,7 +25,7 @@ pub fn unimock_next(
     let attrs = syn::parse_macro_input!(attr as unimock::Cfg);
     let item_trait = syn::parse_macro_input!(input as syn::ItemTrait);
 
-    let output = match unimock::render_output(attrs, item_trait) {
+    let output = match unimock::generate(attrs, item_trait) {
         Ok(stream) => stream,
         Err(err) => err.to_compile_error(),
     };
