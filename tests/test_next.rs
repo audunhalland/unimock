@@ -16,7 +16,7 @@ fn noarg_works() {
         1_000_000,
         NoArg__no_arg
             .mock(|each| {
-                each.call(matching!()).returns(1_000_000);
+                each.call(matching2!()).returns(1_000_000);
             })
             .no_arg()
     );
@@ -37,7 +37,8 @@ fn owned_works() {
         "ab",
         takes_owned(
             &Owned__foo.mock(|each| {
-                each.call(matching!(_)).answers(|(a, b)| format!("{a}{b}"));
+                each.call(matching2!(_, _))
+                    .answers(|(a, b)| format!("{a}{b}"));
             }),
             "a",
             "b",
@@ -47,7 +48,7 @@ fn owned_works() {
         "lol",
         takes_owned(
             &Owned__foo.mock(|each| {
-                each.call(matching!(_)).returns("lol");
+                each.call(matching2!(_, _)).returns("lol");
             }),
             "a",
             "b",
@@ -57,7 +58,7 @@ fn owned_works() {
         "",
         takes_owned(
             &Owned__foo.mock(|each| {
-                each.call(matching!("a", "b")).returns_default();
+                each.call(matching2!("a", "b")).returns_default();
             }),
             "a",
             "b",
@@ -81,7 +82,7 @@ fn referenced_with_static_return_value_works() {
         "answer",
         takes_referenced(
             &Referenced__foo.mock(|each| {
-                each.call(matching!("a")).returns("answer");
+                each.call(matching2!("a")).returns("answer");
             }),
             "a",
         )
@@ -94,8 +95,8 @@ fn referenced_with_default_return_value_works() {
         "",
         takes_referenced(
             &Referenced__foo.mock(|each| {
-                each.call(matching!("Æ")).panics("Should not be called");
-                each.call(matching!("a")).returns_default();
+                each.call(matching2!("Æ")).panics("Should not be called");
+                each.call(matching2!("a")).returns_default();
             }),
             "a",
         )
@@ -124,11 +125,11 @@ fn test_union() {
         takes_single_multi(
             &[
                 SingleArg__method1.mock(|each| {
-                    each.call(matching!("b")).returns("B").once();
+                    each.call(matching2!("b")).returns("B").once();
                 }),
                 MultiArg__method2.mock(|each| {
-                    each.call(matching!("a", _)).never().returns("fail");
-                    each.call(matching!("B", "B")).returns("success").once();
+                    each.call(matching2!("a", _)).never().returns("fail");
+                    each.call(matching2!("B", "B")).returns("success").once();
                 })
             ]
             .union()
@@ -172,7 +173,7 @@ fn call_pattern_without_return_factory_should_crash() {
         {
             SingleArg__method1
                 .mock(|each| {
-                    each.call(matching!(_));
+                    each.call(matching2!(_));
                 })
                 .method1("whatever");
         },
@@ -188,7 +189,7 @@ fn should_panic_if_no_call_patterns_are_matched() {
         {
             SingleArg__method1
                 .mock(|each| {
-                    each.call(matching!("something"));
+                    each.call(matching2!("something"));
                 })
                 .method1("anything");
         },
@@ -201,8 +202,8 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     assert_panics!(
         {
             SingleArg__method1.mock(|each| {
-                each.call(matching!("a")).once().returns_default();
-                each.call(matching!(_)).returns_default();
+                each.call(matching2!("a")).once().returns_default();
+                each.call(matching2!(_)).returns_default();
             }).method1("b");
         },
         includes("SingleArg::method1: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
@@ -215,7 +216,7 @@ fn should_panic_with_explicit_message() {
         {
             SingleArg__method1
                 .mock(|each| {
-                    each.call(matching!(_)).panics("foobar!");
+                    each.call(matching2!(_)).panics("foobar!");
                 })
                 .method1("b");
         },
@@ -237,7 +238,7 @@ trait VeryPrimitive {
 fn primitive_mocking_without_debug() {
     match VeryPrimitive__primitive
         .mock(|each| {
-            each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
+            each.nodebug_call(matching2!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
         })
         .primitive(PrimitiveEnum::Bar, "")
@@ -250,7 +251,7 @@ fn primitive_mocking_without_debug() {
         {
             VeryPrimitive__primitive
                 .mock(|each| {
-                    each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
+                    each.nodebug_call(matching2!(PrimitiveEnum::Bar, _))
                         .answers(|_| PrimitiveEnum::Foo);
                 })
                 .primitive(PrimitiveEnum::Foo, "");
@@ -274,7 +275,7 @@ fn borrowing_with_memory_leak() {
         "foo",
         get_str(
             &Borrowing__borrow.mock(|each| {
-                each.call(matching!(_)).returns_leak("foo");
+                each.call(matching2!(_)).returns_leak("foo");
             }),
             ""
         )
@@ -283,7 +284,7 @@ fn borrowing_with_memory_leak() {
         "yoyo",
         get_str(
             &Borrowing__borrow.mock(|each| {
-                each.call(matching!(_))
+                each.call(matching2!(_))
                     .answers_leak(|input| format!("{input}{input}"));
             }),
             "yo"
@@ -320,10 +321,39 @@ async fn test_async_trait() {
         "42",
         takes_async(
             &Async__func.mock(|each| {
-                each.call(matching!(_)).returns("42");
+                each.call(matching2!(_)).returns("42");
             }),
             21
         )
         .await
     );
+}
+
+use std::borrow::Cow;
+
+#[unimock_next]
+trait CowBased {
+    fn func(&self, arg: Cow<'static, str>) -> Cow<'static, str>;
+}
+
+#[test]
+fn test_cow() {
+    fn takes(t: &impl CowBased, arg: Cow<'static, str>) -> Cow<'static, str> {
+        t.func(arg)
+    }
+
+    fn borrowing(s: &str) -> bool {
+        s == "fds"
+    }
+
+    assert_eq!(
+        "output",
+        takes(
+            &CowBased__func.mock(|each| {
+                each.call(matching2!(Cow::Borrowed("input")))
+                    .returns("output");
+            }),
+            "input".into()
+        )
+    )
 }

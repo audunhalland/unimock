@@ -121,6 +121,8 @@ pub use unimock_macros::unimock;
 
 pub use unimock_macros::unimock_next;
 
+pub use unimock_macros::matching2;
+
 enum FallbackMode {
     Panic,
     CallOriginal,
@@ -403,4 +405,21 @@ impl<T: 'static> LeakOutput for &T {
     fn leak(value: Self::Owned) -> Self {
         Box::leak(Box::new(value))
     }
+}
+
+pub trait BorrowStr {
+    fn borrow_str(&self) -> &str;
+}
+
+impl<T: AsRef<str>> BorrowStr for T {
+    fn borrow_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+#[test]
+fn test_borrow_str() {
+    "fdjskl".borrow_str();
+    "fdsjkl".to_string().borrow_str();
+    std::borrow::Cow::Borrowed("fdsjkl").borrow_str();
 }
