@@ -324,24 +324,7 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
         }
     });
 
-    let input_refs_tuple = method.inputs.iter().map(|input| {
-        let ty = &input.ty;
-        match &input.kind {
-            InputKind(_, String) => quote! { & #inp str },
-            InputKind(_, _) => quote! { & #inp #ty },
-        }
-    });
-
     let n_args = method.inputs.len();
-    let inputs_pat = method.inputs.iter().map(|input| &input.index_ident);
-    let to_ref_expr = method.inputs.iter().map(|input| {
-        let index_ident = &input.index_ident;
-        match &input.kind {
-            InputKind(_, String) => quote! { #index_ident.as_str() },
-            _ => quote! { #index_ident },
-        }
-    });
-
     let output = match &sig.output {
         syn::ReturnType::Default => quote! { () },
         syn::ReturnType::Type(_, ty) => match ty.as_ref() {
@@ -361,13 +344,8 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
 
         impl ::unimock::Mock for #mock_ident {
             type Inputs<#inp> = (#(#inputs_tuple),*);
-            type InputRefs<#inp> = (#(#input_refs_tuple),*);
             type Output = #output;
-
-            fn input_refs<#inp, #out>((#(#inputs_pat),*): & #out Self::Inputs<#inp>) -> (Self::InputRefs<#out>, usize) {
-                ((#(#to_ref_expr),*), #n_args)
-            }
-
+            const N_ARGS: usize = #n_args;
             const NAME: &'static str = #api_name;
         }
     }

@@ -121,7 +121,34 @@ pub use unimock_macros::unimock;
 
 pub use unimock_macros::unimock_next;
 
-pub use unimock_macros::matching2;
+///
+/// Macro to ease argument pattern matching.
+/// This macro produces a closure expression suitable for passing to [builders::Each::call].
+///
+/// Takes inspiration from [std::matches] and works similarly, except that the value to match
+/// can be removed as a macro argument, since it is instead received as the closure argument.
+///
+/// Unimock uses tuples to represent multiple arguments. A single argument is not a tuple.
+/// To avoid the extra set of parentheses for simple multi-argument matchers, there is
+/// a special syntax that accepts several top-level patterns:
+/// `matching!("a", "b")` will expand to `matching!(("a", "b"))`.
+///
+/// # Examples
+///
+/// ```rust
+/// # use unimock::*;
+/// fn one_str(_: impl Fn(&(&str)) -> bool) {}
+/// fn three_strs(_: impl Fn(&(&str, &str, &str)) -> bool) {}
+///
+/// fn test() {
+///     one_str(matching!("a"));
+///     three_strs(matching!("a", _, "c"));
+///     three_strs(matching!(("a", "b", "c") | ("d", "e", "f")));
+///     three_strs(matching!(("a", b, "c") if b.contains("foo")));
+/// }
+///
+/// ```
+pub use unimock_macros::matching;
 
 enum FallbackMode {
     Panic,
@@ -301,17 +328,13 @@ pub trait Mock: Sized {
     /// The direct inputs to the mock function.
     type Inputs<'i>;
 
-    /// The inputs as references for pattern matching.
-    type InputRefs<'i>;
-
     /// The output of the mock function.
     type Output;
 
+    const N_ARGS: usize;
+
     /// The name to use for runtime errors.
     const NAME: &'static str;
-
-    /// Convert input arguments to references, along with the argument count.
-    fn input_refs<'i, 'o>(inputs: &'o Self::Inputs<'i>) -> (Self::InputRefs<'o>, usize);
 
     /// Create a unimock instance that mocks this function.
     fn mock<F>(self, f: F) -> Unimock
@@ -343,51 +366,6 @@ pub trait CallOriginal {
 }
 
 ///
-/// Macro to ease argument pattern matching.
-/// This macro produces a closure expression suitable for passing to [builders::Each::call].
-///
-/// Takes inspiration from [std::matches] and works similarly, except that the value to match
-/// can be removed as a macro argument, since it is instead received as the closure argument.
-///
-/// Unimock uses tuples to represent multiple arguments. A single argument is not a tuple.
-/// To avoid the extra set of parentheses for simple multi-argument matchers, there is
-/// a special syntax that accepts several top-level patterns:
-/// `matching!("a", "b")` will expand to `matching!(("a", "b"))`.
-///
-/// # Examples
-///
-/// ```rust
-/// # use unimock::*;
-/// fn one_str(_: impl Fn(&(&str)) -> bool) {}
-/// fn three_strs(_: impl Fn(&(&str, &str, &str)) -> bool) {}
-///
-/// fn test() {
-///     one_str(matching!("a"));
-///     three_strs(matching!("a", _, "c"));
-///     three_strs(matching!(("a", "b", "c") | ("d", "e", "f")));
-///     three_strs(matching!(("a", b, "c") if b.contains("foo")));
-/// }
-///
-/// ```
-///
-#[macro_export]
-macro_rules! matching {
-    // Special syntax for functions taking no arguments:
-    () => { |()| true };
-    // Special syntax for matching several arguments without requiring tuple syntax:
-    // `matching!("a", "b")` becomes `matching!(("a", "b"))`:
-    ($arg0:pat_param, $( $argn:pat_param ),*) => {
-        matching!(($arg0, $( $argn ),*))
-    };
-    ($(|)? $( $pattern:pat_param )|+ $( if $guard: expr )? $(,)?) => {
-        |args| match *args {
-            $( $pattern )|+ $( if $guard )? => true,
-            _ => false
-        }
-    };
-}
-
-///
 /// Internal trait implemented by references that allows transforming from `&T` to `&'static T`
 /// by leaking memory.
 /// The trait is implemented for all `&T`. It allows functions to refer to the non-referenced owned value `T`,
@@ -407,19 +385,16 @@ impl<T: 'static> LeakOutput for &T {
     }
 }
 
-pub trait BorrowStr {
-    fn borrow_str(&self) -> &str;
+///
+/// Trait for borrowing string slices.
+/// Used by string literals in the [matching!] macro.
+///
+pub trait AsStrRef {
+    fn as_str_ref(&self) -> &str;
 }
 
-impl<T: AsRef<str>> BorrowStr for T {
-    fn borrow_str(&self) -> &str {
+impl<T: AsRef<str>> AsStrRef for T {
+    fn as_str_ref(&self) -> &str {
         self.as_ref()
     }
-}
-
-#[test]
-fn test_borrow_str() {
-    "fdjskl".borrow_str();
-    "fdsjkl".to_string().borrow_str();
-    std::borrow::Cow::Borrowed("fdsjkl").borrow_str();
 }

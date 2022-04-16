@@ -35,13 +35,17 @@ pub fn unimock_next(
     proc_macro::TokenStream::from(output)
 }
 
+///
+/// The `matching` macro.
+/// Re-exported by `unimock`, it is documented there.
+///
 #[proc_macro]
-pub fn matching2(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn matching(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(input as matching::MatchingInput);
 
     let output = matching::generate(input);
 
-    println!("{output}");
+    // println!("{output}");
 
     proc_macro::TokenStream::from(output)
 }

@@ -34,12 +34,9 @@ impl<M: Mock + 'static> Each<M> {
     /// impl Mock for Foo {
     ///     /* ... */
     ///     # type Inputs<'i> = (String);
-    ///     # type InputRefs<'i> = (&'i str);
     ///     # type Output = ();
+    ///     # const N_ARGS: usize = 1;
     ///     # const NAME: &'static str = "Foo";
-    ///     # fn input_refs<'i, 'o>((a0): &'o Self::Inputs<'i>) -> (Self::InputRefs<'o>, usize) {
-    ///     #     ((a0.as_ref()), 1)
-    ///     # }
     /// }
     ///
     /// fn test() {
@@ -48,8 +45,8 @@ impl<M: Mock + 'static> Each<M> {
     /// ```
     pub fn call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
     where
-        F: (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync + 'static,
-        for<'i> M::InputRefs<'i>: std::fmt::Debug,
+        F: (for<'i> Fn(&M::Inputs<'i>) -> bool) + Send + Sync + 'static,
+        for<'i> M::Inputs<'i>: std::fmt::Debug,
     {
         if self.input_debugger.func.is_none() {
             self.input_debugger.func = Some(Box::new(|args| format!("{:?}", args)));
@@ -62,7 +59,7 @@ impl<M: Mock + 'static> Each<M> {
     /// As a result, mocking runtime errors will contain less useful information.
     pub fn nodebug_call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
     where
-        F: (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync + 'static,
+        F: (for<'i> Fn(&M::Inputs<'i>) -> bool) + Send + Sync + 'static,
     {
         let pat_index = self.patterns.len();
         self.patterns.push(mock::CallPattern {

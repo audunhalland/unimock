@@ -60,7 +60,7 @@ impl<M: Mock> MockImpl<M> {
 
         for pattern in self.patterns.iter() {
             if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
-                if !arg_matcher(&M::input_refs(&inputs).0) {
+                if !arg_matcher(&inputs) {
                     continue;
                 }
             }
@@ -87,7 +87,7 @@ impl<M: Mock> MockImpl<M> {
     }
 
     fn debug_inputs<'i>(&self, inputs: &M::Inputs<'i>) -> String {
-        self.input_debugger.debug(M::input_refs(inputs))
+        self.input_debugger.debug(inputs, M::N_ARGS)
     }
 }
 
@@ -105,7 +105,7 @@ impl<M: Mock> Drop for MockImpl<M> {
 
 pub(crate) struct CallPattern<M: Mock> {
     pub pat_index: usize,
-    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::InputRefs<'i>) -> bool) + Send + Sync>>,
+    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&M::Inputs<'i>) -> bool) + Send + Sync>>,
     pub call_counter: counter::CallCounter,
     pub output_factory: Option<Box<dyn (for<'i> Fn(M::Inputs<'i>) -> M::Output) + Send + Sync>>,
 }
@@ -117,7 +117,7 @@ impl<M: Mock> Drop for CallPattern<M> {
 }
 
 pub(crate) struct InputDebugger<M: Mock> {
-    pub func: Option<Box<dyn (for<'i> Fn(M::InputRefs<'i>) -> String) + Send + Sync>>,
+    pub func: Option<Box<dyn (for<'i> Fn(&M::Inputs<'i>) -> String) + Send + Sync>>,
 }
 
 impl<M: Mock> InputDebugger<M> {
@@ -125,7 +125,7 @@ impl<M: Mock> InputDebugger<M> {
         Self { func: None }
     }
 
-    pub fn debug<'i>(&self, (inputs, n_args): (M::InputRefs<'i>, usize)) -> String {
+    pub fn debug<'i>(&self, inputs: &M::Inputs<'i>, n_args: usize) -> String {
         if let Some(func) = self.func.as_ref() {
             let debug = func(inputs);
             match n_args {
