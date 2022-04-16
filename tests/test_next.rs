@@ -352,3 +352,37 @@ fn test_cow() {
         )
     )
 }
+
+#[derive(Clone)]
+struct MyString(pub String);
+
+impl<'s> From<&'s str> for MyString {
+    fn from(s: &'s str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl std::convert::AsRef<str> for MyString {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[unimock_next]
+trait NewtypeString {
+    fn func(&self, arg: MyString) -> MyString;
+}
+
+#[test]
+fn newtype() {
+    fn takes(t: &impl NewtypeString, arg: MyString) -> MyString {
+        t.func(arg)
+    }
+
+    let _ = takes(
+        &NewtypeString__func.mock(|each| {
+            each.nodebug_call(matching!("input")).returns("output");
+        }),
+        "input".into(),
+    );
+}

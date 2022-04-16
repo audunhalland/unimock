@@ -11,10 +11,8 @@ use syn::spanned::Spanned;
 extern crate proc_macro;
 
 ///
-///
+/// Autogenerate a mock implementation of a trait.
 /// # Attributes
-/// currently no attribute parameters are supported by this macro.
-///
 /// TODO
 ///
 #[proc_macro_attribute]
@@ -35,10 +33,6 @@ pub fn unimock_next(
     proc_macro::TokenStream::from(output)
 }
 
-///
-/// The `matching` macro.
-/// Re-exported by `unimock`, it is documented there.
-///
 #[proc_macro]
 pub fn matching(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(input as matching::MatchingInput);

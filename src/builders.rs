@@ -35,7 +35,7 @@ impl<M: Mock + 'static> Each<M> {
     ///     /* ... */
     ///     # type Inputs<'i> = (String);
     ///     # type Output = ();
-    ///     # const N_ARGS: usize = 1;
+    ///     # const N_ARGS: u8 = 1;
     ///     # const NAME: &'static str = "Foo";
     /// }
     ///

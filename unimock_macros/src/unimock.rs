@@ -4,6 +4,7 @@ use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
+    original_fn: Option<syn::Path>,
     input_lifetime: syn::Lifetime,
 }
 
@@ -24,6 +25,7 @@ impl syn::parse::Parse for Cfg {
 
         Ok(Self {
             module,
+            original_fn: None,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
         })
     }

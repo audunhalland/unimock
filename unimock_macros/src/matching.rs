@@ -95,7 +95,7 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
     let arg_expr = concat_args_parenthesized(&args, |arg| {
         let ident = &arg.ident;
         match arg.kind {
-            ArgKind::LitStr => quote! { #ident.as_str_ref() },
+            ArgKind::LitStr => quote! { ::unimock::as_str_ref(#ident) },
             _ => quote! { #ident },
         }
     });
