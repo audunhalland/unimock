@@ -36,16 +36,17 @@
 //! */
 //!
 //! fn test_next() {
-//!     let unimock = Unimock::union([
-//!         Foo__foo.mock(|each| {
-//!             each.call(matching!()).returns(40);
-//!         }),
-//!         Bar__bar.mock(|each| {
-//!             each.call(matching!()).returns(2);
-//!         })
-//!     ]);
-//!
-//!     assert_eq!(42, sum(unimock));
+//!     assert_eq!(
+//!         42,
+//!         sum(
+//!             mock(Foo__foo, |each| {
+//!                 each.call(matching!()).returns(40);
+//!             })
+//!             .also_mock(Bar__bar, |each| {
+//!                 each.call(matching!()).returns(2);
+//!             })
+//!         )
+//!     );
 //! }
 //! ```
 //!
@@ -56,9 +57,10 @@
 //! `unimock` also works with `async_trait`:
 //!
 //! ```rust
+//! #![feature(generic_associated_types)]
 //! use unimock::*;
 //! use async_trait::*;
-//! #[unimock]
+//! #[unimock_next]
 //! #[async_trait]
 //! trait Baz {
 //!     async fn baz(&self, arg: String) -> i32;
@@ -76,51 +78,40 @@ pub mod mock;
 
 mod counter;
 
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 
 ///
-/// Autogenerate a mock implementation of a trait.
+/// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
-/// This macro does two things:
-/// 1. Autogenerate a `mockall` implementation by invoking [`mockall::automock`].
-/// 2. Autogenerate an implementation for [Unimock].
-///
-/// [`mockall::automock`]: https://docs.rs/mockall/latest/mockall/attr.automock.html
+/// Mock generation happens by declaring a new [Mock]-implementing struct for each method.
 ///
 /// Example
 /// ```rust
+/// #![feature(generic_associated_types)]
 /// use unimock::*;
 ///
-/// #[unimock]
-/// trait MyTrait {
-///     fn foo(&self);
+/// #[unimock_next]
+/// trait Trait1 {
+///     fn a(&self) -> i32;
+///     fn b(&self) -> i32;
 /// }
 ///
-/// fn do_something(my_trait: impl MyTrait) {
-///     my_trait.foo();
+/// #[unimock_next]
+/// trait Trait2 {
+///     fn c(&self) -> i32;
 /// }
 ///
-/// fn using_mockall() {
-///     // Since `do_something` is only bounded by one trait, we can use the mockall type directly:
-///     do_something(MockMyTrait::new()); // note: this will panic!
+/// fn sum(obj: impl Trait1 + Trait2) -> i32 {
+///     obj.a() + obj.b() + obj.c()
 /// }
 ///
-/// fn using_unimock() {
-///     // If `do_something` had multiple trait bounds, we would have two choices:
-///     // 1. implement a specialized mock type using `mockall::mock`
-///     // 2. Just use `Unimock`:
-///     do_something(Unimock::new());  // note: this will panic!
+/// fn test() {
+///     let single_mock: Unimock = mock(Trait1__a, |_| {});
+///     sum(single_mock); // note: panics at runtime!
 /// }
-///
-/// # fn main() {
-/// # let _ = std::panic::catch_unwind(|| using_mockall());
-/// # let _ = std::panic::catch_unwind(|| using_unimock());
-/// # }
 /// ```
-pub use unimock_macros::unimock;
-
 pub use unimock_macros::unimock_next;
 
 ///
@@ -213,7 +204,6 @@ impl FallbackMode {
 /// the traits that it implements.
 pub struct Unimock {
     fallback_mode: FallbackMode,
-    mocks: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     impls: HashMap<TypeId, mock::DynImpl>,
 }
 
@@ -222,7 +212,6 @@ impl Unimock {
     pub fn new() -> Self {
         Self {
             fallback_mode: FallbackMode::Panic,
-            mocks: HashMap::new(),
             impls: HashMap::new(),
         }
     }
@@ -241,7 +230,6 @@ impl Unimock {
 
         Self {
             fallback_mode,
-            mocks: HashMap::new(),
             impls,
         }
     }
@@ -258,7 +246,6 @@ impl Unimock {
     pub fn call_original() -> Self {
         Self {
             fallback_mode: FallbackMode::CallOriginal,
-            mocks: HashMap::new(),
             impls: HashMap::new(),
         }
     }
@@ -266,50 +253,17 @@ impl Unimock {
     pub(crate) fn with_single_mock(type_id: TypeId, dyn_impl: mock::DynImpl) -> Self {
         Self {
             fallback_mode: FallbackMode::Panic,
-            mocks: HashMap::new(),
             impls: [(type_id, dyn_impl)].into(),
         }
     }
 
-    /// Configure a specific mock. The type must implement [Default]. Each stored mock is keyed by its [TypeId],
-    /// so repeatedly calling this method with the same receiving type will use the same instance.
-    ///
-    /// When a trait is mocked using [unimock], its _mocked implementation_ must be used in this function.
-    ///
-    /// # Example
-    /// ```rust
-    /// use unimock::*;
-    ///
-    /// #[unimock]
-    /// trait MyTrait {}
-    ///
-    /// # fn main() {
-    /// let unimock = Unimock::new().mock(|my_trait: &mut MockMyTrait| {
-    ///     /* ... */
-    /// });
-    /// # }
-    /// ```
-    pub fn mock<M, F>(mut self, f: F) -> Self
+    /// Union this unimock with another API mock.
+    pub fn also_mock<M, F>(self, api: M, f: F) -> Self
     where
-        M: Default + Send + Sync + 'static,
-        F: FnOnce(&mut M),
+        M: Mock + 'static,
+        F: FnOnce(&mut builders::Each<M>),
     {
-        f(self
-            .mocks
-            .entry(TypeId::of::<M>())
-            .or_insert_with(|| Box::new(M::default()))
-            .downcast_mut()
-            .unwrap());
-
-        self
-    }
-
-    /// Get a specific mock created with `mock`. Panics at runtime if the type is not registered.
-    pub fn get<T: std::any::Any>(&self, trait_name: &'static str) -> &T {
-        self.mocks
-            .get(&TypeId::of::<T>())
-            .and_then(|any| any.downcast_ref())
-            .unwrap_or_else(|| panic!("{}", self.missing_trait_error(trait_name)))
+        Self::union([self, api.mock(f)])
     }
 
     /// Look up a stored mock object and expose it as a dynamic implementation
@@ -393,6 +347,16 @@ pub trait Mock: Sized {
     }
 }
 
+/// Mock some function.
+#[inline]
+pub fn mock<M, F>(api: M, f: F) -> Unimock
+where
+    M: Mock + 'static,
+    F: FnOnce(&mut builders::Each<M>),
+{
+    api.mock(f)
+}
+
 pub trait CallOriginal {
     // Call the original implementation of this API
     fn call_original() -> Unimock
@@ -401,7 +365,6 @@ pub trait CallOriginal {
     {
         Unimock {
             fallback_mode: FallbackMode::Panic,
-            mocks: HashMap::new(),
             impls: [(TypeId::of::<Self>(), mock::DynImpl::CallOriginal)].into(),
         }
     }
