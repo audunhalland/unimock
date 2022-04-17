@@ -75,9 +75,9 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
             syn::AttrStyle::Inner(_) => None,
         });
 
-    let mock_defs = methods
+    let api_defs = methods
         .iter()
-        .map(|method| def_mock(&item_trait, method, &cfg));
+        .map(|method| def_api(&item_trait, method, &cfg));
     let method_impls = methods.iter().map(|method| def_method_impl(method));
 
     if let Some(module) = &cfg.module {
@@ -85,7 +85,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
         Ok(quote! {
             #item_trait
             #vis mod #module {
-                #(#mock_defs)*
+                #(#api_defs)*
 
                 #(#impl_attributes)*
                 impl super::#trait_ident for ::unimock::Unimock {
@@ -96,7 +96,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
     } else {
         Ok(quote! {
             #item_trait
-            #(#mock_defs)*
+            #(#api_defs)*
 
             #(#impl_attributes)*
             impl #trait_ident for ::unimock::Unimock {
@@ -108,17 +108,17 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
 
 struct Method<'s> {
     method: &'s syn::TraitItemMethod,
-    mock_ident: syn::Ident,
+    api_ident: syn::Ident,
     api_name: syn::LitStr,
 }
 
 struct MethodAttrs {
-    mock_ident: Option<proc_macro2::Ident>,
+    api_ident: Option<proc_macro2::Ident>,
 }
 
 impl Default for MethodAttrs {
     fn default() -> Self {
-        Self { mock_ident: None }
+        Self { api_ident: None }
     }
 }
 
@@ -150,7 +150,7 @@ fn extract_inner_attrs(
         })
         .enumerate()
         .map(|(index, method)| {
-            let mut mock_ident = None;
+            let mut api_ident = None;
 
             let mut attr_index = 0;
 
@@ -159,7 +159,7 @@ fn extract_inner_attrs(
                     Some(attr) => {
                         match attr {
                             UnimockInnerAttr::Name(ident) => {
-                                mock_ident = Some(ident);
+                                api_ident = Some(ident);
                             }
                         };
                         method.attrs.remove(attr_index);
@@ -170,7 +170,7 @@ fn extract_inner_attrs(
                 }
             }
 
-            Ok((index, MethodAttrs { mock_ident }))
+            Ok((index, MethodAttrs { api_ident }))
         })
         .collect::<syn::Result<HashMap<usize, MethodAttrs>>>()?;
 
@@ -200,30 +200,30 @@ fn extract_methods<'s>(
                 .remove(&index)
                 .unwrap_or_else(Default::default);
 
-            let mock_ident_method_part = if let Some(custom_ident) = attrs.mock_ident.as_ref() {
+            let api_ident_method_part = if let Some(custom_ident) = attrs.api_ident.as_ref() {
                 custom_ident
             } else {
                 &method.sig.ident
             };
 
-            let mock_ident = if cfg.module.is_some() {
-                mock_ident_method_part.clone()
+            let api_ident = if cfg.module.is_some() {
+                api_ident_method_part.clone()
             } else {
-                quote::format_ident!("{}__{}", item_trait.ident, mock_ident_method_part)
+                quote::format_ident!("{}__{}", item_trait.ident, api_ident_method_part)
             };
 
             Ok(Method {
                 method,
-                mock_ident,
+                api_ident,
                 api_name,
             })
         })
         .collect()
 }
 
-fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
+fn def_api(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let mock_ident = &method.mock_ident;
+    let api_ident = &method.api_ident;
     let api_name = &method.api_name;
 
     let mock_visibility = if let Some(_) = &cfg.module {
@@ -279,9 +279,9 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
 
     quote! {
         #[allow(non_camel_case_types)]
-        #mock_visibility struct #mock_ident;
+        #mock_visibility struct #api_ident;
 
-        impl ::unimock::Mock for #mock_ident {
+        impl ::unimock::Api for #api_ident {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #output;
             const N_INPUTS: u8 = #n_inputs;
@@ -292,7 +292,7 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
 
 fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let mock_ident = &method.mock_ident;
+    let api_ident = &method.api_ident;
 
     let parameters = sig.inputs.iter().filter_map(|fn_arg| match fn_arg {
         syn::FnArg::Receiver(_) => None,
@@ -306,9 +306,9 @@ fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
 
     quote! {
         #sig {
-            match self.get_impl::<#mock_ident>() {
+            match self.get_impl::<#api_ident>() {
                 ::unimock::mock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*)),
-                ::unimock::mock::Impl::CallOriginal => panic!("no original to call for {}", <#mock_ident as ::unimock::Mock>::NAME)
+                ::unimock::mock::Impl::CallOriginal => panic!("no original to call for {}", <#api_ident as ::unimock::Api>::NAME)
             }
         }
     }

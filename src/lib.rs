@@ -50,10 +50,6 @@
 //! }
 //! ```
 //!
-//! `unimock` uses [`mockall`] to mock single traits, which is where the `MockFoo` and `MockBar` types above come from.
-//!
-//! [`mockall`]: https://docs.rs/mockall/latest/mockall/
-//!
 //! `unimock` also works with `async_trait`:
 //!
 //! ```rust
@@ -71,6 +67,7 @@
 // For the mock-fn feature:
 #![feature(generic_associated_types)]
 
+/// Various builder-like types for composing mock behaviour on functions.
 pub mod builders;
 
 #[doc(hidden)]
@@ -85,7 +82,7 @@ use std::sync::atomic::AtomicUsize;
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
-/// Mock generation happens by declaring a new [Mock]-implementing struct for each method.
+/// Mock generation happens by declaring a new [Api]-implementing struct for each method.
 ///
 /// Example
 /// ```rust
@@ -206,17 +203,17 @@ impl Unimock {
         }
     }
 
-    /// Extend this unimock with another API mock.
-    pub fn also<M, F>(mut self, _: M, f: F) -> Self
-    where
-        M: Mock + 'static,
-        F: FnOnce(&mut builders::Each<M>),
-    {
+    /// Extend this instance with a mock of another [Api].
+    pub fn also<A: Api + 'static>(
+        mut self,
+        _: A,
+        setup: impl FnOnce(&mut builders::Each<A>),
+    ) -> Self {
         let mut each = builders::Each::new();
-        f(&mut each);
+        setup(&mut each);
 
         self.impls.insert(
-            TypeId::of::<M>(),
+            TypeId::of::<A>(),
             mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
         );
         self
@@ -248,33 +245,34 @@ impl Unimock {
     /// Look up a stored mock object and expose it as a dynamic implementation
     /// of a function. The implementation can be one of two types: A mock and an
     /// instruction to call a real implementation.
-    pub fn get_impl<'s, M: Mock + 'static>(&'s self) -> mock::Impl<'s, M> {
+    pub fn get_impl<'s, A: Api + 'static>(&'s self) -> mock::Impl<'s, A> {
         self.impls
-            .get(&TypeId::of::<M>())
+            .get(&TypeId::of::<A>())
             .map(mock::Impl::from_storage)
             .unwrap_or_else(|| mock::Impl::from_fallback(&self.fallback_mode))
     }
 }
 
 ///
-/// Trait describing a single mockable function interface.
+/// Trait describing some functional API for which unimock may provide implementation.
+/// _Inversion of Control_ in Rust is achieved through method dispatch, so the items described
+/// will usually be _methods_ in _traits_.
 ///
-/// To be useful, traits need to be implemented by types. But things we want to
-/// mock are _functions_, not types. Unimock works by defining an empty struct
-/// that _represents_ some trait method:
+/// As `Api` is a trait itself, it needs to be implemented to be useful. Because trait methods
+/// are not types, a _surrogate_ need to be introduced:
 ///
 /// ```rust
 /// trait Mockable {
 ///     fn method(&self);
 /// }
 ///
-/// // The method can be referred to via the following empty struct:
-/// struct Mockable_method;
+/// // The method can be referred to via the following empty surrogate struct:
+/// struct Mockable__method;
 ///
-/// /* impl Mock for Mockable_method ... */
+/// /* impl Api for Mockable_method ... */
 /// ```
 ///
-pub trait Mock: Sized {
+pub trait Api: Sized {
     /// The direct inputs to the mock function.
     type Inputs<'i>;
 
@@ -288,17 +286,13 @@ pub trait Mock: Sized {
     const NAME: &'static str;
 }
 
-/// Mock some mockable API.
+/// Mock a single [Api].
 #[inline]
-pub fn mock<M, F>(_: M, f: F) -> Unimock
-where
-    M: Mock + 'static,
-    F: FnOnce(&mut builders::Each<M>),
-{
+pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -> Unimock {
     let mut each = builders::Each::new();
-    f(&mut each);
+    setup(&mut each);
     Unimock::with_single_mock(
-        TypeId::of::<M>(),
+        TypeId::of::<A>(),
         mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
     )
 }
