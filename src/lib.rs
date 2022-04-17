@@ -221,6 +221,35 @@ impl Unimock {
         self
     }
 
+    /// Extend this instance with a spy wrapping another [Api].
+    pub fn also_spy<A: Api + 'static>(
+        mut self,
+        _: A,
+        setup: impl FnOnce(&mut builders::Each<A>),
+    ) -> Self {
+        let mut each = builders::Each::new();
+        setup(&mut each);
+
+        self.impls.insert(
+            TypeId::of::<A>(),
+            mock::DynImpl::Spy(Box::new(mock::MockImpl::from_each(each))),
+        );
+        self
+    }
+
+    /// Extend this instance with an instruction to just call the original implementation of the given [Api],
+    /// without any mock-related behaviour.
+    pub fn also_call<A: Api + 'static>(mut self, _: A) -> Self {
+        self.impls.insert(TypeId::of::<A>(), mock::DynImpl::Call);
+        self
+    }
+
+    /// Change unregistered [Api] fallback behaviour from explicitly panicking to trying to call their original implementation.
+    pub fn or_else_call_any(mut self) -> Self {
+        self.fallback_mode = FallbackMode::CallOriginal;
+        self
+    }
+
     /// Create a unimock that instead of trying to mock, tries to call some original implementation of any API.
     ///
     /// What is considered an original implementation, is not something that unimock concerns itself with,
@@ -245,7 +274,7 @@ impl Unimock {
     }
 
     // Call the specified [Api] in the way unimock has been configured.
-    pub fn call_api<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
+    pub fn apply<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
         match self.get_impl::<A>() {
             mock::Impl::Call => A::call(inputs),
             mock::Impl::Spy(mock_impl) => {
@@ -256,10 +285,7 @@ impl Unimock {
         }
     }
 
-    pub async fn async_call_api<'i, A: Api + 'static>(
-        &'i self,
-        inputs: A::Inputs<'i>,
-    ) -> A::Output {
+    pub async fn apply_async<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
         match self.get_impl::<A>() {
             mock::Impl::Call => A::call_async(inputs).await,
             mock::Impl::Spy(mock_impl) => {
@@ -301,10 +327,10 @@ impl Unimock {
 /// ```
 ///
 pub trait Api: Sized {
-    /// The direct inputs to the mock function.
+    /// The inputs to the function.
     type Inputs<'i>;
 
-    /// The output of the mock function.
+    /// The output of the function.
     type Output;
 
     /// The number of inputs.
@@ -322,9 +348,7 @@ pub trait Api: Sized {
     }
 
     /// Call the Api's real implementation, if any, in an async context. The default behaviour is just to panic.
-    fn call_async<'i>(
-        _: Self::Inputs<'i>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Self::Output>>> {
+    fn call_async<'i>(_: Self::Inputs<'i>) -> Pin<Box<dyn Future<Output = Self::Output>>> {
         panic!(
             "Nothing is implemented for async real call to {}",
             Self::NAME
@@ -333,8 +357,20 @@ pub trait Api: Sized {
 }
 
 /// Mock a single [Api].
-#[inline]
 pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -> Unimock {
+    let mut each = builders::Each::new();
+    setup(&mut each);
+    Unimock::with_single_mock(
+        TypeId::of::<A>(),
+        mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
+    )
+}
+
+/// Spy on a single [Api].
+///
+/// A spy performs argument matching and call count verification, but ignores any mock output configuration.
+/// Instead, a spy produces the output value by trying to invoke the original implementation of the API.
+pub fn spy<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -> Unimock {
     let mut each = builders::Each::new();
     setup(&mut each);
     Unimock::with_single_mock(

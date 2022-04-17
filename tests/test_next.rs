@@ -325,7 +325,8 @@ async fn test_async_trait() {
         takes_async(
             &mock(Async__func, |each| {
                 each.call(matching!(_)).returns("42");
-            }),
+            })
+            .or_else_call_any(),
             21
         )
         .await

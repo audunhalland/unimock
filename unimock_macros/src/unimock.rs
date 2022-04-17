@@ -310,7 +310,7 @@ fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
 
     quote! {
         #sig {
-            self.call_api::<#api_ident>((#(#parameters),*))
+            self.apply::<#api_ident>((#(#parameters),*))
         }
     }
 }
