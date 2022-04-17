@@ -77,6 +77,8 @@ mod counter;
 
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 
 ///
@@ -242,10 +244,36 @@ impl Unimock {
         }
     }
 
+    // Call the specified [Api] in the way unimock has been configured.
+    pub fn call_api<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
+        match self.get_impl::<A>() {
+            mock::Impl::Call => A::call(inputs),
+            mock::Impl::Spy(mock_impl) => {
+                mock_impl.spy_inputs(&inputs);
+                A::call(inputs)
+            }
+            mock::Impl::Mock(mock_impl) => mock_impl.invoke_mock(inputs),
+        }
+    }
+
+    pub async fn async_call_api<'i, A: Api + 'static>(
+        &'i self,
+        inputs: A::Inputs<'i>,
+    ) -> A::Output {
+        match self.get_impl::<A>() {
+            mock::Impl::Call => A::call_async(inputs).await,
+            mock::Impl::Spy(mock_impl) => {
+                mock_impl.spy_inputs(&inputs);
+                A::call_async(inputs).await
+            }
+            mock::Impl::Mock(mock_impl) => mock_impl.invoke_mock(inputs),
+        }
+    }
+
     /// Look up a stored mock object and expose it as a dynamic implementation
     /// of a function. The implementation can be one of two types: A mock and an
     /// instruction to call a real implementation.
-    pub fn get_impl<'s, A: Api + 'static>(&'s self) -> mock::Impl<'s, A> {
+    fn get_impl<'s, A: Api + 'static>(&'s self) -> mock::Impl<'s, A> {
         self.impls
             .get(&TypeId::of::<A>())
             .map(mock::Impl::from_storage)
@@ -284,6 +312,24 @@ pub trait Api: Sized {
 
     /// The name to use for runtime errors.
     const NAME: &'static str;
+
+    /// Call the Api's real implementation, if any. The default behaviour is just to panic.
+    fn call<'i>(_: Self::Inputs<'i>) -> Self::Output {
+        panic!(
+            "Nothing is implemented for synchronous real call to {}",
+            Self::NAME
+        )
+    }
+
+    /// Call the Api's real implementation, if any, in an async context. The default behaviour is just to panic.
+    fn call_async<'i>(
+        _: Self::Inputs<'i>,
+    ) -> Pin<Box<dyn std::future::Future<Output = Self::Output>>> {
+        panic!(
+            "Nothing is implemented for async real call to {}",
+            Self::NAME
+        )
+    }
 }
 
 /// Mock a single [Api].
@@ -295,19 +341,6 @@ pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) 
         TypeId::of::<A>(),
         mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
     )
-}
-
-pub trait CallOriginal {
-    // Call the original implementation of this API
-    fn call_original() -> Unimock
-    where
-        Self: 'static,
-    {
-        Unimock {
-            fallback_mode: FallbackMode::Panic,
-            impls: [(TypeId::of::<Self>(), mock::DynImpl::CallOriginal)].into(),
-        }
-    }
 }
 
 ///

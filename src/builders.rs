@@ -31,11 +31,11 @@ impl<A: Api + 'static> Each<A> {
     /// #![feature(generic_associated_types)]
     /// use unimock::*;
     /// struct Foo;
-    /// impl Mock for Foo {
+    /// impl Api for Foo {
     ///     /* ... */
     ///     # type Inputs<'i> = (String);
     ///     # type Output = ();
-    ///     # const N_ARGS: u8 = 1;
+    ///     # const N_INPUTS: u8 = 1;
     ///     # const NAME: &'static str = "Foo";
     /// }
     ///

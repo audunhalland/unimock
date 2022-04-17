@@ -1,33 +1,34 @@
 use crate::*;
 
-#[doc(hidden)]
-pub enum Impl<'s, A: Api + 'static> {
+type BoxAny = Box<dyn std::any::Any + Send + Sync + 'static>;
+
+pub(crate) enum DynImpl {
+    Call,
+    Spy(BoxAny),
+    Mock(BoxAny),
+}
+
+pub(crate) enum Impl<'s, A: Api + 'static> {
+    Call,
+    Spy(&'s MockImpl<A>),
     Mock(&'s MockImpl<A>),
-    CallOriginal,
 }
 
 impl<'s, A: Api + 'static> Impl<'s, A> {
     pub(crate) fn from_storage(storage: &'s DynImpl) -> Self {
         match storage {
-            DynImpl::CallOriginal => Self::CallOriginal,
-            DynImpl::Mock(any) => {
-                let mock_impl = any.downcast_ref::<MockImpl<A>>().unwrap();
-                Self::Mock(&mock_impl)
-            }
+            DynImpl::Mock(any) => Self::Mock(&any.downcast_ref::<MockImpl<A>>().unwrap()),
+            DynImpl::Spy(any) => Self::Spy(&any.downcast_ref::<MockImpl<A>>().unwrap()),
+            DynImpl::Call => Self::Call,
         }
     }
 
     pub(crate) fn from_fallback(fallback_mode: &FallbackMode) -> Self {
         match fallback_mode {
-            FallbackMode::CallOriginal => Self::CallOriginal,
+            FallbackMode::CallOriginal => Self::Call,
             FallbackMode::Panic => panic!("No mock implementation found for {}", A::NAME),
         }
     }
-}
-
-pub(crate) enum DynImpl {
-    Mock(Box<dyn std::any::Any + Send + Sync + 'static>),
-    CallOriginal,
 }
 
 #[doc(hidden)]
@@ -46,7 +47,7 @@ impl<A: Api> MockImpl<A> {
         }
     }
 
-    pub fn invoke<'i>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
+    pub fn invoke_mock<'i>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
         self.call_counter
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -84,6 +85,18 @@ impl<A: Api> MockImpl<A> {
             A::NAME,
             self.debug_inputs(&inputs)
         );
+    }
+
+    pub fn spy_inputs<'i>(&self, inputs: &A::Inputs<'i>) {
+        for pattern in self.patterns.iter() {
+            if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
+                if !arg_matcher(&inputs) {
+                    continue;
+                }
+            }
+
+            pattern.call_counter.tick();
+        }
     }
 
     fn debug_inputs<'i>(&self, inputs: &A::Inputs<'i>) -> String {

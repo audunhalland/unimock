@@ -294,22 +294,23 @@ fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let api_ident = &method.api_ident;
 
-    let parameters = sig.inputs.iter().filter_map(|fn_arg| match fn_arg {
-        syn::FnArg::Receiver(_) => None,
-        syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-            syn::Pat::Ident(ident) => Some(quote! { #ident }),
-            _ => {
-                Some(syn::Error::new(pat_type.span(), "Unprocessable argument").to_compile_error())
-            }
-        },
-    });
+    let parameters = sig
+        .inputs
+        .iter()
+        .filter_map(|fn_arg| match fn_arg {
+            syn::FnArg::Receiver(_) => None,
+            syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
+                syn::Pat::Ident(ident) => Some(quote! { #ident }),
+                _ => Some(
+                    syn::Error::new(pat_type.span(), "Unprocessable argument").to_compile_error(),
+                ),
+            },
+        })
+        .collect::<Vec<_>>();
 
     quote! {
         #sig {
-            match self.get_impl::<#api_ident>() {
-                ::unimock::mock::Impl::Mock(__m_) => __m_.invoke((#(#parameters),*)),
-                ::unimock::mock::Impl::CallOriginal => panic!("no original to call for {}", <#api_ident as ::unimock::Api>::NAME)
-            }
+            self.call_api::<#api_ident>((#(#parameters),*))
         }
     }
 }
