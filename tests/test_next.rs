@@ -4,6 +4,7 @@ use unimock::*;
 
 use async_trait::async_trait;
 use cool_asserts::*;
+use std::any::Any;
 
 #[unimock_next]
 trait NoArg {
@@ -388,5 +389,36 @@ fn newtype() {
             each.nodebug_call(matching!("input")).returns("output");
         }),
         "input".into(),
+    );
+}
+
+fn repeat(_: &impl Any, arg: String) -> String {
+    format!("{arg}{arg}")
+}
+fn concat(_: &impl Any, a: String, b: String) -> String {
+    format!("{a}{b}")
+}
+
+#[unimock_next(original_fns=[repeat, concat])]
+trait Spyable {
+    fn repeat(&self, arg: String) -> String;
+    fn concat(&self, a: String, b: String) -> String;
+}
+
+#[test]
+fn spyable() {
+    assert_eq!(
+        "ab",
+        spy(Spyable__concat, |each| {
+            each.call(matching!("a", "b")).once();
+        })
+        .concat("a".to_string(), "b".to_string())
+    );
+
+    assert_panics!(
+        {
+            spy(Spyable__concat, |_| {});
+        },
+        includes("Spy for Spyable::concat was never called. Dead mocks should be removed.")
     );
 }

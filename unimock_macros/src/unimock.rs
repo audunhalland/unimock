@@ -4,13 +4,14 @@ use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
-    original_fn: Option<syn::Path>,
+    original_fns: Vec<OriginalFn>,
     input_lifetime: syn::Lifetime,
 }
 
 impl syn::parse::Parse for Cfg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut module = None;
+        let mut original_fns = vec![];
 
         while !input.is_empty() {
             if input.peek(syn::token::Mod) {
@@ -19,15 +20,41 @@ impl syn::parse::Parse for Cfg {
                 module = Some(input.parse()?);
             } else {
                 let keyword: syn::Ident = input.parse()?;
-                return Err(syn::Error::new(keyword.span(), "Unrecognized keyword"));
+                let _: syn::token::Eq = input.parse()?;
+                match keyword.to_string().as_str() {
+                    "original_fns" => {
+                        let content;
+                        let _ = syn::bracketed!(content in input);
+                        original_fns.push(content.parse()?);
+                        while content.peek(syn::token::Comma) {
+                            let _: syn::token::Comma = content.parse()?;
+                            original_fns.push(content.parse()?);
+                        }
+                    }
+                    _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
+                };
             }
         }
 
         Ok(Self {
             module,
-            original_fn: None,
+            original_fns,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
         })
+    }
+}
+
+struct OriginalFn(Option<syn::Path>);
+
+impl syn::parse::Parse for OriginalFn {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(syn::token::Underscore) {
+            let _: syn::token::Underscore = input.parse()?;
+            return Ok(Self(None));
+        }
+
+        let path: syn::Path = input.parse()?;
+        Ok(Self(Some(path)))
     }
 }
 
@@ -78,7 +105,10 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
     let api_defs = methods
         .iter()
         .map(|method| def_api(&item_trait, method, &cfg));
-    let method_impls = methods.iter().map(|method| def_method_impl(method));
+    let method_impls = methods
+        .iter()
+        .enumerate()
+        .map(|(index, method)| def_method_impl(index, method, &cfg));
 
     if let Some(module) = &cfg.module {
         let vis = &item_trait.vis;
@@ -290,7 +320,7 @@ fn def_api(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_macr
     }
 }
 
-fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
+fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let api_ident = &method.api_ident;
 
@@ -308,9 +338,42 @@ fn def_method_impl(method: &Method) -> proc_macro2::TokenStream {
         })
         .collect::<Vec<_>>();
 
+    let original_fn = cfg
+        .original_fns
+        .get(index)
+        .map(|opt| opt.0.as_ref())
+        .unwrap_or(None);
+
+    let call_impl = if let Some(original_fn) = original_fn {
+        quote! { #original_fn(self, #(#parameters),*) }
+    } else {
+        quote! {
+            panic!("no original fn available for call to {}", <#api_ident as ::unimock::Api>::NAME)
+        }
+    };
+
+    let spy_impl = if let Some(original_fn) = original_fn {
+        quote! {
+            {
+                let __t = (#(#parameters),*);
+                __m_.spy_inputs(&__t);
+                let (#(#parameters),*) = __t;
+                #original_fn(self, #(#parameters),*)
+            }
+        }
+    } else {
+        quote! {
+            panic!("no original fn available for spying on {}", <#api_ident as ::unimock::Api>::NAME)
+        }
+    };
+
     quote! {
         #sig {
-            self.apply::<#api_ident>((#(#parameters),*))
+            match self.get_impl::<#api_ident>() {
+                ::unimock::mock::Impl::Call => #call_impl,
+                ::unimock::mock::Impl::Spy(__m_) => #spy_impl,
+                ::unimock::mock::Impl::Mock(__m_) => __m_.invoke_mock((#(#parameters),*)),
+            }
         }
     }
 }

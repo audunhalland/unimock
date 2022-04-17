@@ -216,7 +216,7 @@ impl Unimock {
 
         self.impls.insert(
             TypeId::of::<A>(),
-            mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
+            mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each, mock::Mode::Mock))),
         );
         self
     }
@@ -232,7 +232,7 @@ impl Unimock {
 
         self.impls.insert(
             TypeId::of::<A>(),
-            mock::DynImpl::Spy(Box::new(mock::MockImpl::from_each(each))),
+            mock::DynImpl::Spy(Box::new(mock::MockImpl::from_each(each, mock::Mode::Spy))),
         );
         self
     }
@@ -273,33 +273,10 @@ impl Unimock {
         }
     }
 
-    // Call the specified [Api] in the way unimock has been configured.
-    pub fn apply<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
-        match self.get_impl::<A>() {
-            mock::Impl::Call => A::call(inputs),
-            mock::Impl::Spy(mock_impl) => {
-                mock_impl.spy_inputs(&inputs);
-                A::call(inputs)
-            }
-            mock::Impl::Mock(mock_impl) => mock_impl.invoke_mock(inputs),
-        }
-    }
-
-    pub async fn apply_async<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> A::Output {
-        match self.get_impl::<A>() {
-            mock::Impl::Call => A::call_async(inputs).await,
-            mock::Impl::Spy(mock_impl) => {
-                mock_impl.spy_inputs(&inputs);
-                A::call_async(inputs).await
-            }
-            mock::Impl::Mock(mock_impl) => mock_impl.invoke_mock(inputs),
-        }
-    }
-
     /// Look up a stored mock object and expose it as a dynamic implementation
     /// of a function. The implementation can be one of two types: A mock and an
     /// instruction to call a real implementation.
-    fn get_impl<'s, A: Api + 'static>(&'s self) -> mock::Impl<'s, A> {
+    pub fn get_impl<'s, A: Api + 'static>(&'s self) -> mock::Impl<'s, A> {
         self.impls
             .get(&TypeId::of::<A>())
             .map(mock::Impl::from_storage)
@@ -362,7 +339,7 @@ pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) 
     setup(&mut each);
     Unimock::with_single_mock(
         TypeId::of::<A>(),
-        mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
+        mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each, mock::Mode::Mock))),
     )
 }
 
@@ -375,7 +352,7 @@ pub fn spy<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -
     setup(&mut each);
     Unimock::with_single_mock(
         TypeId::of::<A>(),
-        mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
+        mock::DynImpl::Spy(Box::new(mock::MockImpl::from_each(each, mock::Mode::Spy))),
     )
 }
 

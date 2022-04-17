@@ -8,7 +8,7 @@ pub(crate) enum DynImpl {
     Mock(BoxAny),
 }
 
-pub(crate) enum Impl<'s, A: Api + 'static> {
+pub enum Impl<'s, A: Api + 'static> {
     Call,
     Spy(&'s MockImpl<A>),
     Mock(&'s MockImpl<A>),
@@ -31,19 +31,27 @@ impl<'s, A: Api + 'static> Impl<'s, A> {
     }
 }
 
+#[derive(Debug)]
+pub enum Mode {
+    Mock,
+    Spy,
+}
+
 #[doc(hidden)]
 pub struct MockImpl<A: Api> {
     patterns: Vec<CallPattern<A>>,
     input_debugger: InputDebugger<A>,
     call_counter: AtomicUsize,
+    mode: Mode,
 }
 
 impl<A: Api> MockImpl<A> {
-    pub(crate) fn from_each(each: builders::Each<A>) -> Self {
+    pub(crate) fn from_each(each: builders::Each<A>, mode: Mode) -> Self {
         Self {
             patterns: each.patterns,
             input_debugger: each.input_debugger,
             call_counter: AtomicUsize::new(0),
+            mode,
         }
     }
 
@@ -88,6 +96,9 @@ impl<A: Api> MockImpl<A> {
     }
 
     pub fn spy_inputs<'i>(&self, inputs: &A::Inputs<'i>) {
+        self.call_counter
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         for pattern in self.patterns.iter() {
             if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
                 if !arg_matcher(&inputs) {
@@ -108,8 +119,9 @@ impl<A: Api> Drop for MockImpl<A> {
     fn drop(&mut self) {
         let call_count = self.call_counter.load(std::sync::atomic::Ordering::Relaxed);
         if call_count == 0 {
+            let mode = &self.mode;
             panic!(
-                "Mock for {} was never called. Dead mocks should be removed.",
+                "{mode:?} for {} was never called. Dead mocks should be removed.",
                 A::NAME
             );
         }
