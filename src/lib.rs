@@ -6,12 +6,12 @@
 //! ```rust
 //! #![feature(generic_associated_types)]
 //! use unimock::*;
-//! #[unimock_next]
+//! #[unimock]
 //! trait Foo {
 //!     fn foo(&self) -> i32;
 //! }
 //!
-//! #[unimock_next]
+//! #[unimock]
 //! trait Bar {
 //!     fn bar(&self) -> i32;
 //! }
@@ -56,7 +56,7 @@
 //! #![feature(generic_associated_types)]
 //! use unimock::*;
 //! use async_trait::*;
-//! #[unimock_next]
+//! #[unimock]
 //! #[async_trait]
 //! trait Baz {
 //!     async fn baz(&self, arg: String) -> i32;
@@ -89,13 +89,13 @@ use std::sync::atomic::AtomicBool;
 /// #![feature(generic_associated_types)]
 /// use unimock::*;
 ///
-/// #[unimock_next]
+/// #[unimock]
 /// trait Trait1 {
 ///     fn a(&self) -> i32;
 ///     fn b(&self) -> i32;
 /// }
 ///
-/// #[unimock_next]
+/// #[unimock]
 /// trait Trait2 {
 ///     fn c(&self) -> i32;
 /// }
@@ -109,7 +109,7 @@ use std::sync::atomic::AtomicBool;
 ///     sum(single_mock); // note: panics at runtime!
 /// }
 /// ```
-pub use unimock_macros::unimock_next;
+pub use unimock_macros::unimock;
 
 ///
 /// Macro to ease argument pattern matching.

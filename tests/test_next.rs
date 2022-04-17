@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use cool_asserts::*;
 use std::any::Any;
 
-#[unimock_next]
+#[unimock]
 trait NoArg {
     fn no_arg(&self) -> i32;
 }
@@ -22,7 +22,7 @@ fn noarg_works() {
     );
 }
 
-#[unimock_next]
+#[unimock]
 trait Owned {
     fn foo(&self, a: String, b: String) -> String;
 }
@@ -66,7 +66,7 @@ fn owned_works() {
     );
 }
 
-#[unimock_next]
+#[unimock]
 trait Referenced {
     fn foo(&self, a: &str) -> &str;
     fn bar(&self, a: &str, b: &str) -> &str;
@@ -103,12 +103,12 @@ fn referenced_with_default_return_value_works() {
     );
 }
 
-#[unimock_next]
+#[unimock]
 trait SingleArg {
     fn method1(&self, a: &str) -> &str;
 }
 
-#[unimock_next]
+#[unimock]
 trait MultiArg {
     fn method2(&self, a: &str, b: &str) -> &str;
 }
@@ -235,7 +235,7 @@ enum PrimitiveEnum {
     Bar,
 }
 
-#[unimock_next]
+#[unimock]
 trait VeryPrimitive {
     fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
 }
@@ -264,7 +264,7 @@ fn primitive_mocking_without_debug() {
     );
 }
 
-#[unimock_next]
+#[unimock]
 trait Borrowing {
     fn borrow<'s>(&'s self, input: String) -> &'s String;
 }
@@ -296,7 +296,7 @@ fn borrowing_with_memory_leak() {
     );
 }
 
-#[unimock_next(mod=with_module)]
+#[unimock(mod=with_module)]
 trait WithModule {
     #[unimock(name=Funk)]
     fn func<'s>(&'s self, input: String) -> &'s String;
@@ -309,7 +309,7 @@ fn test_with_module() {
     });
 }
 
-#[unimock_next]
+#[unimock]
 #[async_trait]
 trait Async {
     async fn func(&self, arg: i32) -> String;
@@ -336,7 +336,7 @@ async fn test_async_trait() {
 
 use std::borrow::Cow;
 
-#[unimock_next]
+#[unimock]
 trait CowBased {
     fn func(&self, arg: Cow<'static, str>) -> Cow<'static, str>;
 }
@@ -373,7 +373,7 @@ impl std::convert::AsRef<str> for MyString {
     }
 }
 
-#[unimock_next]
+#[unimock]
 trait NewtypeString {
     fn func(&self, arg: MyString) -> MyString;
 }
@@ -399,7 +399,7 @@ fn concat(_: &impl Spyable, a: String, b: String) -> String {
     format!("{a}{b}")
 }
 
-#[unimock_next(original_fns=[repeat, concat])]
+#[unimock(original_fns=[repeat, concat])]
 trait Spyable {
     fn repeat(&self, arg: String) -> String;
     fn concat(&self, a: String, b: String) -> String;
