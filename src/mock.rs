@@ -1,37 +1,47 @@
 use crate::*;
 
-pub enum ApplyResult<'i, A: Api> {
+use std::any::Any;
+
+/// The outcome of an api application/call on a mock object.
+pub enum Outcome<'i, A: Api> {
+    /// The mock evaluated the call and produced an output.
     Evaluated(A::Output),
-    Fallthrough(A::Inputs<'i>),
+    /// The mock only matched the inputs, and registered that fact.
+    /// How to produce the output is left to the caller.
+    Matched(A::Inputs<'i>),
 }
 
-pub(crate) struct DynImpl(pub Box<dyn std::any::Any + Send + Sync + 'static>);
+pub(crate) trait Mock: Any {
+    fn as_any(&self) -> &dyn Any;
+
+    fn verify(&self, errors: &mut Vec<String>);
+}
+
+pub(crate) struct DynImpl(pub Box<dyn Mock + Send + Sync + 'static>);
 
 pub(crate) fn apply<'i, A: Api + 'static>(
     dyn_impl: Option<&'i DynImpl>,
     inputs: A::Inputs<'i>,
     fallback_mode: FallbackMode,
-) -> ApplyResult<'i, A> {
+) -> Result<Outcome<'i, A>, String> {
     match dyn_impl {
         None => match fallback_mode {
-            FallbackMode::Panic => panic!("No mock implementation found for {}", A::NAME),
-            FallbackMode::Fallthrough => ApplyResult::Fallthrough(inputs),
+            FallbackMode::Error => Err(format!("No mock implementation found for {}", A::NAME)),
+            FallbackMode::Fallthrough => Ok(Outcome::Matched(inputs)),
         },
         Some(dyn_impl) => {
-            let mock_impl = dyn_impl.0.downcast_ref::<MockImpl<A>>().unwrap();
+            let mock_impl = dyn_impl.0.as_any().downcast_ref::<MockImpl<A>>().unwrap();
 
             mock_impl
-                .call_counter
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                .has_applications
+                .store(true, std::sync::atomic::Ordering::Relaxed);
 
             if mock_impl.patterns.is_empty() {
-                return mock_impl.report_error(|| {
-                    panic!(
-                        "{}{}: No registered call patterns",
-                        A::NAME,
-                        mock_impl.debug_inputs(&inputs)
-                    );
-                });
+                return Err(format!(
+                    "{}{}: No registered call patterns",
+                    A::NAME,
+                    mock_impl.debug_inputs(&inputs)
+                ));
             }
 
             for pattern in mock_impl.patterns.iter() {
@@ -43,27 +53,23 @@ pub(crate) fn apply<'i, A: Api + 'static>(
 
                 pattern.call_counter.tick();
 
-                match &pattern.responder {
-                    Responder::Closure(closure) => return ApplyResult::Evaluated(closure(inputs)),
-                    Responder::Fallthrough => return ApplyResult::Fallthrough(inputs),
-                    Responder::Panic => {
-                        panic!(
-                            "{}{}: No output available for matching call pattern #{}",
-                            A::NAME,
-                            mock_impl.debug_inputs(&inputs),
-                            pattern.pat_index,
-                        );
-                    }
-                }
+                return match &pattern.responder {
+                    Responder::Closure(closure) => Ok(Outcome::Evaluated(closure(inputs))),
+                    Responder::Fallthrough => Ok(Outcome::Matched(inputs)),
+                    Responder::Error => Err(format!(
+                        "{}{}: No output available for matching call pattern #{}",
+                        A::NAME,
+                        mock_impl.debug_inputs(&inputs),
+                        pattern.pat_index,
+                    )),
+                };
             }
 
-            return mock_impl.report_error(|| {
-                panic!(
-                    "{}{}: No registered call patterns",
-                    A::NAME,
-                    mock_impl.debug_inputs(&inputs)
-                );
-            });
+            Err(format!(
+                "{}{}: No matching call patterns.",
+                A::NAME,
+                mock_impl.debug_inputs(&inputs)
+            ))
         }
     }
 }
@@ -72,8 +78,7 @@ pub(crate) fn apply<'i, A: Api + 'static>(
 pub struct MockImpl<A: Api> {
     patterns: Vec<CallPattern<A>>,
     input_debugger: InputDebugger<A>,
-    call_counter: AtomicUsize,
-    error_counter: AtomicUsize,
+    has_applications: AtomicBool,
 }
 
 impl<A: Api> MockImpl<A> {
@@ -81,8 +86,7 @@ impl<A: Api> MockImpl<A> {
         Self {
             patterns: each.patterns,
             input_debugger: each.input_debugger,
-            call_counter: AtomicUsize::new(0),
-            error_counter: AtomicUsize::new(0),
+            has_applications: AtomicBool::new(false),
         }
     }
 
@@ -90,18 +94,8 @@ impl<A: Api> MockImpl<A> {
         Self {
             patterns: vec![],
             input_debugger: InputDebugger { func: None },
-            call_counter: AtomicUsize::new(0),
-            error_counter: AtomicUsize::new(0),
+            has_applications: AtomicBool::new(false),
         }
-    }
-
-    fn report_error<'i, F>(&self, panic_producer: F) -> ApplyResult<'i, A>
-    where
-        F: FnOnce() -> ApplyResult<'i, A>,
-    {
-        self.error_counter
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        panic_producer()
     }
 
     fn debug_inputs<'i>(&self, inputs: &A::Inputs<'i>) -> String {
@@ -110,14 +104,26 @@ impl<A: Api> MockImpl<A> {
     }
 }
 
-impl<A: Api> Drop for MockImpl<A> {
-    fn drop(&mut self) {
-        let call_count = self.call_counter.load(std::sync::atomic::Ordering::Relaxed);
-        if call_count == 0 {
-            panic!(
+impl<A: Api + 'static> Mock for MockImpl<A> {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn verify(&self, errors: &mut Vec<String>) {
+        for pattern in self.patterns.iter() {
+            pattern
+                .call_counter
+                .verify(A::NAME, pattern.pat_index, errors);
+        }
+
+        if !self
+            .has_applications
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            errors.push(format!(
                 "Mock for {} was never called. Dead mocks should be removed.",
                 A::NAME
-            );
+            ));
         }
     }
 }
@@ -132,13 +138,7 @@ pub(crate) struct CallPattern<A: Api> {
 pub(crate) enum Responder<A: Api> {
     Closure(Box<dyn (for<'i> Fn(A::Inputs<'i>) -> A::Output) + Send + Sync>),
     Fallthrough,
-    Panic,
-}
-
-impl<A: Api> Drop for CallPattern<A> {
-    fn drop(&mut self) {
-        self.call_counter.verify(A::NAME, self.pat_index);
-    }
+    Error,
 }
 
 pub(crate) struct InputDebugger<A: Api> {

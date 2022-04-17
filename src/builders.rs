@@ -66,7 +66,7 @@ impl<A: Api + 'static> Each<A> {
             pat_index,
             arg_matcher: Some(Box::new(matching)),
             call_counter: counter::CallCounter::new(counter::CountExpectation::None),
-            responder: mock::Responder::Panic,
+            responder: mock::Responder::Error,
         });
 
         Call {

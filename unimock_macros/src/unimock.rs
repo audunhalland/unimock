@@ -344,13 +344,13 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         .map(|opt| opt.0.as_ref())
         .unwrap_or(None);
 
-    let fallthrough_pat = if let Some(original_fn) = original_fn {
+    let matched_pat = if let Some(original_fn) = original_fn {
         quote! {
-            ::unimock::mock::ApplyResult::Fallthrough((#(#parameters),*)) => #original_fn(self, #(#parameters),*)
+            ::unimock::mock::Outcome::Matched((#(#parameters),*)) => #original_fn(self, #(#parameters),*)
         }
     } else {
         quote! {
-            ::unimock::mock::ApplyResult::Fallthrough(_) => {
+            ::unimock::mock::Outcome::Matched(_) => {
                 panic!("no fn available for fallthrough on {}", <#api_ident as ::unimock::Api>::NAME)
             }
         }
@@ -359,8 +359,8 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     quote! {
         #sig {
             match self.apply::<#api_ident>((#(#parameters),*)) {
-                ::unimock::mock::ApplyResult::Evaluated(output) => output,
-                #fallthrough_pat,
+                ::unimock::mock::Outcome::Evaluated(output) => output,
+                #matched_pat,
             }
         }
     }

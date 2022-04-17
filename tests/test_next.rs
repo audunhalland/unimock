@@ -422,16 +422,14 @@ fn spyable() {
             .concat("a".to_string(), "b".to_string())
     );
 
-    mock(Spyable__concat, |each| {
-        each.call(matching!("", "")).once();
-    })
-    .concat("a".to_string(), "b".to_string());
-
-    /*
     assert_panics!(
         {
+            let unimock = mock(Spyable__concat, |each| {
+                each.call(matching!("", "")).once().calls_archetype();
+                each.call(matching!(_, _)).calls_archetype();
+            });
+            assert_eq!("ab", unimock.concat("a".to_string(), "b".to_string()));
         },
         includes("Spyable::concat: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
     );
-    */
 }

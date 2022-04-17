@@ -77,7 +77,7 @@ mod counter;
 
 use std::any::TypeId;
 use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::AtomicBool;
 
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
@@ -181,7 +181,7 @@ pub use unimock_macros::matching;
 
 #[derive(Clone, Copy)]
 enum FallbackMode {
-    Panic,
+    Error,
     Fallthrough,
 }
 
@@ -193,14 +193,16 @@ enum FallbackMode {
 pub struct Unimock {
     fallback_mode: FallbackMode,
     impls: HashMap<TypeId, mock::DynImpl>,
+    has_panicked: AtomicBool,
 }
 
 impl Unimock {
     /// Create a new, empty Unimock. Attempting to call implemented traits on an empty instance will panic at runtime.
     pub fn empty() -> Self {
         Self {
-            fallback_mode: FallbackMode::Panic,
+            fallback_mode: FallbackMode::Error,
             impls: HashMap::new(),
+            has_panicked: AtomicBool::new(false),
         }
     }
 
@@ -249,26 +251,52 @@ impl Unimock {
         Self {
             fallback_mode: FallbackMode::Fallthrough,
             impls: HashMap::new(),
+            has_panicked: AtomicBool::new(false),
         }
     }
 
     pub(crate) fn with_single_mock(type_id: TypeId, dyn_impl: mock::DynImpl) -> Self {
         Self {
-            fallback_mode: FallbackMode::Panic,
+            fallback_mode: FallbackMode::Error,
             impls: [(type_id, dyn_impl)].into(),
+            has_panicked: AtomicBool::new(false),
         }
     }
 
     /// Perform function-application against some [Api].
-    pub fn apply<'i, A: Api + 'static>(
-        &'i self,
-        inputs: A::Inputs<'i>,
-    ) -> mock::ApplyResult<'i, A> {
-        mock::apply(
+    pub fn apply<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> mock::Outcome<'i, A> {
+        match mock::apply(
             self.impls.get(&TypeId::of::<A>()),
             inputs,
             self.fallback_mode,
-        )
+        ) {
+            Ok(outcome) => outcome,
+            Err(message) => {
+                self.has_panicked
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                panic!("{}", message);
+            }
+        }
+    }
+}
+
+impl Drop for Unimock {
+    fn drop(&mut self) {
+        // skip verification if panic already occured.
+        if self.has_panicked.load(std::sync::atomic::Ordering::Relaxed) || std::thread::panicking()
+        {
+            return;
+        }
+
+        let mut errors = Vec::new();
+        for (_, dyn_impl) in self.impls.iter() {
+            dyn_impl.0.verify(&mut errors);
+        }
+
+        if !errors.is_empty() {
+            let error_string = errors.join("\n");
+            panic!("{}", error_string);
+        }
     }
 }
 

@@ -22,7 +22,7 @@ impl CallCounter {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
-    pub fn verify(&self, name: &'static str, pat_index: usize) {
+    pub fn verify(&self, name: &'static str, pat_index: usize, errors: &mut Vec<String>) {
         let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::Relaxed));
 
         match self.expectation {
@@ -30,13 +30,13 @@ impl CallCounter {
             CountExpectation::Exactly(target) => {
                 if actual_calls.0 != target {
                     let target_calls = NCalls(target);
-                    panic!("{name}: Expected call pattern #{pat_index} to match exactly {target_calls}, but it actually matched {actual_calls}.");
+                    errors.push(format!("{name}: Expected call pattern #{pat_index} to match exactly {target_calls}, but it actually matched {actual_calls}."));
                 }
             }
             CountExpectation::AtLeast(target) => {
                 if actual_calls.0 < target {
                     let target_calls = NCalls(target);
-                    panic!("{name}: Expected call pattern #{pat_index} to match at least {target_calls}, but it actually matched {actual_calls}.");
+                    errors.push(format!("{name}: Expected call pattern #{pat_index} to match at least {target_calls}, but it actually matched {actual_calls}."));
                 }
             }
         }
