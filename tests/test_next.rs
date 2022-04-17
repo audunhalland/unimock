@@ -113,7 +113,7 @@ trait MultiArg {
 }
 
 #[test]
-fn test_union() {
+fn test_multiple() {
     fn takes_single_multi(t: &(impl SingleArg + MultiArg)) -> &str {
         let tmp = t.method1("b");
         t.method2(tmp, tmp)
@@ -122,16 +122,13 @@ fn test_union() {
     assert_eq!(
         "success",
         takes_single_multi(
-            &[
-                mock(SingleArg__method1, |each| {
-                    each.call(matching!("b")).returns("B").once();
-                }),
-                mock(MultiArg__method2, |each| {
-                    each.call(matching!("a", _)).never().returns("fail");
-                    each.call(matching!("B", "B")).returns("success").once();
-                })
-            ]
-            .union()
+            &mock(SingleArg__method1, |each| {
+                each.call(matching!("b")).returns("B").once();
+            })
+            .also(MultiArg__method2, |each| {
+                each.call(matching!("a", _)).never().returns("fail");
+                each.call(matching!("B", "B")).returns("success").once();
+            })
         )
     );
     assert_eq!(
@@ -140,7 +137,7 @@ fn test_union() {
             &mock(SingleArg__method1, |each| {
                 each.call(matching!("b")).returns("B").once();
             })
-            .also_mock(MultiArg__method2, |each| {
+            .also(MultiArg__method2, |each| {
                 each.call(matching!("a", _)).never().returns("fail");
                 each.call(matching!("B", "B")).returns("success").once();
             })
@@ -152,7 +149,7 @@ fn test_union() {
 fn should_panic_for_nonexisting_mock() {
     assert_panics!(
         {
-            Unimock::new().method1("hoi");
+            Unimock::empty().method1("hoi");
         },
         includes("No mock implementation found for SingleArg::method1")
     );

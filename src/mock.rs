@@ -87,7 +87,7 @@ impl<M: Mock> MockImpl<M> {
     }
 
     fn debug_inputs<'i>(&self, inputs: &M::Inputs<'i>) -> String {
-        self.input_debugger.debug(inputs, M::N_ARGS)
+        self.input_debugger.debug(inputs, M::N_INPUTS)
     }
 }
 

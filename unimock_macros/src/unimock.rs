@@ -235,7 +235,7 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
     };
 
     let input_lifetime = &cfg.input_lifetime;
-    let mut n_args: u8 = 0;
+    let mut n_inputs: u8 = 0;
 
     let inputs_tuple = method
         .method
@@ -247,7 +247,7 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
             syn::FnArg::Typed(pat_type) => Some(pat_type.ty.as_ref()),
         })
         .map(|ty| {
-            n_args += 1;
+            n_inputs += 1;
             match ty {
                 syn::Type::Reference(reference) => {
                     let syn::TypeReference {
@@ -284,7 +284,7 @@ fn def_mock(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_mac
         impl ::unimock::Mock for #mock_ident {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #output;
-            const N_ARGS: u8 = #n_args;
+            const N_INPUTS: u8 = #n_inputs;
             const NAME: &'static str = #api_name;
         }
     }

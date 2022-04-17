@@ -42,7 +42,7 @@
 //!             mock(Foo__foo, |each| {
 //!                 each.call(matching!()).returns(40);
 //!             })
-//!             .also_mock(Bar__bar, |each| {
+//!             .also(Bar__bar, |each| {
 //!                 each.call(matching!()).returns(2);
 //!             })
 //!         )
@@ -187,16 +187,6 @@ enum FallbackMode {
     CallOriginal,
 }
 
-impl FallbackMode {
-    fn union(self, other: FallbackMode) -> Self {
-        match (self, other) {
-            (Self::Panic, other) => other,
-            (other, Self::Panic) => other,
-            (_, other) => other,
-        }
-    }
-}
-
 /// Unimock's purpose is to be an implementor of downstream traits via mock objects.
 /// A single mock object provides the implementation of a single trait method.
 ///
@@ -209,29 +199,27 @@ pub struct Unimock {
 
 impl Unimock {
     /// Create a new, empty Unimock. Attempting to call implemented traits on an empty instance will panic at runtime.
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self {
             fallback_mode: FallbackMode::Panic,
             impls: HashMap::new(),
         }
     }
 
-    ///
-    /// Compose a new unimock by consuming an array of simpler unimocks by a union operation.
-    ///
-    pub fn union<const N: usize>(unimocks: [Unimock; N]) -> Self {
-        let mut impls = HashMap::new();
-        let mut fallback_mode = FallbackMode::Panic;
+    /// Extend this unimock with another API mock.
+    pub fn also<M, F>(mut self, _: M, f: F) -> Self
+    where
+        M: Mock + 'static,
+        F: FnOnce(&mut builders::Each<M>),
+    {
+        let mut each = builders::Each::new();
+        f(&mut each);
 
-        for unimock in unimocks.into_iter() {
-            fallback_mode = fallback_mode.union(unimock.fallback_mode);
-            impls.extend(unimock.impls);
-        }
-
-        Self {
-            fallback_mode,
-            impls,
-        }
+        self.impls.insert(
+            TypeId::of::<M>(),
+            mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
+        );
+        self
     }
 
     /// Create a unimock that instead of trying to mock, tries to call some original implementation of any API.
@@ -257,15 +245,6 @@ impl Unimock {
         }
     }
 
-    /// Union this unimock with another API mock.
-    pub fn also_mock<M, F>(self, api: M, f: F) -> Self
-    where
-        M: Mock + 'static,
-        F: FnOnce(&mut builders::Each<M>),
-    {
-        Self::union([self, api.mock(f)])
-    }
-
     /// Look up a stored mock object and expose it as a dynamic implementation
     /// of a function. The implementation can be one of two types: A mock and an
     /// instruction to call a real implementation.
@@ -274,31 +253,6 @@ impl Unimock {
             .get(&TypeId::of::<M>())
             .map(mock::Impl::from_storage)
             .unwrap_or_else(|| mock::Impl::from_fallback(&self.fallback_mode))
-    }
-
-    fn missing_trait_error(&self, trait_name: &'static str) -> String {
-        format!("Missing mock for trait {trait_name}")
-    }
-}
-
-impl std::ops::Add<Unimock> for Unimock {
-    type Output = Unimock;
-
-    fn add(self, rhs: Unimock) -> Self::Output {
-        Unimock::union([self, rhs])
-    }
-}
-
-///
-/// Trait for combining several [Unimock] values into a single one.
-///
-pub trait Union {
-    fn union(self) -> Unimock;
-}
-
-impl<const N: usize> Union for [Unimock; N] {
-    fn union(self) -> Unimock {
-        Unimock::union(self)
     }
 }
 
@@ -327,34 +281,26 @@ pub trait Mock: Sized {
     /// The output of the mock function.
     type Output;
 
-    const N_ARGS: u8;
+    /// The number of inputs.
+    const N_INPUTS: u8;
 
     /// The name to use for runtime errors.
     const NAME: &'static str;
-
-    /// Create a unimock instance that mocks this function.
-    fn mock<F>(self, f: F) -> Unimock
-    where
-        Self: 'static,
-        F: FnOnce(&mut builders::Each<Self>),
-    {
-        let mut each = builders::Each::new();
-        f(&mut each);
-        Unimock::with_single_mock(
-            TypeId::of::<Self>(),
-            mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
-        )
-    }
 }
 
-/// Mock some function.
+/// Mock some mockable API.
 #[inline]
-pub fn mock<M, F>(api: M, f: F) -> Unimock
+pub fn mock<M, F>(_: M, f: F) -> Unimock
 where
     M: Mock + 'static,
     F: FnOnce(&mut builders::Each<M>),
 {
-    api.mock(f)
+    let mut each = builders::Each::new();
+    f(&mut each);
+    Unimock::with_single_mock(
+        TypeId::of::<M>(),
+        mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each))),
+    )
 }
 
 pub trait CallOriginal {

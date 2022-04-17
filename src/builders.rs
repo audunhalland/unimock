@@ -40,7 +40,7 @@ impl<M: Mock + 'static> Each<M> {
     /// }
     ///
     /// fn test() {
-    ///     let mock = Foo.mock(|each| { each.call(matching!("value")).returns_default(); });
+    ///     let mock = mock(Foo, |each| { each.call(matching!("value")).returns_default(); });
     /// }
     /// ```
     pub fn call<'b, F>(&'b mut self, matching: F) -> Call<'b, M>
