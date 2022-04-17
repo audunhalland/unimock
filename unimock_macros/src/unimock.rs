@@ -344,35 +344,23 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         .map(|opt| opt.0.as_ref())
         .unwrap_or(None);
 
-    let call_impl = if let Some(original_fn) = original_fn {
-        quote! { #original_fn(self, #(#parameters),*) }
+    let fallthrough_pat = if let Some(original_fn) = original_fn {
+        quote! {
+            ::unimock::mock::ApplyResult::Fallthrough((#(#parameters),*)) => #original_fn(self, #(#parameters),*)
+        }
     } else {
         quote! {
-            panic!("no original fn available for call to {}", <#api_ident as ::unimock::Api>::NAME)
-        }
-    };
-
-    let spy_impl = if let Some(original_fn) = original_fn {
-        quote! {
-            {
-                let __t = (#(#parameters),*);
-                __m_.spy_inputs(&__t);
-                let (#(#parameters),*) = __t;
-                #original_fn(self, #(#parameters),*)
+            ::unimock::mock::ApplyResult::Fallthrough(_) => {
+                panic!("no fn available for fallthrough on {}", <#api_ident as ::unimock::Api>::NAME)
             }
-        }
-    } else {
-        quote! {
-            panic!("no original fn available for spying on {}", <#api_ident as ::unimock::Api>::NAME)
         }
     };
 
     quote! {
         #sig {
-            match self.get_impl::<#api_ident>() {
-                ::unimock::mock::Impl::Call => #call_impl,
-                ::unimock::mock::Impl::Spy(__m_) => #spy_impl,
-                ::unimock::mock::Impl::Mock(__m_) => __m_.invoke_mock((#(#parameters),*)),
+            match self.apply::<#api_ident>((#(#parameters),*)) {
+                ::unimock::mock::ApplyResult::Evaluated(output) => output,
+                #fallthrough_pat,
             }
         }
     }

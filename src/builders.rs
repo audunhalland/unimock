@@ -66,7 +66,7 @@ impl<A: Api + 'static> Each<A> {
             pat_index,
             arg_matcher: Some(Box::new(matching)),
             call_counter: counter::CallCounter::new(counter::CountExpectation::None),
-            output_factory: None,
+            responder: mock::Responder::Panic,
         });
 
         Call {
@@ -94,7 +94,7 @@ where
         A::Output: Send + Sync + Clone + 'static,
     {
         let value = value.into();
-        self.pattern.output_factory = Some(Box::new(move |_| value.clone()));
+        self.pattern.responder = mock::Responder::Closure(Box::new(move |_| value.clone()));
         self
     }
 
@@ -103,7 +103,7 @@ where
     where
         A::Output: Default,
     {
-        self.pattern.output_factory = Some(Box::new(|_| Default::default()));
+        self.pattern.responder = mock::Responder::Closure(Box::new(|_| Default::default()));
         self
     }
 
@@ -114,7 +114,7 @@ where
         F: (for<'i> Fn(A::Inputs<'i>) -> R) + Send + Sync + 'static,
         R: Into<A::Output>,
     {
-        self.pattern.output_factory = Some(Box::new(move |inputs| f(inputs).into()));
+        self.pattern.responder = mock::Responder::Closure(Box::new(move |inputs| f(inputs).into()));
         self
     }
 
@@ -125,7 +125,7 @@ where
         A::Output: Send + Sync + Copy + LeakOutput<Owned = T> + 'static,
     {
         let leaked = <A::Output as LeakOutput>::leak(value.into());
-        self.pattern.output_factory = Some(Box::new(move |_| leaked));
+        self.pattern.responder = mock::Responder::Closure(Box::new(move |_| leaked));
         self
     }
 
@@ -139,7 +139,7 @@ where
         R: Into<O>,
         A::Output: LeakOutput<Owned = O>,
     {
-        self.pattern.output_factory = Some(Box::new(move |inputs| {
+        self.pattern.responder = mock::Responder::Closure(Box::new(move |inputs| {
             let owned_output = f(inputs).into();
             <A::Output as LeakOutput>::leak(owned_output)
         }));
@@ -149,7 +149,15 @@ where
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
     pub fn panics(self, message: impl Into<String>) -> Self {
         let message = message.into();
-        self.pattern.output_factory = Some(Box::new(move |_| panic!("{}", message)));
+        self.pattern.responder = mock::Responder::Closure(Box::new(move |_| panic!("{}", message)));
+        self
+    }
+
+    pub fn calls_archetype(self) -> Self
+//where
+    //    A: Archetype,
+    {
+        self.pattern.responder = mock::Responder::Fallthrough;
         self
     }
 

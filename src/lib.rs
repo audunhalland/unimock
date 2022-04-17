@@ -77,8 +77,6 @@ mod counter;
 
 use std::any::TypeId;
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 
 ///
@@ -181,9 +179,10 @@ pub use unimock_macros::unimock_next;
 /// Internally it works by calling [as_str_ref] on inputs matched by a string literal.
 pub use unimock_macros::matching;
 
+#[derive(Clone, Copy)]
 enum FallbackMode {
     Panic,
-    CallOriginal,
+    Fallthrough,
 }
 
 /// Unimock's purpose is to be an implementor of downstream traits via mock objects.
@@ -216,23 +215,7 @@ impl Unimock {
 
         self.impls.insert(
             TypeId::of::<A>(),
-            mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each, mock::Mode::Mock))),
-        );
-        self
-    }
-
-    /// Extend this instance with a spy wrapping another [Api].
-    pub fn also_spy<A: Api + 'static>(
-        mut self,
-        _: A,
-        setup: impl FnOnce(&mut builders::Each<A>),
-    ) -> Self {
-        let mut each = builders::Each::new();
-        setup(&mut each);
-
-        self.impls.insert(
-            TypeId::of::<A>(),
-            mock::DynImpl::Spy(Box::new(mock::MockImpl::from_each(each, mock::Mode::Spy))),
+            mock::DynImpl(Box::new(mock::MockImpl::from_each(each))),
         );
         self
     }
@@ -240,13 +223,16 @@ impl Unimock {
     /// Extend this instance with an instruction to just call the original implementation of the given [Api],
     /// without any mock-related behaviour.
     pub fn also_call<A: Api + 'static>(mut self, _: A) -> Self {
-        self.impls.insert(TypeId::of::<A>(), mock::DynImpl::Call);
+        self.impls.insert(
+            TypeId::of::<A>(),
+            mock::DynImpl(Box::new(mock::MockImpl::<A>::empty_with_forwarding())),
+        );
         self
     }
 
     /// Change unregistered [Api] fallback behaviour from explicitly panicking to trying to call their original implementation.
-    pub fn or_else_call_any(mut self) -> Self {
-        self.fallback_mode = FallbackMode::CallOriginal;
+    pub fn or_else_call_original(mut self) -> Self {
+        self.fallback_mode = FallbackMode::Fallthrough;
         self
     }
 
@@ -261,7 +247,7 @@ impl Unimock {
     /// creating a mix of real and mocked APIs, allowing deeper tests than mock-only mode can provide.
     pub fn call_original() -> Self {
         Self {
-            fallback_mode: FallbackMode::CallOriginal,
+            fallback_mode: FallbackMode::Fallthrough,
             impls: HashMap::new(),
         }
     }
@@ -273,14 +259,16 @@ impl Unimock {
         }
     }
 
-    /// Look up a stored mock object and expose it as a dynamic implementation
-    /// of a function. The implementation can be one of two types: A mock and an
-    /// instruction to call a real implementation.
-    pub fn get_impl<'s, A: Api + 'static>(&'s self) -> mock::Impl<'s, A> {
-        self.impls
-            .get(&TypeId::of::<A>())
-            .map(mock::Impl::from_storage)
-            .unwrap_or_else(|| mock::Impl::from_fallback(&self.fallback_mode))
+    /// Perform function-application against some [Api].
+    pub fn apply<'i, A: Api + 'static>(
+        &'i self,
+        inputs: A::Inputs<'i>,
+    ) -> mock::ApplyResult<'i, A> {
+        mock::apply(
+            self.impls.get(&TypeId::of::<A>()),
+            inputs,
+            self.fallback_mode,
+        )
     }
 }
 
@@ -315,23 +303,10 @@ pub trait Api: Sized {
 
     /// The name to use for runtime errors.
     const NAME: &'static str;
-
-    /// Call the Api's real implementation, if any. The default behaviour is just to panic.
-    fn call<'i>(_: Self::Inputs<'i>) -> Self::Output {
-        panic!(
-            "Nothing is implemented for synchronous real call to {}",
-            Self::NAME
-        )
-    }
-
-    /// Call the Api's real implementation, if any, in an async context. The default behaviour is just to panic.
-    fn call_async<'i>(_: Self::Inputs<'i>) -> Pin<Box<dyn Future<Output = Self::Output>>> {
-        panic!(
-            "Nothing is implemented for async real call to {}",
-            Self::NAME
-        )
-    }
 }
+
+/// Api that has an archetypical implementation.
+pub trait Archetype: Api {}
 
 /// Mock a single [Api].
 pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -> Unimock {
@@ -339,20 +314,7 @@ pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) 
     setup(&mut each);
     Unimock::with_single_mock(
         TypeId::of::<A>(),
-        mock::DynImpl::Mock(Box::new(mock::MockImpl::from_each(each, mock::Mode::Mock))),
-    )
-}
-
-/// Spy on a single [Api].
-///
-/// A spy performs argument matching and call count verification, but ignores any mock output configuration.
-/// Instead, a spy produces the output value by trying to invoke the original implementation of the API.
-pub fn spy<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -> Unimock {
-    let mut each = builders::Each::new();
-    setup(&mut each);
-    Unimock::with_single_mock(
-        TypeId::of::<A>(),
-        mock::DynImpl::Spy(Box::new(mock::MockImpl::from_each(each, mock::Mode::Spy))),
+        mock::DynImpl(Box::new(mock::MockImpl::from_each(each))),
     )
 }
 

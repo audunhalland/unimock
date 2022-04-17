@@ -327,7 +327,7 @@ async fn test_async_trait() {
             &mock(Async__func, |each| {
                 each.call(matching!(_)).returns("42");
             })
-            .or_else_call_any(),
+            .or_else_call_original(),
             21
         )
         .await
@@ -395,7 +395,7 @@ fn newtype() {
 fn repeat(_: &impl Any, arg: String) -> String {
     format!("{arg}{arg}")
 }
-fn concat(_: &impl Any, a: String, b: String) -> String {
+fn concat(_: &impl Spyable, a: String, b: String) -> String {
     format!("{a}{b}")
 }
 
@@ -409,16 +409,29 @@ trait Spyable {
 fn spyable() {
     assert_eq!(
         "ab",
-        spy(Spyable__concat, |each| {
-            each.call(matching!("a", "b")).once();
+        mock(Spyable__concat, |each| {
+            each.call(matching!("a", "b")).once().calls_archetype();
         })
         .concat("a".to_string(), "b".to_string())
     );
 
+    assert_eq!(
+        "ab",
+        Unimock::empty()
+            .or_else_call_original()
+            .concat("a".to_string(), "b".to_string())
+    );
+
+    mock(Spyable__concat, |each| {
+        each.call(matching!("", "")).once();
+    })
+    .concat("a".to_string(), "b".to_string());
+
+    /*
     assert_panics!(
         {
-            spy(Spyable__concat, |_| {});
         },
-        includes("Spy for Spyable::concat was never called. Dead mocks should be removed.")
+        includes("Spyable::concat: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
     );
+    */
 }
