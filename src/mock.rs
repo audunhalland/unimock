@@ -55,7 +55,7 @@ pub(crate) fn apply<'i, A: Api + 'static>(
 
                 return match &pattern.responder {
                     Responder::Closure(closure) => Ok(Outcome::Evaluated(closure(inputs))),
-                    Responder::Fallthrough => Ok(Outcome::Matched(inputs)),
+                    Responder::Archetypal => Ok(Outcome::Matched(inputs)),
                     Responder::Error => Err(format!(
                         "{}{}: No output available for matching call pattern #{}",
                         A::NAME,
@@ -86,14 +86,6 @@ impl<A: Api> MockImpl<A> {
         Self {
             patterns: each.patterns,
             input_debugger: each.input_debugger,
-            has_applications: AtomicBool::new(false),
-        }
-    }
-
-    pub(crate) fn empty_with_forwarding() -> Self {
-        Self {
-            patterns: vec![],
-            input_debugger: InputDebugger { func: None },
             has_applications: AtomicBool::new(false),
         }
     }
@@ -137,7 +129,7 @@ pub(crate) struct CallPattern<A: Api> {
 
 pub(crate) enum Responder<A: Api> {
     Closure(Box<dyn (for<'i> Fn(A::Inputs<'i>) -> A::Output) + Send + Sync>),
-    Fallthrough,
+    Archetypal,
     Error,
 }
 

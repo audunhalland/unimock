@@ -153,11 +153,12 @@ where
         self
     }
 
-    pub fn calls_archetype(self) -> Self
-//where
-    //    A: Archetype,
+    /// Instruct this call pattern to invoke the [Archetypal] function.
+    pub fn invokes_archetype(self) -> Self
+    where
+        A: Archetypal,
     {
-        self.pattern.responder = mock::Responder::Fallthrough;
+        self.pattern.responder = mock::Responder::Archetypal;
         self
     }
 

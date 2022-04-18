@@ -358,28 +358,28 @@ fn test_cow() {
     )
 }
 
-#[derive(Clone)]
-struct MyString(pub String);
-
-impl<'s> From<&'s str> for MyString {
-    fn from(s: &'s str) -> Self {
-        Self(s.to_string())
-    }
-}
-
-impl std::convert::AsRef<str> for MyString {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-#[unimock]
-trait NewtypeString {
-    fn func(&self, arg: MyString) -> MyString;
-}
-
 #[test]
 fn newtype() {
+    #[derive(Clone)]
+    struct MyString(pub String);
+
+    impl<'s> From<&'s str> for MyString {
+        fn from(s: &'s str) -> Self {
+            Self(s.to_string())
+        }
+    }
+
+    impl std::convert::AsRef<str> for MyString {
+        fn as_ref(&self) -> &str {
+            self.0.as_str()
+        }
+    }
+
+    #[unimock]
+    trait NewtypeString {
+        fn func(&self, arg: MyString) -> MyString;
+    }
+
     fn takes(t: &impl NewtypeString, arg: MyString) -> MyString {
         t.func(arg)
     }
@@ -392,25 +392,25 @@ fn newtype() {
     );
 }
 
-fn repeat(_: &impl Any, arg: String) -> String {
-    format!("{arg}{arg}")
-}
-fn concat(_: &impl Spyable, a: String, b: String) -> String {
-    format!("{a}{b}")
-}
-
-#[unimock(original_fns=[repeat, concat])]
-trait Spyable {
-    fn repeat(&self, arg: String) -> String;
-    fn concat(&self, a: String, b: String) -> String;
-}
-
 #[test]
-fn spyable() {
+fn archetypes() {
+    #[unimock(archetypes=[repeat, concat])]
+    trait Spyable {
+        fn repeat(&self, arg: String) -> String;
+        fn concat(&self, a: String, b: String) -> String;
+    }
+
+    fn repeat(_: &impl Any, arg: String) -> String {
+        format!("{arg}{arg}")
+    }
+    fn concat(_: &impl Spyable, a: String, b: String) -> String {
+        format!("{a}{b}")
+    }
+
     assert_eq!(
         "ab",
         mock(Spyable__concat, |each| {
-            each.call(matching!("a", "b")).once().calls_archetype();
+            each.call(matching!("a", "b")).once().invokes_archetype();
         })
         .concat("a".to_string(), "b".to_string())
     );
@@ -425,11 +425,32 @@ fn spyable() {
     assert_panics!(
         {
             let unimock = mock(Spyable__concat, |each| {
-                each.call(matching!("", "")).once().calls_archetype();
-                each.call(matching!(_, _)).calls_archetype();
+                each.call(matching!("", "")).returns("foobar").once();
+                each.call(matching!(_, _)).invokes_archetype();
             });
             assert_eq!("ab", unimock.concat("a".to_string(), "b".to_string()));
         },
         includes("Spyable::concat: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
+    );
+}
+
+#[test]
+fn arch_recursion() {
+    #[unimock(archetypes=[my_factorial])]
+    trait Factorial {
+        fn factorial(&self, input: u32) -> u32;
+    }
+
+    fn my_factorial(f: &impl Factorial, input: u32) -> u32 {
+        f.factorial(input - 1) * input
+    }
+
+    assert_eq!(
+        120,
+        mock(Factorial__factorial, |each| {
+            each.call(matching!((input) if *input <= 1)).returns(1u32);
+            each.call(matching!(_)).invokes_archetype();
+        })
+        .factorial(5)
     );
 }

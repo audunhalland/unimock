@@ -4,14 +4,23 @@ use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
-    original_fns: Vec<OriginalFn>,
+    archetypes: Vec<Archetype>,
     input_lifetime: syn::Lifetime,
+}
+
+impl Cfg {
+    fn get_archetype_path(&self, index: usize) -> Option<&syn::Path> {
+        self.archetypes
+            .get(index)
+            .map(|opt| opt.0.as_ref())
+            .unwrap_or(None)
+    }
 }
 
 impl syn::parse::Parse for Cfg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut module = None;
-        let mut original_fns = vec![];
+        let mut archetypes = vec![];
 
         while !input.is_empty() {
             if input.peek(syn::token::Mod) {
@@ -22,13 +31,13 @@ impl syn::parse::Parse for Cfg {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
                 match keyword.to_string().as_str() {
-                    "original_fns" => {
+                    "archetypes" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
-                        original_fns.push(content.parse()?);
+                        archetypes.push(content.parse()?);
                         while content.peek(syn::token::Comma) {
                             let _: syn::token::Comma = content.parse()?;
-                            original_fns.push(content.parse()?);
+                            archetypes.push(content.parse()?);
                         }
                     }
                     _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
@@ -38,15 +47,15 @@ impl syn::parse::Parse for Cfg {
 
         Ok(Self {
             module,
-            original_fns,
+            archetypes,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
         })
     }
 }
 
-struct OriginalFn(Option<syn::Path>);
+struct Archetype(Option<syn::Path>);
 
-impl syn::parse::Parse for OriginalFn {
+impl syn::parse::Parse for Archetype {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         if input.peek(syn::token::Underscore) {
             let _: syn::token::Underscore = input.parse()?;
@@ -104,7 +113,8 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
 
     let api_defs = methods
         .iter()
-        .map(|method| def_api(&item_trait, method, &cfg));
+        .enumerate()
+        .map(|(index, method)| def_api(index, method, &item_trait, &cfg));
     let method_impls = methods
         .iter()
         .enumerate()
@@ -251,7 +261,12 @@ fn extract_methods<'s>(
         .collect()
 }
 
-fn def_api(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
+fn def_api(
+    index: usize,
+    method: &Method,
+    item_trait: &syn::ItemTrait,
+    cfg: &Cfg,
+) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let api_ident = &method.api_ident;
     let api_name = &method.api_name;
@@ -307,6 +322,12 @@ fn def_api(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_macr
         },
     };
 
+    let archetypal_impl = cfg.get_archetype_path(index).map(|_| {
+        quote! {
+            impl ::unimock::Archetypal for #api_ident {}
+        }
+    });
+
     quote! {
         #[allow(non_camel_case_types)]
         #mock_visibility struct #api_ident;
@@ -317,6 +338,8 @@ fn def_api(item_trait: &syn::ItemTrait, method: &Method, cfg: &Cfg) -> proc_macr
             const N_INPUTS: u8 = #n_inputs;
             const NAME: &'static str = #api_name;
         }
+
+        #archetypal_impl
     }
 }
 
@@ -338,15 +361,9 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         })
         .collect::<Vec<_>>();
 
-    let original_fn = cfg
-        .original_fns
-        .get(index)
-        .map(|opt| opt.0.as_ref())
-        .unwrap_or(None);
-
-    let matched_pat = if let Some(original_fn) = original_fn {
+    let matched_pat = if let Some(arch_path) = cfg.get_archetype_path(index) {
         quote! {
-            ::unimock::mock::Outcome::Matched((#(#parameters),*)) => #original_fn(self, #(#parameters),*)
+            ::unimock::mock::Outcome::Matched((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
         }
     } else {
         quote! {

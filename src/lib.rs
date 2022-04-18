@@ -20,22 +20,7 @@
 //!     foobar.foo() + foobar.bar()
 //! }
 //!
-//! /*
 //! fn test() {
-//!     let unimock = Unimock::new()
-//!         .mock(|foo: &mut MockFoo| {
-//!             foo.expect_foo().return_const(40);
-//!         })
-//!         .mock(|bar: &mut MockBar| {
-//!             bar.expect_bar().return_const(2);
-//!         });
-//!
-//!     let answer = sum(unimock);
-//!     assert_eq!(42, answer);
-//! }
-//! */
-//!
-//! fn test_next() {
 //!     assert_eq!(
 //!         42,
 //!         sum(
@@ -222,16 +207,6 @@ impl Unimock {
         self
     }
 
-    /// Extend this instance with an instruction to just call the original implementation of the given [Api],
-    /// without any mock-related behaviour.
-    pub fn also_call<A: Api + 'static>(mut self, _: A) -> Self {
-        self.impls.insert(
-            TypeId::of::<A>(),
-            mock::DynImpl(Box::new(mock::MockImpl::<A>::empty_with_forwarding())),
-        );
-        self
-    }
-
     /// Change unregistered [Api] fallback behaviour from explicitly panicking to trying to call their original implementation.
     pub fn or_else_call_original(mut self) -> Self {
         self.fallback_mode = FallbackMode::Fallthrough;
@@ -333,8 +308,63 @@ pub trait Api: Sized {
     const NAME: &'static str;
 }
 
-/// Api that has an archetypical implementation.
-pub trait Archetype: Api {}
+/// [Api] that has an _archetypical implementation_.
+/// TODO: Find better name
+///
+/// An archetypal implementation is a free-standing function, not part of a trait,
+/// where the first parameter is generic (`self`-replacement), and the rest of the parameters are
+/// identical to [Api::Inputs]:
+///
+/// ```rust
+/// # #![feature(generic_associated_types)]
+/// # use unimock::*;
+/// #[unimock(archetypes=[my_archetype])]
+/// trait DoubleNumber {
+///     fn double_number(&self, a: i32) -> i32;
+/// }
+///
+/// // A _real function_ which performs number doubling!
+/// fn my_archetype<T>(_: T, a: i32) -> i32 {
+///     a * 2
+/// }
+/// ```
+///
+/// Archetypal functions make sense when the reason to define a mockable trait
+/// is _solely_ for the purpose of inversion-of-control at test-time: Release code
+/// need only one way to double a number.
+///
+/// Free-standing archetypal functions enables arbitrarily deep integration testing
+/// in unimock-based application architectures. When unimock calls an archetypal,
+/// it inserts itself as the generic first parameter. When this parameter is
+/// bounded by traits, the archetype `fn` is given capabilities to call other APIs,
+/// though only indirectly. Each method invocation happening during a test will invisibly pass
+/// through unimock, resulting in a great level of control. Consider:
+///
+/// ```rust
+/// # #![feature(generic_associated_types)]
+/// # use unimock::*;
+/// #[unimock(archetypes=[my_factorial])]
+/// trait Factorial {
+///     fn factorial(&self, input: u32) -> u32;
+/// }
+///
+/// // will it eventually panic?
+/// fn my_factorial(f: &impl Factorial, input: u32) -> u32 {
+///     f.factorial(input - 1) * input
+/// }
+///
+/// assert_eq!(
+///     120,
+///     // well, not in the test, at least!
+///     mock(Factorial__factorial, |each| {
+///         each.call(matching!((input) if *input <= 1)).returns(1u32); // unimock controls the API call
+///         each.call(matching!(_)).invokes_archetype();
+///     })
+///     .factorial(5)
+/// );
+/// ```
+///
+pub trait Archetypal: Api {}
 
 /// Mock a single [Api].
 pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -> Unimock {
