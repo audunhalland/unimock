@@ -6,6 +6,7 @@ pub struct Cfg {
     module: Option<syn::Ident>,
     archetypes: Vec<Archetype>,
     input_lifetime: syn::Lifetime,
+    static_lifetime: syn::Lifetime,
 }
 
 impl Cfg {
@@ -49,6 +50,7 @@ impl syn::parse::Parse for Cfg {
             module,
             archetypes,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
+            static_lifetime: syn::Lifetime::new("'static", proc_macro2::Span::call_site()),
         })
     }
 }
@@ -293,33 +295,16 @@ fn def_api(
         })
         .map(|ty| {
             n_inputs += 1;
-            match ty {
-                syn::Type::Reference(reference) => {
-                    let syn::TypeReference {
-                        and_token,
-                        lifetime: _,
-                        mutability,
-                        elem,
-                    } = reference;
-                    quote! {
-                        #and_token #input_lifetime #mutability #elem
-                    }
-                }
-                ty => quote! { #ty },
-            }
+            let ty = substitute_lifetimes(ty, input_lifetime);
+            quote! { #ty }
         });
 
     let output = match &sig.output {
         syn::ReturnType::Default => quote! { () },
-        syn::ReturnType::Type(_, ty) => match ty.as_ref() {
-            syn::Type::Path(type_path) => quote! { #type_path },
-            syn::Type::Reference(type_reference) => {
-                let static_lifetime = syn::Lifetime::new("'static", proc_macro2::Span::call_site());
-                let item = &type_reference.elem;
-                quote! { & #static_lifetime #item }
-            }
-            _ => syn::Error::new(ty.span(), "Unprocessable return type").to_compile_error(),
-        },
+        syn::ReturnType::Type(_, ty) => {
+            let ty = substitute_lifetimes(ty, &cfg.static_lifetime);
+            quote! { #ty }
+        }
     };
 
     let archetypal_impl = cfg.get_archetype_path(index).map(|_| {
@@ -341,6 +326,32 @@ fn def_api(
 
         #archetypal_impl
     }
+}
+
+fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
+    let mut ty = ty.clone();
+
+    struct LifetimeReplace<'s> {
+        lifetime: &'s syn::Lifetime,
+    }
+
+    impl<'s> syn::visit_mut::VisitMut for LifetimeReplace<'s> {
+        fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
+            reference.lifetime = Some(self.lifetime.clone());
+            syn::visit_mut::visit_type_reference_mut(self, reference);
+        }
+
+        fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
+            *lifetime = self.lifetime.clone();
+            syn::visit_mut::visit_lifetime_mut(self, lifetime);
+        }
+    }
+
+    let mut replace = LifetimeReplace { lifetime };
+    use syn::visit_mut::VisitMut;
+    replace.visit_type_mut(&mut ty);
+
+    ty
 }
 
 fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {

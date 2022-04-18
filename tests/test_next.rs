@@ -454,3 +454,20 @@ fn arch_recursion() {
         .factorial(5)
     );
 }
+
+#[test]
+fn intricate_lifetimes() {
+    struct I<'s>(std::marker::PhantomData<&'s ()>);
+    #[derive(Clone)]
+    struct O<'s>(&'s String);
+
+    #[unimock]
+    trait Intricate {
+        fn foo<'s, 't>(&'s self, inp: &'t I<'s>) -> &'t O<'s>;
+    }
+
+    mock(Intricate__foo, |each| {
+        each.nodebug_call(|_| true)
+            .returns_leak(O("foobar".to_string().leak()));
+    });
+}

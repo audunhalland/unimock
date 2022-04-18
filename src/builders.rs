@@ -122,9 +122,9 @@ where
     /// passed owned value, by leaking its memory. This version leaks the value once.
     pub fn returns_leak<T>(self, value: impl Into<T>) -> Self
     where
-        A::Output: Send + Sync + Copy + LeakOutput<Owned = T> + 'static,
+        A::Output: Send + Sync + Copy + LeakInto<Owned = T> + 'static,
     {
-        let leaked = <A::Output as LeakOutput>::leak(value.into());
+        let leaked = <A::Output as LeakInto>::leak_into(value.into());
         self.pattern.responder = mock::Responder::Closure(Box::new(move |_| leaked));
         self
     }
@@ -137,11 +137,11 @@ where
     where
         F: (for<'i> Fn(A::Inputs<'i>) -> R) + Send + Sync + 'static,
         R: Into<O>,
-        A::Output: LeakOutput<Owned = O>,
+        A::Output: LeakInto<Owned = O>,
     {
         self.pattern.responder = mock::Responder::Closure(Box::new(move |inputs| {
             let owned_output = f(inputs).into();
-            <A::Output as LeakOutput>::leak(owned_output)
+            <A::Output as LeakInto>::leak_into(owned_output)
         }));
         self
     }
