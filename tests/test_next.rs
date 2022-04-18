@@ -6,13 +6,13 @@ use async_trait::async_trait;
 use cool_asserts::*;
 use std::any::Any;
 
-#[unimock]
-trait NoArg {
-    fn no_arg(&self) -> i32;
-}
-
 #[test]
 fn noarg_works() {
+    #[unimock]
+    trait NoArg {
+        fn no_arg(&self) -> i32;
+    }
+
     assert_eq!(
         1_000_000,
         mock(NoArg__no_arg, |each| {
@@ -22,13 +22,13 @@ fn noarg_works() {
     );
 }
 
-#[unimock]
-trait Owned {
-    fn foo(&self, a: String, b: String) -> String;
-}
-
 #[test]
 fn owned_works() {
+    #[unimock]
+    trait Owned {
+        fn foo(&self, a: String, b: String) -> String;
+    }
+
     fn takes_owned(o: &impl Owned, a: impl Into<String>, b: impl Into<String>) -> String {
         o.foo(a.into(), b.into())
     }
@@ -230,18 +230,18 @@ fn should_panic_with_explicit_message() {
     );
 }
 
-enum PrimitiveEnum {
-    Foo,
-    Bar,
-}
-
-#[unimock]
-trait VeryPrimitive {
-    fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
-}
-
 #[test]
 fn primitive_mocking_without_debug() {
+    enum PrimitiveEnum {
+        Foo,
+        Bar,
+    }
+
+    #[unimock]
+    trait VeryPrimitive {
+        fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
+    }
+
     match mock(VeryPrimitive__primitive, |each| {
         each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
             .answers(|_| PrimitiveEnum::Foo);
@@ -264,13 +264,12 @@ fn primitive_mocking_without_debug() {
     );
 }
 
-#[unimock]
-trait Borrowing {
-    fn borrow<'s>(&'s self, input: String) -> &'s String;
-}
-
 #[test]
 fn borrowing_with_memory_leak() {
+    #[unimock]
+    trait Borrowing {
+        fn borrow<'s>(&'s self, input: String) -> &'s String;
+    }
     fn get_str<'s>(t: &'s impl Borrowing, input: &str) -> &'s str {
         t.borrow(input.to_string()).as_str()
     }
@@ -327,7 +326,7 @@ async fn test_async_trait() {
             &mock(Async__func, |each| {
                 each.call(matching!(_)).returns("42");
             })
-            .or_else_call_original(),
+            .otherwise_invoke_archetypes(),
             21
         )
         .await
@@ -418,7 +417,7 @@ fn archetypes() {
     assert_eq!(
         "ab",
         Unimock::empty()
-            .or_else_call_original()
+            .otherwise_invoke_archetypes()
             .concat("a".to_string(), "b".to_string())
     );
 
@@ -463,7 +462,7 @@ fn intricate_lifetimes() {
 
     #[unimock]
     trait Intricate {
-        fn foo<'s, 't>(&'s self, inp: &'t I<'s>) -> &'t O<'s>;
+        fn foo<'s, 't>(&'s self, inp: &'t I<'s>) -> &'s O<'t>;
     }
 
     mock(Intricate__foo, |each| {

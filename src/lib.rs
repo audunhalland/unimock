@@ -207,8 +207,8 @@ impl Unimock {
         self
     }
 
-    /// Change unregistered [Api] fallback behaviour from explicitly panicking to trying to call their original implementation.
-    pub fn or_else_call_original(mut self) -> Self {
+    /// Change unregistered [Api] fallback behaviour from explicitly panicking to trying to call archetypes.
+    pub fn otherwise_invoke_archetypes(mut self) -> Self {
         self.fallback_mode = FallbackMode::Fallthrough;
         self
     }
