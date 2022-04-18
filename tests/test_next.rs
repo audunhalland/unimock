@@ -326,7 +326,7 @@ async fn test_async_trait() {
             &mock(Async__func, |each| {
                 each.call(matching!(_)).returns("42");
             })
-            .otherwise_invoke_archetypes(),
+            .otherwise_invoke_originals(),
             21
         )
         .await
@@ -393,7 +393,7 @@ fn newtype() {
 
 #[test]
 fn archetypes() {
-    #[unimock(archetypes=[repeat, concat])]
+    #[unimock(originals=[repeat, concat])]
     trait Spyable {
         fn repeat(&self, arg: String) -> String;
         fn concat(&self, a: String, b: String) -> String;
@@ -409,7 +409,7 @@ fn archetypes() {
     assert_eq!(
         "ab",
         mock(Spyable__concat, |each| {
-            each.call(matching!("a", "b")).once().invokes_archetype();
+            each.call(matching!("a", "b")).once().invokes_original();
         })
         .concat("a".to_string(), "b".to_string())
     );
@@ -417,7 +417,7 @@ fn archetypes() {
     assert_eq!(
         "ab",
         Unimock::empty()
-            .otherwise_invoke_archetypes()
+            .otherwise_invoke_originals()
             .concat("a".to_string(), "b".to_string())
     );
 
@@ -425,7 +425,7 @@ fn archetypes() {
         {
             let unimock = mock(Spyable__concat, |each| {
                 each.call(matching!("", "")).returns("foobar").once();
-                each.call(matching!(_, _)).invokes_archetype();
+                each.call(matching!(_, _)).invokes_original();
             });
             assert_eq!("ab", unimock.concat("a".to_string(), "b".to_string()));
         },
@@ -435,7 +435,7 @@ fn archetypes() {
 
 #[test]
 fn arch_recursion() {
-    #[unimock(archetypes=[my_factorial])]
+    #[unimock(originals=[my_factorial])]
     trait Factorial {
         fn factorial(&self, input: u32) -> u32;
     }
@@ -448,7 +448,7 @@ fn arch_recursion() {
         120,
         mock(Factorial__factorial, |each| {
             each.call(matching!((input) if *input <= 1)).returns(1u32);
-            each.call(matching!(_)).invokes_archetype();
+            each.call(matching!(_)).invokes_original();
         })
         .factorial(5)
     );
@@ -465,8 +465,12 @@ fn intricate_lifetimes() {
         fn foo<'s, 't>(&'s self, inp: &'t I<'s>) -> &'s O<'t>;
     }
 
-    mock(Intricate__foo, |each| {
+    fn takes_intricate(i: &impl Intricate) {
+        i.foo(&I(std::marker::PhantomData));
+    }
+
+    takes_intricate(&mock(Intricate__foo, |each| {
         each.nodebug_call(|_| true)
             .returns_leak(O("foobar".to_string().leak()));
-    });
+    }));
 }

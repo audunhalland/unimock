@@ -67,7 +67,7 @@ use std::sync::atomic::AtomicBool;
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
-/// Mock generation happens by declaring a new [Api]-implementing struct for each method.
+/// Mock generation happens by declaring a new [VirtualFn]-implementing struct for each method.
 ///
 /// Example
 /// ```rust
@@ -167,7 +167,7 @@ pub use unimock_macros::matching;
 #[derive(Clone, Copy)]
 enum FallbackMode {
     Error,
-    Fallthrough,
+    InvokeOriginal,
 }
 
 /// Unimock's purpose is to be an implementor of downstream traits via mock objects.
@@ -183,34 +183,12 @@ pub struct Unimock {
 
 impl Unimock {
     /// Create a new, empty Unimock. Attempting to call implemented traits on an empty instance will panic at runtime.
-    pub fn empty() -> Self {
+    pub fn empty() -> Unimock {
         Self {
             fallback_mode: FallbackMode::Error,
             impls: HashMap::new(),
             has_panicked: AtomicBool::new(false),
         }
-    }
-
-    /// Extend this instance with a mock of another [Api].
-    pub fn also<A: Api + 'static>(
-        mut self,
-        _: A,
-        setup: impl FnOnce(&mut builders::Each<A>),
-    ) -> Self {
-        let mut each = builders::Each::new();
-        setup(&mut each);
-
-        self.impls.insert(
-            TypeId::of::<A>(),
-            mock::DynImpl(Box::new(mock::MockImpl::from_each(each))),
-        );
-        self
-    }
-
-    /// Change unregistered [Api] fallback behaviour from explicitly panicking to trying to call archetypes.
-    pub fn otherwise_invoke_archetypes(mut self) -> Self {
-        self.fallback_mode = FallbackMode::Fallthrough;
-        self
     }
 
     /// Create a unimock that instead of trying to mock, tries to call some original implementation of any API.
@@ -222,15 +200,37 @@ impl Unimock {
     ///
     /// A call-original unimock may be `union`ed together with normal mocks, effectively
     /// creating a mix of real and mocked APIs, allowing deeper tests than mock-only mode can provide.
-    pub fn call_original() -> Self {
+    pub fn original() -> Unimock {
         Self {
-            fallback_mode: FallbackMode::Fallthrough,
+            fallback_mode: FallbackMode::InvokeOriginal,
             impls: HashMap::new(),
             has_panicked: AtomicBool::new(false),
         }
     }
 
-    pub(crate) fn with_single_mock(type_id: TypeId, dyn_impl: mock::DynImpl) -> Self {
+    /// Extend this instance with a mock of another [VirtualFn].
+    pub fn also<F: VirtualFn + 'static>(
+        mut self,
+        _: F,
+        setup: impl FnOnce(&mut builders::Each<F>),
+    ) -> Unimock {
+        let mut each = builders::Each::new();
+        setup(&mut each);
+
+        self.impls.insert(
+            TypeId::of::<F>(),
+            mock::DynImpl(Box::new(mock::MockImpl::from_each(each))),
+        );
+        self
+    }
+
+    /// Change unregistered [VirtualFn] fallback behaviour from explicitly panicking to trying to call originals.
+    pub fn otherwise_invoke_originals(mut self) -> Unimock {
+        self.fallback_mode = FallbackMode::InvokeOriginal;
+        self
+    }
+
+    pub(crate) fn with_single_mock(type_id: TypeId, dyn_impl: mock::DynImpl) -> Unimock {
         Self {
             fallback_mode: FallbackMode::Error,
             impls: [(type_id, dyn_impl)].into(),
@@ -238,10 +238,13 @@ impl Unimock {
         }
     }
 
-    /// Perform function-application against some [Api].
-    pub fn apply<'i, A: Api + 'static>(&'i self, inputs: A::Inputs<'i>) -> mock::Outcome<'i, A> {
+    /// Perform function-application against some [VirtualFn].
+    pub fn apply<'i, F: VirtualFn + 'static>(
+        &'i self,
+        inputs: F::Inputs<'i>,
+    ) -> mock::Outcome<'i, F> {
         match mock::apply(
-            self.impls.get(&TypeId::of::<A>()),
+            self.impls.get(&TypeId::of::<F>()),
             inputs,
             self.fallback_mode,
         ) {
@@ -276,25 +279,30 @@ impl Drop for Unimock {
 }
 
 ///
-/// Trait describing some functional API for which unimock may provide implementation.
-/// _Inversion of Control_ in Rust is achieved through method dispatch, so the items described
-/// will usually be _methods_ in _traits_.
+/// The main trait used for unimock configuration.
 ///
-/// As `Api` is a trait itself, it needs to be implemented to be useful. Because trait methods
-/// are not types, a _surrogate_ need to be introduced:
+/// `VirtualFn` describes functional APIs that may be called via dispatch, a.k.a. _Inversion of Control_.
+///
+/// In Rust, the most convenient way to perform a virtualized/dispatched function call is to
+/// call a trait method.
+///
+/// `VirtualFn` only provides metadata about an API, it is not directly callable.
+///
+/// As this is a trait itself, it needs to be implemented to be useful. Methods are not types,
+/// so we cannot implement `VirtualFn` for those. But a surrogate type can be introduced:
 ///
 /// ```rust
-/// trait Mockable {
+/// trait ILoveToMock {
 ///     fn method(&self);
 /// }
 ///
 /// // The method can be referred to via the following empty surrogate struct:
-/// struct Mockable__method;
+/// struct ILoveToMock__method;
 ///
-/// /* impl Api for Mockable_method ... */
+/// /* impl VirtualFn for Mockable_method ... */
 /// ```
 ///
-pub trait Api: Sized {
+pub trait VirtualFn: Sized {
     /// The inputs to the function.
     type Inputs<'i>;
 
@@ -308,42 +316,41 @@ pub trait Api: Sized {
     const NAME: &'static str;
 }
 
-/// [Api] that has an _archetypical implementation_.
-/// TODO: Find better name
+/// [VirtualFn] that has an _original implementation_.
 ///
-/// An archetypal implementation is a free-standing function, not part of a trait,
+/// An original implementation is a free-standing function, not part of a trait,
 /// where the first parameter is generic (`self`-replacement), and the rest of the parameters are
-/// identical to [Api::Inputs]:
+/// identical to [VirtualFn::Inputs]:
 ///
 /// ```rust
 /// # #![feature(generic_associated_types)]
 /// # use unimock::*;
-/// #[unimock(archetypes=[my_archetype])]
+/// #[unimock(originals=[my_original])]
 /// trait DoubleNumber {
 ///     fn double_number(&self, a: i32) -> i32;
 /// }
 ///
 /// // A _real function_ which performs number doubling!
-/// fn my_archetype<T>(_: T, a: i32) -> i32 {
+/// fn my_original<T>(_: T, a: i32) -> i32 {
 ///     a * 2
 /// }
 /// ```
 ///
-/// Archetypal functions make sense when the reason to define a mockable trait
+/// Original functions make sense when the reason to define a mockable trait
 /// is _solely_ for the purpose of inversion-of-control at test-time: Release code
 /// need only one way to double a number.
 ///
-/// Free-standing archetypal functions enables arbitrarily deep integration testing
-/// in unimock-based application architectures. When unimock calls an archetypal,
+/// Free-standing original functions enables arbitrarily deep integration testing
+/// in unimock-based application architectures. When unimock calls an original,
 /// it inserts itself as the generic first parameter. When this parameter is
-/// bounded by traits, the archetype `fn` is given capabilities to call other APIs,
+/// bounded by traits, the original `fn` is given capabilities to call other APIs,
 /// though only indirectly. Each method invocation happening during a test will invisibly pass
 /// through unimock, resulting in a great level of control. Consider:
 ///
 /// ```rust
 /// # #![feature(generic_associated_types)]
 /// # use unimock::*;
-/// #[unimock(archetypes=[my_factorial])]
+/// #[unimock(originals=[my_factorial])]
 /// trait Factorial {
 ///     fn factorial(&self, input: u32) -> u32;
 /// }
@@ -358,20 +365,20 @@ pub trait Api: Sized {
 ///     // well, not in the test, at least!
 ///     mock(Factorial__factorial, |each| {
 ///         each.call(matching!((input) if *input <= 1)).returns(1u32); // unimock controls the API call
-///         each.call(matching!(_)).invokes_archetype();
+///         each.call(matching!(_)).invokes_original();
 ///     })
 ///     .factorial(5)
 /// );
 /// ```
 ///
-pub trait Archetypal: Api {}
+pub trait Original: VirtualFn {}
 
-/// Mock a single [Api].
-pub fn mock<A: Api + 'static>(_: A, setup: impl FnOnce(&mut builders::Each<A>)) -> Unimock {
+/// Mock a single [VirtualFn].
+pub fn mock<F: VirtualFn + 'static>(_: F, setup: impl FnOnce(&mut builders::Each<F>)) -> Unimock {
     let mut each = builders::Each::new();
     setup(&mut each);
     Unimock::with_single_mock(
-        TypeId::of::<A>(),
+        TypeId::of::<F>(),
         mock::DynImpl(Box::new(mock::MockImpl::from_each(each))),
     )
 }

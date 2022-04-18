@@ -25,7 +25,7 @@ pub fn unimock(
         Err(err) => err.to_compile_error(),
     };
 
-    println!("{output}");
+    // println!("{output}");
 
     proc_macro::TokenStream::from(output)
 }

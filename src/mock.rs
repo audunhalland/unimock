@@ -3,12 +3,12 @@ use crate::*;
 use std::any::Any;
 
 /// The outcome of an api application/call on a mock object.
-pub enum Outcome<'i, A: Api> {
+pub enum Outcome<'i, F: VirtualFn> {
     /// The mock evaluated the call and produced an output.
-    Evaluated(A::Output),
+    Evaluated(F::Output),
     /// The mock only matched the inputs, and registered that fact.
     /// How to produce the output is left to the caller.
-    Matched(A::Inputs<'i>),
+    InvokeOriginal(F::Inputs<'i>),
 }
 
 pub(crate) trait Mock: Any {
@@ -19,18 +19,18 @@ pub(crate) trait Mock: Any {
 
 pub(crate) struct DynImpl(pub Box<dyn Mock + Send + Sync + 'static>);
 
-pub(crate) fn apply<'i, A: Api + 'static>(
+pub(crate) fn apply<'i, F: VirtualFn + 'static>(
     dyn_impl: Option<&'i DynImpl>,
-    inputs: A::Inputs<'i>,
+    inputs: F::Inputs<'i>,
     fallback_mode: FallbackMode,
-) -> Result<Outcome<'i, A>, String> {
+) -> Result<Outcome<'i, F>, String> {
     match dyn_impl {
         None => match fallback_mode {
-            FallbackMode::Error => Err(format!("No mock implementation found for {}", A::NAME)),
-            FallbackMode::Fallthrough => Ok(Outcome::Matched(inputs)),
+            FallbackMode::Error => Err(format!("No mock implementation found for {}", F::NAME)),
+            FallbackMode::InvokeOriginal => Ok(Outcome::InvokeOriginal(inputs)),
         },
         Some(dyn_impl) => {
-            let mock_impl = dyn_impl.0.as_any().downcast_ref::<MockImpl<A>>().unwrap();
+            let mock_impl = dyn_impl.0.as_any().downcast_ref::<MockImpl<F>>().unwrap();
 
             mock_impl
                 .has_applications
@@ -39,7 +39,7 @@ pub(crate) fn apply<'i, A: Api + 'static>(
             if mock_impl.patterns.is_empty() {
                 return Err(format!(
                     "{}{}: No registered call patterns",
-                    A::NAME,
+                    F::NAME,
                     mock_impl.debug_inputs(&inputs)
                 ));
             }
@@ -55,10 +55,10 @@ pub(crate) fn apply<'i, A: Api + 'static>(
 
                 return match &pattern.responder {
                     Responder::Closure(closure) => Ok(Outcome::Evaluated(closure(inputs))),
-                    Responder::Archetypal => Ok(Outcome::Matched(inputs)),
+                    Responder::InvokeOriginal => Ok(Outcome::InvokeOriginal(inputs)),
                     Responder::Error => Err(format!(
                         "{}{}: No output available for matching call pattern #{}",
-                        A::NAME,
+                        F::NAME,
                         mock_impl.debug_inputs(&inputs),
                         pattern.pat_index,
                     )),
@@ -67,22 +67,21 @@ pub(crate) fn apply<'i, A: Api + 'static>(
 
             Err(format!(
                 "{}{}: No matching call patterns.",
-                A::NAME,
+                F::NAME,
                 mock_impl.debug_inputs(&inputs)
             ))
         }
     }
 }
 
-#[doc(hidden)]
-pub struct MockImpl<A: Api> {
-    patterns: Vec<CallPattern<A>>,
-    input_debugger: InputDebugger<A>,
+pub(crate) struct MockImpl<F: VirtualFn> {
+    patterns: Vec<CallPattern<F>>,
+    input_debugger: InputDebugger<F>,
     has_applications: AtomicBool,
 }
 
-impl<A: Api> MockImpl<A> {
-    pub(crate) fn from_each(each: builders::Each<A>) -> Self {
+impl<F: VirtualFn> MockImpl<F> {
+    pub(crate) fn from_each(each: builders::Each<F>) -> Self {
         Self {
             patterns: each.patterns,
             input_debugger: each.input_debugger,
@@ -90,13 +89,13 @@ impl<A: Api> MockImpl<A> {
         }
     }
 
-    fn debug_inputs<'i>(&self, inputs: &A::Inputs<'i>) -> String {
+    fn debug_inputs<'i>(&self, inputs: &F::Inputs<'i>) -> String {
         self.input_debugger
-            .debug_input_as_tuple(inputs, A::N_INPUTS)
+            .debug_input_as_tuple(inputs, F::N_INPUTS)
     }
 }
 
-impl<A: Api + 'static> Mock for MockImpl<A> {
+impl<F: VirtualFn + 'static> Mock for MockImpl<F> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -105,7 +104,7 @@ impl<A: Api + 'static> Mock for MockImpl<A> {
         for pattern in self.patterns.iter() {
             pattern
                 .call_counter
-                .verify(A::NAME, pattern.pat_index, errors);
+                .verify(F::NAME, pattern.pat_index, errors);
         }
 
         if !self
@@ -114,35 +113,35 @@ impl<A: Api + 'static> Mock for MockImpl<A> {
         {
             errors.push(format!(
                 "Mock for {} was never called. Dead mocks should be removed.",
-                A::NAME
+                F::NAME
             ));
         }
     }
 }
 
-pub(crate) struct CallPattern<A: Api> {
+pub(crate) struct CallPattern<F: VirtualFn> {
     pub pat_index: usize,
-    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&A::Inputs<'i>) -> bool) + Send + Sync>>,
+    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>>,
     pub call_counter: counter::CallCounter,
-    pub responder: Responder<A>,
+    pub responder: Responder<F>,
 }
 
-pub(crate) enum Responder<A: Api> {
-    Closure(Box<dyn (for<'i> Fn(A::Inputs<'i>) -> A::Output) + Send + Sync>),
-    Archetypal,
+pub(crate) enum Responder<F: VirtualFn> {
+    Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync>),
+    InvokeOriginal,
     Error,
 }
 
-pub(crate) struct InputDebugger<A: Api> {
-    pub func: Option<Box<dyn (for<'i> Fn(&A::Inputs<'i>) -> String) + Send + Sync>>,
+pub(crate) struct InputDebugger<F: VirtualFn> {
+    pub func: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> String) + Send + Sync>>,
 }
 
-impl<A: Api> InputDebugger<A> {
+impl<F: VirtualFn> InputDebugger<F> {
     pub fn new() -> Self {
         Self { func: None }
     }
 
-    pub fn debug_input_as_tuple<'i>(&self, inputs: &A::Inputs<'i>, n_args: u8) -> String {
+    pub fn debug_input_as_tuple<'i>(&self, inputs: &F::Inputs<'i>, n_args: u8) -> String {
         if let Some(func) = self.func.as_ref() {
             let debug = func(inputs);
             match n_args {

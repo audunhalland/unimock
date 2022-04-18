@@ -4,14 +4,14 @@ use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
-    archetypes: Vec<Archetype>,
+    originals: Vec<OriginalFn>,
     input_lifetime: syn::Lifetime,
     static_lifetime: syn::Lifetime,
 }
 
 impl Cfg {
-    fn get_archetype_path(&self, index: usize) -> Option<&syn::Path> {
-        self.archetypes
+    fn get_original_fn_path(&self, index: usize) -> Option<&syn::Path> {
+        self.originals
             .get(index)
             .map(|opt| opt.0.as_ref())
             .unwrap_or(None)
@@ -21,7 +21,7 @@ impl Cfg {
 impl syn::parse::Parse for Cfg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut module = None;
-        let mut archetypes = vec![];
+        let mut originals = vec![];
 
         while !input.is_empty() {
             if input.peek(syn::token::Mod) {
@@ -32,13 +32,13 @@ impl syn::parse::Parse for Cfg {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
                 match keyword.to_string().as_str() {
-                    "archetypes" => {
+                    "originals" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
-                        archetypes.push(content.parse()?);
+                        originals.push(content.parse()?);
                         while content.peek(syn::token::Comma) {
                             let _: syn::token::Comma = content.parse()?;
-                            archetypes.push(content.parse()?);
+                            originals.push(content.parse()?);
                         }
                     }
                     _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
@@ -48,16 +48,16 @@ impl syn::parse::Parse for Cfg {
 
         Ok(Self {
             module,
-            archetypes,
+            originals,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             static_lifetime: syn::Lifetime::new("'static", proc_macro2::Span::call_site()),
         })
     }
 }
 
-struct Archetype(Option<syn::Path>);
+struct OriginalFn(Option<syn::Path>);
 
-impl syn::parse::Parse for Archetype {
+impl syn::parse::Parse for OriginalFn {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         if input.peek(syn::token::Underscore) {
             let _: syn::token::Underscore = input.parse()?;
@@ -113,10 +113,10 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
             syn::AttrStyle::Inner(_) => None,
         });
 
-    let api_defs = methods
+    let vfn_defs = methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_api(index, method, &item_trait, &cfg));
+        .map(|(index, method)| def_vfn(index, method, &item_trait, &cfg));
     let method_impls = methods
         .iter()
         .enumerate()
@@ -127,7 +127,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
         Ok(quote! {
             #item_trait
             #vis mod #module {
-                #(#api_defs)*
+                #(#vfn_defs)*
 
                 #(#impl_attributes)*
                 impl super::#trait_ident for ::unimock::Unimock {
@@ -138,7 +138,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
     } else {
         Ok(quote! {
             #item_trait
-            #(#api_defs)*
+            #(#vfn_defs)*
 
             #(#impl_attributes)*
             impl #trait_ident for ::unimock::Unimock {
@@ -150,17 +150,17 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
 
 struct Method<'s> {
     method: &'s syn::TraitItemMethod,
-    api_ident: syn::Ident,
-    api_name: syn::LitStr,
+    vfn_ident: syn::Ident,
+    vfn_name: syn::LitStr,
 }
 
 struct MethodAttrs {
-    api_ident: Option<proc_macro2::Ident>,
+    vfn_ident: Option<proc_macro2::Ident>,
 }
 
 impl Default for MethodAttrs {
     fn default() -> Self {
-        Self { api_ident: None }
+        Self { vfn_ident: None }
     }
 }
 
@@ -192,7 +192,7 @@ fn extract_inner_attrs(
         })
         .enumerate()
         .map(|(index, method)| {
-            let mut api_ident = None;
+            let mut vfn_ident = None;
 
             let mut attr_index = 0;
 
@@ -201,7 +201,7 @@ fn extract_inner_attrs(
                     Some(attr) => {
                         match attr {
                             UnimockInnerAttr::Name(ident) => {
-                                api_ident = Some(ident);
+                                vfn_ident = Some(ident);
                             }
                         };
                         method.attrs.remove(attr_index);
@@ -212,7 +212,7 @@ fn extract_inner_attrs(
                 }
             }
 
-            Ok((index, MethodAttrs { api_ident }))
+            Ok((index, MethodAttrs { vfn_ident }))
         })
         .collect::<syn::Result<HashMap<usize, MethodAttrs>>>()?;
 
@@ -233,7 +233,7 @@ fn extract_methods<'s>(
         })
         .enumerate()
         .map(|(index, method)| {
-            let api_name = syn::LitStr::new(
+            let vfn_name = syn::LitStr::new(
                 &format!("{}::{}", item_trait.ident, method.sig.ident),
                 item_trait.ident.span(),
             );
@@ -242,36 +242,36 @@ fn extract_methods<'s>(
                 .remove(&index)
                 .unwrap_or_else(Default::default);
 
-            let api_ident_method_part = if let Some(custom_ident) = attrs.api_ident.as_ref() {
+            let vfn_ident_method_part = if let Some(custom_ident) = attrs.vfn_ident.as_ref() {
                 custom_ident
             } else {
                 &method.sig.ident
             };
 
-            let api_ident = if cfg.module.is_some() {
-                api_ident_method_part.clone()
+            let vfn_ident = if cfg.module.is_some() {
+                vfn_ident_method_part.clone()
             } else {
-                quote::format_ident!("{}__{}", item_trait.ident, api_ident_method_part)
+                quote::format_ident!("{}__{}", item_trait.ident, vfn_ident_method_part)
             };
 
             Ok(Method {
                 method,
-                api_ident,
-                api_name,
+                vfn_ident,
+                vfn_name,
             })
         })
         .collect()
 }
 
-fn def_api(
+fn def_vfn(
     index: usize,
     method: &Method,
     item_trait: &syn::ItemTrait,
     cfg: &Cfg,
 ) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let api_ident = &method.api_ident;
-    let api_name = &method.api_name;
+    let vfn_ident = &method.vfn_ident;
+    let vfn_name = &method.vfn_name;
 
     let mock_visibility = if let Some(_) = &cfg.module {
         syn::Visibility::Public(syn::VisPublic {
@@ -307,24 +307,24 @@ fn def_api(
         }
     };
 
-    let archetypal_impl = cfg.get_archetype_path(index).map(|_| {
+    let original_impl = cfg.get_original_fn_path(index).map(|_| {
         quote! {
-            impl ::unimock::Archetypal for #api_ident {}
+            impl ::unimock::Original for #vfn_ident {}
         }
     });
 
     quote! {
         #[allow(non_camel_case_types)]
-        #mock_visibility struct #api_ident;
+        #mock_visibility struct #vfn_ident;
 
-        impl ::unimock::Api for #api_ident {
+        impl ::unimock::VirtualFn for #vfn_ident {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #output;
             const N_INPUTS: u8 = #n_inputs;
-            const NAME: &'static str = #api_name;
+            const NAME: &'static str = #vfn_name;
         }
 
-        #archetypal_impl
+        #original_impl
     }
 }
 
@@ -356,7 +356,7 @@ fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
 
 fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let api_ident = &method.api_ident;
+    let vfn_ident = &method.vfn_ident;
 
     let parameters = sig
         .inputs
@@ -372,21 +372,21 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         })
         .collect::<Vec<_>>();
 
-    let matched_pat = if let Some(arch_path) = cfg.get_archetype_path(index) {
+    let matched_pat = if let Some(arch_path) = cfg.get_original_fn_path(index) {
         quote! {
-            ::unimock::mock::Outcome::Matched((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
+            ::unimock::mock::Outcome::InvokeOriginal((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
         }
     } else {
         quote! {
-            ::unimock::mock::Outcome::Matched(_) => {
-                panic!("no fn available for fallthrough on {}", <#api_ident as ::unimock::Api>::NAME)
+            ::unimock::mock::Outcome::InvokeOriginal(_) => {
+                panic!("no fn available for fallthrough on {}", <#vfn_ident as ::unimock::VirtualFn>::NAME)
             }
         }
     };
 
     quote! {
         #sig {
-            match self.apply::<#api_ident>((#(#parameters),*)) {
+            match self.apply::<#vfn_ident>((#(#parameters),*)) {
                 ::unimock::mock::Outcome::Evaluated(output) => output,
                 #matched_pat,
             }
