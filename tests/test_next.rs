@@ -393,7 +393,7 @@ fn newtype() {
 
 #[test]
 fn archetypes() {
-    #[unimock(originals=[repeat, concat])]
+    #[unimock(unmock_with=[repeat, concat])]
     trait Spyable {
         fn repeat(&self, arg: String) -> String;
         fn concat(&self, a: String, b: String) -> String;
@@ -435,7 +435,7 @@ fn archetypes() {
 
 #[test]
 fn arch_recursion() {
-    #[unimock(originals=[my_factorial])]
+    #[unimock(unmock_with=[my_factorial])]
     trait Factorial {
         fn factorial(&self, input: u32) -> u32;
     }

@@ -4,14 +4,14 @@ use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
-    originals: Vec<OriginalFn>,
+    unmocks: Vec<Unmock>,
     input_lifetime: syn::Lifetime,
     static_lifetime: syn::Lifetime,
 }
 
 impl Cfg {
-    fn get_original_fn_path(&self, index: usize) -> Option<&syn::Path> {
-        self.originals
+    fn get_unmock_fn_path(&self, index: usize) -> Option<&syn::Path> {
+        self.unmocks
             .get(index)
             .map(|opt| opt.0.as_ref())
             .unwrap_or(None)
@@ -21,7 +21,7 @@ impl Cfg {
 impl syn::parse::Parse for Cfg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut module = None;
-        let mut originals = vec![];
+        let mut unmocks = vec![];
 
         while !input.is_empty() {
             if input.peek(syn::token::Mod) {
@@ -32,13 +32,13 @@ impl syn::parse::Parse for Cfg {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
                 match keyword.to_string().as_str() {
-                    "originals" => {
+                    "unmock_with" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
-                        originals.push(content.parse()?);
+                        unmocks.push(content.parse()?);
                         while content.peek(syn::token::Comma) {
                             let _: syn::token::Comma = content.parse()?;
-                            originals.push(content.parse()?);
+                            unmocks.push(content.parse()?);
                         }
                     }
                     _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
@@ -48,16 +48,16 @@ impl syn::parse::Parse for Cfg {
 
         Ok(Self {
             module,
-            originals,
+            unmocks,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             static_lifetime: syn::Lifetime::new("'static", proc_macro2::Span::call_site()),
         })
     }
 }
 
-struct OriginalFn(Option<syn::Path>);
+struct Unmock(Option<syn::Path>);
 
-impl syn::parse::Parse for OriginalFn {
+impl syn::parse::Parse for Unmock {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         if input.peek(syn::token::Underscore) {
             let _: syn::token::Underscore = input.parse()?;
@@ -307,7 +307,7 @@ fn def_vfn(
         }
     };
 
-    let original_impl = cfg.get_original_fn_path(index).map(|_| {
+    let unmock_impl = cfg.get_unmock_fn_path(index).map(|_| {
         quote! {
             impl ::unimock::Unmock for #vfn_ident {}
         }
@@ -324,7 +324,7 @@ fn def_vfn(
             const NAME: &'static str = #vfn_name;
         }
 
-        #original_impl
+        #unmock_impl
     }
 }
 
@@ -372,9 +372,9 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         })
         .collect::<Vec<_>>();
 
-    let unmock_pat = if let Some(arch_path) = cfg.get_original_fn_path(index) {
+    let unmock_pat = if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
         quote! {
-            ::unimock::Outcome::Unmock((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
+            ::unimock::Outcome::Unmock((#(#parameters),*)) => #unmock_path(self, #(#parameters),*)
         }
     } else {
         quote! {

@@ -323,7 +323,7 @@ pub trait MockFn: Sized {
 /// ```rust
 /// # #![feature(generic_associated_types)]
 /// # use unimock::*;
-/// #[unimock(originals=[my_original])]
+/// #[unimock(unmock_with=[my_original])]
 /// trait DoubleNumber {
 ///     fn double_number(&self, a: i32) -> i32;
 /// }
@@ -348,7 +348,7 @@ pub trait MockFn: Sized {
 /// ```rust
 /// # #![feature(generic_associated_types)]
 /// # use unimock::*;
-/// #[unimock(originals=[my_factorial])]
+/// #[unimock(unmock_with=[my_factorial])]
 /// trait Factorial {
 ///     fn factorial(&self, input: u32) -> u32;
 /// }
