@@ -326,7 +326,7 @@ async fn test_async_trait() {
             &mock(Async__func, |each| {
                 each.call(matching!(_)).returns("42");
             })
-            .otherwise_invoke_originals(),
+            .otherwise_unmock(),
             21
         )
         .await
@@ -409,7 +409,7 @@ fn archetypes() {
     assert_eq!(
         "ab",
         mock(Spyable__concat, |each| {
-            each.call(matching!("a", "b")).once().invokes_original();
+            each.call(matching!("a", "b")).once().unmock();
         })
         .concat("a".to_string(), "b".to_string())
     );
@@ -417,7 +417,7 @@ fn archetypes() {
     assert_eq!(
         "ab",
         Unimock::empty()
-            .otherwise_invoke_originals()
+            .otherwise_unmock()
             .concat("a".to_string(), "b".to_string())
     );
 
@@ -425,7 +425,7 @@ fn archetypes() {
         {
             let unimock = mock(Spyable__concat, |each| {
                 each.call(matching!("", "")).returns("foobar").once();
-                each.call(matching!(_, _)).invokes_original();
+                each.call(matching!(_, _)).unmock();
             });
             assert_eq!("ab", unimock.concat("a".to_string(), "b".to_string()));
         },
@@ -448,7 +448,7 @@ fn arch_recursion() {
         120,
         mock(Factorial__factorial, |each| {
             each.call(matching!((input) if *input <= 1)).returns(1u32);
-            each.call(matching!(_)).invokes_original();
+            each.call(matching!(_)).unmock();
         })
         .factorial(5)
     );

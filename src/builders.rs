@@ -5,12 +5,12 @@ use crate::*;
 ///
 /// Builder for defining call patterns that will be recognized on a mock.
 ///
-pub struct Each<F: VirtualFn> {
+pub struct Each<F: MockFn> {
     pub(crate) patterns: Vec<mock::CallPattern<F>>,
     pub(crate) input_debugger: mock::InputDebugger<F>,
 }
 
-impl<F: VirtualFn + 'static> Each<F> {
+impl<F: MockFn + 'static> Each<F> {
     pub(crate) fn new() -> Self {
         Self {
             patterns: vec![],
@@ -31,7 +31,7 @@ impl<F: VirtualFn + 'static> Each<F> {
     /// #![feature(generic_associated_types)]
     /// use unimock::*;
     /// struct Foo;
-    /// impl VirtualFn for Foo {
+    /// impl MockFn for Foo {
     ///     /* ... */
     ///     # type Inputs<'i> = (String);
     ///     # type Output = ();
@@ -78,13 +78,13 @@ impl<F: VirtualFn + 'static> Each<F> {
 ///
 /// Builder for configuring a specific call pattern.
 ///
-pub struct Call<'b, F: VirtualFn> {
-    pattern: &'b mut mock::CallPattern<F>,
+pub struct Call<'p, F: MockFn> {
+    pattern: &'p mut mock::CallPattern<F>,
 }
 
-impl<'b, F> Call<'b, F>
+impl<'p, F> Call<'p, F>
 where
-    F: VirtualFn + 'static,
+    F: MockFn + 'static,
 {
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement [Clone] and cannot contain non-static references.
@@ -154,12 +154,12 @@ where
         self
     }
 
-    /// Instruct this call pattern to invoke the [Original] function.
-    pub fn invokes_original(self) -> Self
+    /// Instruct this call pattern to invoke the [Unmock]ed function.
+    pub fn unmock(self) -> Self
     where
-        F: Original,
+        F: Unmock,
     {
-        self.pattern.responder = mock::Responder::InvokeOriginal;
+        self.pattern.responder = mock::Responder::Unmock;
         self
     }
 

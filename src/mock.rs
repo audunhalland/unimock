@@ -3,23 +3,33 @@ use crate::*;
 use std::any::Any;
 
 /// The outcome of an api application/call on a mock object.
-pub enum Outcome<'i, F: VirtualFn> {
+pub enum Outcome<'i, F: MockFn> {
     /// The mock evaluated the call and produced an output.
     Evaluated(F::Output),
     /// The mock only matched the inputs, and registered that fact.
     /// How to produce the output is left to the caller.
-    InvokeOriginal(F::Inputs<'i>),
+    Unmock(F::Inputs<'i>),
 }
 
-pub(crate) trait Mock: Any {
+pub(crate) struct DynImpl(pub Box<dyn TypeErasedMockImpl + Send + Sync + 'static>);
+
+impl DynImpl {
+    pub(crate) fn from_each<F: MockFn + 'static>(each: builders::Each<F>) -> DynImpl {
+        DynImpl(Box::new(TypedMockImpl {
+            patterns: each.patterns,
+            input_debugger: each.input_debugger,
+            has_applications: AtomicBool::new(false),
+        }))
+    }
+}
+
+pub(crate) trait TypeErasedMockImpl: Any {
     fn as_any(&self) -> &dyn Any;
 
     fn verify(&self, errors: &mut Vec<String>);
 }
 
-pub(crate) struct DynImpl(pub Box<dyn Mock + Send + Sync + 'static>);
-
-pub(crate) fn apply<'i, F: VirtualFn + 'static>(
+pub(crate) fn apply<'i, F: MockFn + 'static>(
     dyn_impl: Option<&'i DynImpl>,
     inputs: F::Inputs<'i>,
     fallback_mode: FallbackMode,
@@ -27,10 +37,14 @@ pub(crate) fn apply<'i, F: VirtualFn + 'static>(
     match dyn_impl {
         None => match fallback_mode {
             FallbackMode::Error => Err(format!("No mock implementation found for {}", F::NAME)),
-            FallbackMode::InvokeOriginal => Ok(Outcome::InvokeOriginal(inputs)),
+            FallbackMode::Unmock => Ok(Outcome::Unmock(inputs)),
         },
         Some(dyn_impl) => {
-            let mock_impl = dyn_impl.0.as_any().downcast_ref::<MockImpl<F>>().unwrap();
+            let mock_impl = dyn_impl
+                .0
+                .as_any()
+                .downcast_ref::<TypedMockImpl<F>>()
+                .ok_or_else(|| format!(""))?;
 
             mock_impl
                 .has_applications
@@ -55,7 +69,7 @@ pub(crate) fn apply<'i, F: VirtualFn + 'static>(
 
                 return match &pattern.responder {
                     Responder::Closure(closure) => Ok(Outcome::Evaluated(closure(inputs))),
-                    Responder::InvokeOriginal => Ok(Outcome::InvokeOriginal(inputs)),
+                    Responder::Unmock => Ok(Outcome::Unmock(inputs)),
                     Responder::Error => Err(format!(
                         "{}{}: No output available for matching call pattern #{}",
                         F::NAME,
@@ -74,28 +88,20 @@ pub(crate) fn apply<'i, F: VirtualFn + 'static>(
     }
 }
 
-pub(crate) struct MockImpl<F: VirtualFn> {
+pub(crate) struct TypedMockImpl<F: MockFn> {
     patterns: Vec<CallPattern<F>>,
     input_debugger: InputDebugger<F>,
     has_applications: AtomicBool,
 }
 
-impl<F: VirtualFn> MockImpl<F> {
-    pub(crate) fn from_each(each: builders::Each<F>) -> Self {
-        Self {
-            patterns: each.patterns,
-            input_debugger: each.input_debugger,
-            has_applications: AtomicBool::new(false),
-        }
-    }
-
+impl<F: MockFn> TypedMockImpl<F> {
     fn debug_inputs<'i>(&self, inputs: &F::Inputs<'i>) -> String {
         self.input_debugger
             .debug_input_as_tuple(inputs, F::N_INPUTS)
     }
 }
 
-impl<F: VirtualFn + 'static> Mock for MockImpl<F> {
+impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -119,24 +125,24 @@ impl<F: VirtualFn + 'static> Mock for MockImpl<F> {
     }
 }
 
-pub(crate) struct CallPattern<F: VirtualFn> {
+pub(crate) struct CallPattern<F: MockFn> {
     pub pat_index: usize,
     pub arg_matcher: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>>,
     pub call_counter: counter::CallCounter,
     pub responder: Responder<F>,
 }
 
-pub(crate) enum Responder<F: VirtualFn> {
+pub(crate) enum Responder<F: MockFn> {
     Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync>),
-    InvokeOriginal,
+    Unmock,
     Error,
 }
 
-pub(crate) struct InputDebugger<F: VirtualFn> {
+pub(crate) struct InputDebugger<F: MockFn> {
     pub func: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> String) + Send + Sync>>,
 }
 
-impl<F: VirtualFn> InputDebugger<F> {
+impl<F: MockFn> InputDebugger<F> {
     pub fn new() -> Self {
         Self { func: None }
     }

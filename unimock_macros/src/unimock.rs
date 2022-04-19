@@ -309,7 +309,7 @@ fn def_vfn(
 
     let original_impl = cfg.get_original_fn_path(index).map(|_| {
         quote! {
-            impl ::unimock::Original for #vfn_ident {}
+            impl ::unimock::Unmock for #vfn_ident {}
         }
     });
 
@@ -317,7 +317,7 @@ fn def_vfn(
         #[allow(non_camel_case_types)]
         #mock_visibility struct #vfn_ident;
 
-        impl ::unimock::VirtualFn for #vfn_ident {
+        impl ::unimock::MockFn for #vfn_ident {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #output;
             const N_INPUTS: u8 = #n_inputs;
@@ -372,14 +372,14 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         })
         .collect::<Vec<_>>();
 
-    let matched_pat = if let Some(arch_path) = cfg.get_original_fn_path(index) {
+    let unmock_pat = if let Some(arch_path) = cfg.get_original_fn_path(index) {
         quote! {
-            ::unimock::mock::Outcome::InvokeOriginal((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
+            ::unimock::mock::Outcome::Unmock((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
         }
     } else {
         quote! {
-            ::unimock::mock::Outcome::InvokeOriginal(_) => {
-                panic!("no fn available for fallthrough on {}", <#vfn_ident as ::unimock::VirtualFn>::NAME)
+            ::unimock::mock::Outcome::Unmock(_) => {
+                panic!("no fn available for fallthrough on {}", <#vfn_ident as ::unimock::MockFn>::NAME)
             }
         }
     };
@@ -388,7 +388,7 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         #sig {
             match self.apply::<#vfn_ident>((#(#parameters),*)) {
                 ::unimock::mock::Outcome::Evaluated(output) => output,
-                #matched_pat,
+                #unmock_pat,
             }
         }
     }

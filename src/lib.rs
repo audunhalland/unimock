@@ -67,7 +67,7 @@ use std::sync::atomic::AtomicBool;
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
-/// Mock generation happens by declaring a new [VirtualFn]-implementing struct for each method.
+/// Mock generation happens by declaring a new [MockFn]-implementing struct for each method.
 ///
 /// Example
 /// ```rust
@@ -167,7 +167,7 @@ pub use unimock_macros::matching;
 #[derive(Clone, Copy)]
 enum FallbackMode {
     Error,
-    InvokeOriginal,
+    Unmock,
 }
 
 /// Unimock's purpose is to be an implementor of downstream traits via mock objects.
@@ -200,16 +200,16 @@ impl Unimock {
     ///
     /// A call-original unimock may be `union`ed together with normal mocks, effectively
     /// creating a mix of real and mocked APIs, allowing deeper tests than mock-only mode can provide.
-    pub fn original() -> Unimock {
+    pub fn unmocked() -> Unimock {
         Self {
-            fallback_mode: FallbackMode::InvokeOriginal,
+            fallback_mode: FallbackMode::Unmock,
             impls: HashMap::new(),
             has_panicked: AtomicBool::new(false),
         }
     }
 
-    /// Extend this instance with a mock of another [VirtualFn].
-    pub fn also<F: VirtualFn + 'static>(
+    /// Extend this instance with a mock of another [MockFn].
+    pub fn also<F: MockFn + 'static>(
         mut self,
         _: F,
         setup: impl FnOnce(&mut builders::Each<F>),
@@ -217,16 +217,14 @@ impl Unimock {
         let mut each = builders::Each::new();
         setup(&mut each);
 
-        self.impls.insert(
-            TypeId::of::<F>(),
-            mock::DynImpl(Box::new(mock::MockImpl::from_each(each))),
-        );
+        self.impls
+            .insert(TypeId::of::<F>(), mock::DynImpl::from_each(each));
         self
     }
 
-    /// Change unregistered [VirtualFn] fallback behaviour from explicitly panicking to trying to call originals.
-    pub fn otherwise_invoke_originals(mut self) -> Unimock {
-        self.fallback_mode = FallbackMode::InvokeOriginal;
+    /// Change unregistered [MockFn] fallback behaviour from explicitly panicking to trying to unmock them.
+    pub fn otherwise_unmock(mut self) -> Unimock {
+        self.fallback_mode = FallbackMode::Unmock;
         self
     }
 
@@ -238,11 +236,8 @@ impl Unimock {
         }
     }
 
-    /// Perform function-application against some [VirtualFn].
-    pub fn apply<'i, F: VirtualFn + 'static>(
-        &'i self,
-        inputs: F::Inputs<'i>,
-    ) -> mock::Outcome<'i, F> {
+    /// Perform function-application against some [MockFn].
+    pub fn apply<'i, F: MockFn + 'static>(&'i self, inputs: F::Inputs<'i>) -> mock::Outcome<'i, F> {
         match mock::apply(
             self.impls.get(&TypeId::of::<F>()),
             inputs,
@@ -281,15 +276,16 @@ impl Drop for Unimock {
 ///
 /// The main trait used for unimock configuration.
 ///
-/// `VirtualFn` describes functional APIs that may be called via dispatch, a.k.a. _Inversion of Control_.
+/// `MockFn` describes functional APIs that may be called via dispatch, a.k.a. _Inversion of Control_.
+/// Virtuality should be regarded as as test-time virtuality: A virtual function is either the real deal (see [Unmock]) OR it is mocked.
 ///
 /// In Rust, the most convenient way to perform a virtualized/dispatched function call is to
 /// call a trait method.
 ///
-/// `VirtualFn` only provides metadata about an API, it is not directly callable.
+/// `MockFn` only provides metadata about an API, it is not directly callable.
 ///
 /// As this is a trait itself, it needs to be implemented to be useful. Methods are not types,
-/// so we cannot implement `VirtualFn` for those. But a surrogate type can be introduced:
+/// so we cannot implement `MockFn` for those. But a surrogate type can be introduced:
 ///
 /// ```rust
 /// trait ILoveToMock {
@@ -299,10 +295,10 @@ impl Drop for Unimock {
 /// // The method can be referred to via the following empty surrogate struct:
 /// struct ILoveToMock__method;
 ///
-/// /* impl VirtualFn for Mockable_method ... */
+/// /* impl MockFn for Mockable_method ... */
 /// ```
 ///
-pub trait VirtualFn: Sized {
+pub trait MockFn: Sized {
     /// The inputs to the function.
     type Inputs<'i>;
 
@@ -316,11 +312,11 @@ pub trait VirtualFn: Sized {
     const NAME: &'static str;
 }
 
-/// [VirtualFn] that has an _original implementation_.
+/// [MockFn] that can "unmock" into a single "true" implementation.
 ///
-/// An original implementation is a free-standing function, not part of a trait,
+/// A real implementation is a free-standing function, not part of a trait,
 /// where the first parameter is generic (`self`-replacement), and the rest of the parameters are
-/// identical to [VirtualFn::Inputs]:
+/// identical to [MockFn::Inputs]:
 ///
 /// ```rust
 /// # #![feature(generic_associated_types)]
@@ -336,7 +332,7 @@ pub trait VirtualFn: Sized {
 /// }
 /// ```
 ///
-/// Original functions make sense when the reason to define a mockable trait
+/// Real functions make sense when the reason to define a mockable trait
 /// is _solely_ for the purpose of inversion-of-control at test-time: Release code
 /// need only one way to double a number.
 ///
@@ -371,16 +367,13 @@ pub trait VirtualFn: Sized {
 /// );
 /// ```
 ///
-pub trait Original: VirtualFn {}
+pub trait Unmock: MockFn {}
 
-/// Mock a single [VirtualFn].
-pub fn mock<F: VirtualFn + 'static>(_: F, setup: impl FnOnce(&mut builders::Each<F>)) -> Unimock {
+/// Mock a single [MockFn].
+pub fn mock<F: MockFn + 'static>(_: F, setup: impl FnOnce(&mut builders::Each<F>)) -> Unimock {
     let mut each = builders::Each::new();
     setup(&mut each);
-    Unimock::with_single_mock(
-        TypeId::of::<F>(),
-        mock::DynImpl(Box::new(mock::MockImpl::from_each(each))),
-    )
+    Unimock::with_single_mock(TypeId::of::<F>(), mock::DynImpl::from_each(each))
 }
 
 /// Conveniently leak some value to produce a static reference.
