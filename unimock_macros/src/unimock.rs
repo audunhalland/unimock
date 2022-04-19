@@ -32,7 +32,7 @@ impl syn::parse::Parse for Cfg {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
                 match keyword.to_string().as_str() {
-                    "unmock_with" => {
+                    "unmocked" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
                         unmocks.push(content.parse()?);
