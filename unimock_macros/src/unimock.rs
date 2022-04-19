@@ -130,31 +130,36 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
             syn::AttrStyle::Inner(_) => None,
         });
 
-    let mock_fn_defs = methods
+    let mock_fn_defs: Vec<MockFnDef> = methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_mock_fn(index, method, &item_trait, &cfg));
+        .map(|(index, method)| def_mock_fn(index, method, &item_trait, &cfg))
+        .collect();
     let method_impls = methods
         .iter()
         .enumerate()
         .map(|(index, method)| def_method_impl(index, method, &cfg));
 
-    let wrapped_mock_fn_deps = if let Some(module) = &cfg.module {
+    let struct_defs = mock_fn_defs.iter().map(|def| &def.struct_def);
+    let mock_fn_impls = mock_fn_defs.iter().map(|def| &def.impls);
+
+    let mock_fn_structs = if let Some(module) = &cfg.module {
         let vis = &item_trait.vis;
         quote! {
             #vis mod #module {
-                #(#mock_fn_defs)*
+                #(#struct_defs)*
             }
         }
     } else {
         quote! {
-            #(#mock_fn_defs)*
+            #(#struct_defs)*
         }
     };
 
     Ok(quote! {
         #item_trait
-        #wrapped_mock_fn_deps
+        #mock_fn_structs
+        #(#mock_fn_impls)*
 
         #(#impl_attributes)*
         impl #trait_ident for ::unimock::Unimock {
@@ -167,6 +172,17 @@ struct Method<'s> {
     method: &'s syn::TraitItemMethod,
     mock_fn_ident: syn::Ident,
     mock_fn_name: syn::LitStr,
+}
+
+impl<'s> Method<'s> {
+    fn mock_fn_path(&self, cfg: &Cfg) -> proc_macro2::TokenStream {
+        let mock_fn_ident = &self.mock_fn_ident;
+        if let Some(module) = &cfg.module {
+            quote! { #module::#mock_fn_ident }
+        } else {
+            quote! { #mock_fn_ident }
+        }
+    }
 }
 
 fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result<Vec<Method<'s>>> {
@@ -202,14 +218,15 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
         .collect()
 }
 
-fn def_mock_fn(
-    index: usize,
-    method: &Method,
-    item_trait: &syn::ItemTrait,
-    cfg: &Cfg,
-) -> proc_macro2::TokenStream {
+struct MockFnDef {
+    struct_def: proc_macro2::TokenStream,
+    impls: proc_macro2::TokenStream,
+}
+
+fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: &Cfg) -> MockFnDef {
     let sig = &method.method.sig;
     let mock_fn_ident = &method.mock_fn_ident;
+    let mock_fn_path = method.mock_fn_path(cfg);
     let mock_fn_name = &method.mock_fn_name;
 
     let mock_visibility = if let Some(_) = &cfg.module {
@@ -248,22 +265,25 @@ fn def_mock_fn(
 
     let unmock_impl = cfg.get_unmock_fn_path(index).map(|_| {
         quote! {
-            impl ::unimock::Unmock for #mock_fn_ident {}
+            impl ::unimock::Unmock for #mock_fn_path {}
         }
     });
 
-    quote! {
-        #[allow(non_camel_case_types)]
-        #mock_visibility struct #mock_fn_ident;
+    MockFnDef {
+        struct_def: quote! {
+            #[allow(non_camel_case_types)]
+            #mock_visibility struct #mock_fn_ident;
+        },
+        impls: quote! {
+            impl ::unimock::MockFn for #mock_fn_path {
+                type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
+                type Output = #output;
+                const N_INPUTS: u8 = #n_inputs;
+                const NAME: &'static str = #mock_fn_name;
+            }
 
-        impl ::unimock::MockFn for #mock_fn_ident {
-            type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
-            type Output = #output;
-            const N_INPUTS: u8 = #n_inputs;
-            const NAME: &'static str = #mock_fn_name;
-        }
-
-        #unmock_impl
+            #unmock_impl
+        },
     }
 }
 
@@ -295,7 +315,7 @@ fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
 
 fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let mock_fn_ident = &method.mock_fn_ident;
+    let mock_fn_path = method.mock_fn_path(cfg);
 
     let parameters = sig
         .inputs
@@ -310,12 +330,6 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
             },
         })
         .collect::<Vec<_>>();
-
-    let mock_fn_path = if let Some(module) = &cfg.module {
-        quote! { #module::#mock_fn_ident }
-    } else {
-        quote! { #mock_fn_ident }
-    };
 
     let unmock_pat = if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
         let opt_dot_await = sig.asyncness.map(|_| quote! { .await });

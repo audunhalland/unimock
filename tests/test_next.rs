@@ -295,9 +295,11 @@ fn borrowing_with_memory_leak() {
     );
 }
 
+pub struct MyType;
+
 #[unimock(mod=with_module, as=[Funk])]
 trait WithModule {
-    fn func<'s>(&'s self, input: String) -> &'s String;
+    fn func<'s>(&'s self, input: String) -> &'s MyType;
 }
 
 #[test]
