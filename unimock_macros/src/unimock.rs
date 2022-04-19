@@ -139,30 +139,28 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
         .enumerate()
         .map(|(index, method)| def_method_impl(index, method, &cfg));
 
-    if let Some(module) = &cfg.module {
+    let wrapped_mock_fn_deps = if let Some(module) = &cfg.module {
         let vis = &item_trait.vis;
-        Ok(quote! {
-            #item_trait
+        quote! {
             #vis mod #module {
                 #(#mock_fn_defs)*
-
-                #(#impl_attributes)*
-                impl super::#trait_ident for ::unimock::Unimock {
-                    #(#method_impls)*
-                }
             }
-        })
+        }
     } else {
-        Ok(quote! {
-            #item_trait
+        quote! {
             #(#mock_fn_defs)*
+        }
+    };
 
-            #(#impl_attributes)*
-            impl #trait_ident for ::unimock::Unimock {
-                #(#method_impls)*
-            }
-        })
-    }
+    Ok(quote! {
+        #item_trait
+        #wrapped_mock_fn_deps
+
+        #(#impl_attributes)*
+        impl #trait_ident for ::unimock::Unimock {
+            #(#method_impls)*
+        }
+    })
 }
 
 struct Method<'s> {
@@ -313,6 +311,12 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         })
         .collect::<Vec<_>>();
 
+    let mock_fn_path = if let Some(module) = &cfg.module {
+        quote! { #module::#mock_fn_ident }
+    } else {
+        quote! { #mock_fn_ident }
+    };
+
     let unmock_pat = if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
         let opt_dot_await = sig.asyncness.map(|_| quote! { .await });
 
@@ -322,14 +326,14 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     } else {
         quote! {
             ::unimock::Outcome::Unmock(_) => {
-                ::unimock::error::MockError::CannotUnmock { name: <#mock_fn_ident as ::unimock::MockFn>::NAME }.panic()
+                ::unimock::error::MockError::CannotUnmock { name: <#mock_fn_path as ::unimock::MockFn>::NAME }.panic()
             }
         }
     };
 
     quote! {
         #sig {
-            match self.apply::<#mock_fn_ident>((#(#parameters),*)) {
+            match self.apply::<#mock_fn_path>((#(#parameters),*)) {
                 ::unimock::Outcome::Evaluated(output) => output,
                 #unmock_pat,
             }
