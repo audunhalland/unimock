@@ -1,10 +1,10 @@
 use quote::quote;
-use std::collections::HashMap;
 use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
     unmocks: Vec<Unmock>,
+    mock_fn_idents: Vec<syn::Ident>,
     input_lifetime: syn::Lifetime,
     static_lifetime: syn::Lifetime,
 }
@@ -22,12 +22,23 @@ impl syn::parse::Parse for Cfg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut module = None;
         let mut unmocks = vec![];
+        let mut mock_fn_idents = vec![];
 
         while !input.is_empty() {
             if input.peek(syn::token::Mod) {
                 let _: syn::token::Mod = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
                 module = Some(input.parse()?);
+            } else if input.peek(syn::token::As) {
+                let _: syn::token::As = input.parse()?;
+                let _: syn::token::Eq = input.parse()?;
+                let content;
+                let _ = syn::bracketed!(content in input);
+                mock_fn_idents.push(content.parse()?);
+                while content.peek(syn::token::Comma) {
+                    let _: syn::token::Comma = content.parse()?;
+                    mock_fn_idents.push(content.parse()?);
+                }
             } else {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
@@ -44,11 +55,18 @@ impl syn::parse::Parse for Cfg {
                     _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
                 };
             }
+
+            if input.peek(syn::token::Comma) {
+                let _: syn::token::Comma = input.parse()?;
+            } else {
+                break;
+            }
         }
 
         Ok(Self {
             module,
             unmocks,
+            mock_fn_idents,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             static_lifetime: syn::Lifetime::new("'static", proc_macro2::Span::call_site()),
         })
@@ -91,8 +109,7 @@ impl syn::parse::Parse for UnimockInnerAttr {
 }
 
 pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
-    let (item_trait, method_attrs_by_index) = extract_inner_attrs(item_trait)?;
-    let methods = extract_methods(&item_trait, &cfg, method_attrs_by_index)?;
+    let methods = extract_methods(&item_trait, &cfg)?;
 
     let trait_ident = &item_trait.ident;
     let impl_attributes = item_trait
@@ -113,10 +130,10 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
             syn::AttrStyle::Inner(_) => None,
         });
 
-    let vfn_defs = methods
+    let mock_fn_defs = methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_vfn(index, method, &item_trait, &cfg));
+        .map(|(index, method)| def_mock_fn(index, method, &item_trait, &cfg));
     let method_impls = methods
         .iter()
         .enumerate()
@@ -127,7 +144,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
         Ok(quote! {
             #item_trait
             #vis mod #module {
-                #(#vfn_defs)*
+                #(#mock_fn_defs)*
 
                 #(#impl_attributes)*
                 impl super::#trait_ident for ::unimock::Unimock {
@@ -138,7 +155,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
     } else {
         Ok(quote! {
             #item_trait
-            #(#vfn_defs)*
+            #(#mock_fn_defs)*
 
             #(#impl_attributes)*
             impl #trait_ident for ::unimock::Unimock {
@@ -150,80 +167,11 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
 
 struct Method<'s> {
     method: &'s syn::TraitItemMethod,
-    vfn_ident: syn::Ident,
-    vfn_name: syn::LitStr,
+    mock_fn_ident: syn::Ident,
+    mock_fn_name: syn::LitStr,
 }
 
-struct MethodAttrs {
-    vfn_ident: Option<proc_macro2::Ident>,
-}
-
-impl Default for MethodAttrs {
-    fn default() -> Self {
-        Self { vfn_ident: None }
-    }
-}
-
-fn extract_inner_attrs(
-    mut item_trait: syn::ItemTrait,
-) -> syn::Result<(syn::ItemTrait, HashMap<usize, MethodAttrs>)> {
-    fn parse_inner_attr(attr: &syn::Attribute) -> syn::Result<Option<UnimockInnerAttr>> {
-        let path = &attr.path;
-        if path.segments.len() != 1 {
-            return Ok(None);
-        }
-
-        let segment = path.segments.last().unwrap();
-        match segment.ident.to_string().as_str() {
-            "unimock" => match syn::parse2::<UnimockInnerAttr>(attr.tokens.clone()) {
-                Ok(inner_attr) => Ok(Some(inner_attr)),
-                Err(err) => Err(err),
-            },
-            _ => Ok(None),
-        }
-    }
-
-    let method_attrs = item_trait
-        .items
-        .iter_mut()
-        .filter_map(|item| match item {
-            syn::TraitItem::Method(method) => Some(method),
-            _ => None,
-        })
-        .enumerate()
-        .map(|(index, method)| {
-            let mut vfn_ident = None;
-
-            let mut attr_index = 0;
-
-            while attr_index < method.attrs.len() {
-                match parse_inner_attr(&method.attrs[attr_index])? {
-                    Some(attr) => {
-                        match attr {
-                            UnimockInnerAttr::Name(ident) => {
-                                vfn_ident = Some(ident);
-                            }
-                        };
-                        method.attrs.remove(attr_index);
-                    }
-                    None => {
-                        attr_index += 1;
-                    }
-                }
-            }
-
-            Ok((index, MethodAttrs { vfn_ident }))
-        })
-        .collect::<syn::Result<HashMap<usize, MethodAttrs>>>()?;
-
-    Ok((item_trait, method_attrs))
-}
-
-fn extract_methods<'s>(
-    item_trait: &'s syn::ItemTrait,
-    cfg: &Cfg,
-    mut method_attrs_by_index: HashMap<usize, MethodAttrs>,
-) -> syn::Result<Vec<Method<'s>>> {
+fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result<Vec<Method<'s>>> {
     item_trait
         .items
         .iter()
@@ -233,45 +181,38 @@ fn extract_methods<'s>(
         })
         .enumerate()
         .map(|(index, method)| {
-            let vfn_name = syn::LitStr::new(
+            let mock_fn_name = syn::LitStr::new(
                 &format!("{}::{}", item_trait.ident, method.sig.ident),
                 item_trait.ident.span(),
             );
 
-            let attrs = method_attrs_by_index
-                .remove(&index)
-                .unwrap_or_else(Default::default);
+            let mock_fn_ident_method_part =
+                cfg.mock_fn_idents.get(index).unwrap_or(&method.sig.ident);
 
-            let vfn_ident_method_part = if let Some(custom_ident) = attrs.vfn_ident.as_ref() {
-                custom_ident
+            let mock_fn_ident = if cfg.module.is_some() {
+                mock_fn_ident_method_part.clone()
             } else {
-                &method.sig.ident
-            };
-
-            let vfn_ident = if cfg.module.is_some() {
-                vfn_ident_method_part.clone()
-            } else {
-                quote::format_ident!("{}__{}", item_trait.ident, vfn_ident_method_part)
+                quote::format_ident!("{}__{}", item_trait.ident, mock_fn_ident_method_part)
             };
 
             Ok(Method {
                 method,
-                vfn_ident,
-                vfn_name,
+                mock_fn_ident,
+                mock_fn_name,
             })
         })
         .collect()
 }
 
-fn def_vfn(
+fn def_mock_fn(
     index: usize,
     method: &Method,
     item_trait: &syn::ItemTrait,
     cfg: &Cfg,
 ) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let vfn_ident = &method.vfn_ident;
-    let vfn_name = &method.vfn_name;
+    let mock_fn_ident = &method.mock_fn_ident;
+    let mock_fn_name = &method.mock_fn_name;
 
     let mock_visibility = if let Some(_) = &cfg.module {
         syn::Visibility::Public(syn::VisPublic {
@@ -309,19 +250,19 @@ fn def_vfn(
 
     let unmock_impl = cfg.get_unmock_fn_path(index).map(|_| {
         quote! {
-            impl ::unimock::Unmock for #vfn_ident {}
+            impl ::unimock::Unmock for #mock_fn_ident {}
         }
     });
 
     quote! {
         #[allow(non_camel_case_types)]
-        #mock_visibility struct #vfn_ident;
+        #mock_visibility struct #mock_fn_ident;
 
-        impl ::unimock::MockFn for #vfn_ident {
+        impl ::unimock::MockFn for #mock_fn_ident {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #output;
             const N_INPUTS: u8 = #n_inputs;
-            const NAME: &'static str = #vfn_name;
+            const NAME: &'static str = #mock_fn_name;
         }
 
         #unmock_impl
@@ -356,7 +297,7 @@ fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
 
 fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let vfn_ident = &method.vfn_ident;
+    let mock_fn_ident = &method.mock_fn_ident;
 
     let parameters = sig
         .inputs
@@ -379,14 +320,14 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     } else {
         quote! {
             ::unimock::Outcome::Unmock(_) => {
-                ::unimock::error::MockError::CannotUnmock { name: <#vfn_ident as ::unimock::MockFn>::NAME }.panic()
+                ::unimock::error::MockError::CannotUnmock { name: <#mock_fn_ident as ::unimock::MockFn>::NAME }.panic()
             }
         }
     };
 
     quote! {
         #sig {
-            match self.apply::<#vfn_ident>((#(#parameters),*)) {
+            match self.apply::<#mock_fn_ident>((#(#parameters),*)) {
                 ::unimock::Outcome::Evaluated(output) => output,
                 #unmock_pat,
             }

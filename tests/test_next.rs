@@ -295,9 +295,8 @@ fn borrowing_with_memory_leak() {
     );
 }
 
-#[unimock(mod=with_module)]
+#[unimock(mod=with_module, as=[Funk])]
 trait WithModule {
-    #[unimock(name=Funk)]
     fn func<'s>(&'s self, input: String) -> &'s String;
 }
 
