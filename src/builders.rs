@@ -64,7 +64,7 @@ impl<F: MockFn + 'static> Each<F> {
         let pat_index = self.patterns.len();
         self.patterns.push(mock::CallPattern {
             pat_index,
-            arg_matcher: Some(Box::new(matching)),
+            input_matcher: Box::new(matching),
             call_counter: counter::CallCounter::new(counter::CountExpectation::None),
             responder: mock::Responder::Error,
         });

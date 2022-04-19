@@ -1,15 +1,7 @@
+use crate::error::MockError;
 use crate::*;
 
 use std::any::Any;
-
-/// The outcome of an api application/call on a mock object.
-pub enum Outcome<'i, F: MockFn> {
-    /// The mock evaluated the call and produced an output.
-    Evaluated(F::Output),
-    /// The mock only matched the inputs, and registered that fact.
-    /// How to produce the output is left to the caller.
-    Unmock(F::Inputs<'i>),
-}
 
 pub(crate) struct DynImpl(pub Box<dyn TypeErasedMockImpl + Send + Sync + 'static>);
 
@@ -26,17 +18,17 @@ impl DynImpl {
 pub(crate) trait TypeErasedMockImpl: Any {
     fn as_any(&self) -> &dyn Any;
 
-    fn verify(&self, errors: &mut Vec<String>);
+    fn verify(&self, errors: &mut Vec<MockError>);
 }
 
 pub(crate) fn apply<'i, F: MockFn + 'static>(
     dyn_impl: Option<&'i DynImpl>,
     inputs: F::Inputs<'i>,
     fallback_mode: FallbackMode,
-) -> Result<Outcome<'i, F>, String> {
+) -> Result<Outcome<'i, F>, MockError> {
     match dyn_impl {
         None => match fallback_mode {
-            FallbackMode::Error => Err(format!("No mock implementation found for {}", F::NAME)),
+            FallbackMode::Error => Err(MockError::NoMockImplementation { name: F::NAME }),
             FallbackMode::Unmock => Ok(Outcome::Unmock(inputs)),
         },
         Some(dyn_impl) => {
@@ -44,25 +36,22 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
                 .0
                 .as_any()
                 .downcast_ref::<TypedMockImpl<F>>()
-                .ok_or_else(|| format!(""))?;
+                .ok_or_else(|| MockError::Downcast { name: F::NAME })?;
 
             mock_impl
                 .has_applications
                 .store(true, std::sync::atomic::Ordering::Relaxed);
 
             if mock_impl.patterns.is_empty() {
-                return Err(format!(
-                    "{}{}: No registered call patterns",
-                    F::NAME,
-                    mock_impl.debug_inputs(&inputs)
-                ));
+                return Err(MockError::NoRegisteredCallPatterns {
+                    name: F::NAME,
+                    inputs_debug: mock_impl.debug_inputs(&inputs),
+                });
             }
 
             for pattern in mock_impl.patterns.iter() {
-                if let Some(arg_matcher) = pattern.arg_matcher.as_ref() {
-                    if !arg_matcher(&inputs) {
-                        continue;
-                    }
+                if !(*pattern.input_matcher)(&inputs) {
+                    continue;
                 }
 
                 pattern.call_counter.tick();
@@ -70,20 +59,18 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
                 return match &pattern.responder {
                     Responder::Closure(closure) => Ok(Outcome::Evaluated(closure(inputs))),
                     Responder::Unmock => Ok(Outcome::Unmock(inputs)),
-                    Responder::Error => Err(format!(
-                        "{}{}: No output available for matching call pattern #{}",
-                        F::NAME,
-                        mock_impl.debug_inputs(&inputs),
-                        pattern.pat_index,
-                    )),
+                    Responder::Error => Err(MockError::NoOutputAvailableForCallPattern {
+                        name: F::NAME,
+                        inputs_debug: mock_impl.debug_inputs(&inputs),
+                        pat_index: pattern.pat_index,
+                    }),
                 };
             }
 
-            Err(format!(
-                "{}{}: No matching call patterns.",
-                F::NAME,
-                mock_impl.debug_inputs(&inputs)
-            ))
+            Err(MockError::NoMatchingCallPatterns {
+                name: F::NAME,
+                inputs_debug: mock_impl.debug_inputs(&inputs),
+            })
         }
     }
 }
@@ -106,7 +93,7 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         self
     }
 
-    fn verify(&self, errors: &mut Vec<String>) {
+    fn verify(&self, errors: &mut Vec<MockError>) {
         for pattern in self.patterns.iter() {
             pattern
                 .call_counter
@@ -117,17 +104,14 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
             .has_applications
             .load(std::sync::atomic::Ordering::Relaxed)
         {
-            errors.push(format!(
-                "Mock for {} was never called. Dead mocks should be removed.",
-                F::NAME
-            ));
+            errors.push(MockError::MockNeverCalled { name: F::NAME });
         }
     }
 }
 
 pub(crate) struct CallPattern<F: MockFn> {
     pub pat_index: usize,
-    pub arg_matcher: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>>,
+    pub input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
     pub call_counter: counter::CallCounter,
     pub responder: Responder<F>,
 }

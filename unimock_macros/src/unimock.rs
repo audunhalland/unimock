@@ -374,12 +374,12 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
 
     let unmock_pat = if let Some(arch_path) = cfg.get_original_fn_path(index) {
         quote! {
-            ::unimock::mock::Outcome::Unmock((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
+            ::unimock::Outcome::Unmock((#(#parameters),*)) => #arch_path(self, #(#parameters),*)
         }
     } else {
         quote! {
-            ::unimock::mock::Outcome::Unmock(_) => {
-                panic!("no fn available for fallthrough on {}", <#vfn_ident as ::unimock::MockFn>::NAME)
+            ::unimock::Outcome::Unmock(_) => {
+                ::unimock::error::MockError::CannotUnmock { name: <#vfn_ident as ::unimock::MockFn>::NAME }.panic()
             }
         }
     };
@@ -387,7 +387,7 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     quote! {
         #sig {
             match self.apply::<#vfn_ident>((#(#parameters),*)) {
-                ::unimock::mock::Outcome::Evaluated(output) => output,
+                ::unimock::Outcome::Evaluated(output) => output,
                 #unmock_pat,
             }
         }

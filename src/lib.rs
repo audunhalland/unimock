@@ -54,11 +54,10 @@
 
 /// Various builder-like types for composing mock behaviour on functions.
 pub mod builders;
-
-#[doc(hidden)]
-pub mod mock;
+pub mod error;
 
 mod counter;
+mod mock;
 
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -237,17 +236,17 @@ impl Unimock {
     }
 
     /// Perform function-application against some [MockFn].
-    pub fn apply<'i, F: MockFn + 'static>(&'i self, inputs: F::Inputs<'i>) -> mock::Outcome<'i, F> {
+    pub fn apply<'i, F: MockFn + 'static>(&'i self, inputs: F::Inputs<'i>) -> Outcome<'i, F> {
         match mock::apply(
             self.impls.get(&TypeId::of::<F>()),
             inputs,
             self.fallback_mode,
         ) {
             Ok(outcome) => outcome,
-            Err(message) => {
+            Err(mock_error) => {
                 self.has_panicked
                     .store(true, std::sync::atomic::Ordering::Relaxed);
-                panic!("{}", message);
+                mock_error.panic()
             }
         }
     }
@@ -261,14 +260,17 @@ impl Drop for Unimock {
             return;
         }
 
-        let mut errors = Vec::new();
+        let mut mock_errors = Vec::new();
         for (_, dyn_impl) in self.impls.iter() {
-            dyn_impl.0.verify(&mut errors);
+            dyn_impl.0.verify(&mut mock_errors);
         }
 
-        if !errors.is_empty() {
-            let error_string = errors.join("\n");
-            panic!("{}", error_string);
+        if !mock_errors.is_empty() {
+            let error_strings = mock_errors
+                .into_iter()
+                .map(|err| err.to_string())
+                .collect::<Vec<_>>();
+            panic!("{}", error_strings.join("/n"));
         }
     }
 }
@@ -360,8 +362,8 @@ pub trait MockFn: Sized {
 ///     120,
 ///     // well, not in the test, at least!
 ///     mock(Factorial__factorial, |each| {
-///         each.call(matching!((input) if *input <= 1)).returns(1u32); // unimock controls the API call
-///         each.call(matching!(_)).invokes_original();
+///         each.call(matching!((input) if *input <= 1)).returns(1_u32); // unimock controls the API call
+///         each.call(matching!(_)).unmock();
 ///     })
 ///     .factorial(5)
 /// );
@@ -374,6 +376,15 @@ pub fn mock<F: MockFn + 'static>(_: F, setup: impl FnOnce(&mut builders::Each<F>
     let mut each = builders::Each::new();
     setup(&mut each);
     Unimock::with_single_mock(TypeId::of::<F>(), mock::DynImpl::from_each(each))
+}
+
+/// The outcome of an api application/call on a mock object.
+pub enum Outcome<'i, F: MockFn> {
+    /// The mock evaluated the call and produced an output.
+    Evaluated(F::Output),
+    /// The mock only matched the inputs, and registered that fact.
+    /// How to produce the output is left to the caller.
+    Unmock(F::Inputs<'i>),
 }
 
 /// Conveniently leak some value to produce a static reference.
