@@ -314,8 +314,10 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         .collect::<Vec<_>>();
 
     let unmock_pat = if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
+        let opt_dot_await = sig.asyncness.map(|_| quote! { .await });
+
         quote! {
-            ::unimock::Outcome::Unmock((#(#parameters),*)) => #unmock_path(self, #(#parameters),*)
+            ::unimock::Outcome::Unmock((#(#parameters),*)) => #unmock_path(self, #(#parameters),*) #opt_dot_await
         }
     } else {
         quote! {

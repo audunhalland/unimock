@@ -453,6 +453,29 @@ fn unmock_recursion() {
     );
 }
 
+#[tokio::test]
+async fn unmock_async() {
+    #[unimock(unmocked=[my_factorial])]
+    #[async_trait]
+    trait AsyncFactorial {
+        async fn factorial(&self, input: u32) -> u32;
+    }
+
+    async fn my_factorial(f: &impl AsyncFactorial, input: u32) -> u32 {
+        f.factorial(input - 1).await * input
+    }
+
+    assert_eq!(
+        120,
+        mock(AsyncFactorial__factorial, |each| {
+            each.call(matching!((input) if *input <= 1)).returns(1u32);
+            each.call(matching!(_)).unmock();
+        })
+        .factorial(5)
+        .await
+    );
+}
+
 #[test]
 fn intricate_lifetimes() {
     struct I<'s>(std::marker::PhantomData<&'s ()>);
