@@ -10,11 +10,11 @@ pub struct Clause {
     pub(crate) dyn_impl: mock::DynImpl,
 }
 
-pub struct GroupEach<F: MockFn> {
+pub struct Each<F: MockFn> {
     mock_impl: mock::TypedMockImpl<F>,
 }
 
-impl<F> GroupEach<F>
+impl<F> Each<F>
 where
     F: MockFn + 'static,
 {
@@ -72,55 +72,59 @@ where
         }
     }
 
+    fn complete(self) -> CompleteCall<'p, F> {
+        CompleteCall { kind: self.kind }
+    }
+
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement [Clone] and cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
-    pub fn returns(mut self, value: impl Into<F::Output>) -> Self
+    pub fn returns(mut self, value: impl Into<F::Output>) -> CompleteCall<'p, F>
     where
         F::Output: Send + Sync + Clone + 'static,
     {
         let value = value.into();
         self.pattern_mut().responder = mock::Responder::Closure(Box::new(move |_| value.clone()));
-        self
+        self.complete()
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
-    pub fn returns_default(mut self) -> Self
+    pub fn returns_default(mut self) -> CompleteCall<'p, F>
     where
         F::Output: Default,
     {
         self.pattern_mut().responder = mock::Responder::Closure(Box::new(|_| Default::default()));
-        self
+        self.complete()
     }
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters.
-    pub fn answers<A, R>(mut self, func: A) -> Self
+    pub fn answers<A, R>(mut self, func: A) -> CompleteCall<'p, F>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
         R: Into<F::Output>,
     {
         self.pattern_mut().responder =
             mock::Responder::Closure(Box::new(move |inputs| func(inputs).into()));
-        self
+        self.complete()
     }
 
     /// Specify the output of the call pattern to be a static reference to the
     /// passed owned value, by leaking its memory. This version leaks the value once.
-    pub fn returns_leak<T>(mut self, value: impl Into<T>) -> Self
+    pub fn returns_leak<T>(mut self, value: impl Into<T>) -> CompleteCall<'p, F>
     where
         F::Output: Send + Sync + Copy + LeakInto<Owned = T> + 'static,
     {
         let leaked = <F::Output as LeakInto>::leak_into(value.into());
         self.pattern_mut().responder = mock::Responder::Closure(Box::new(move |_| leaked));
-        self
+        self.complete()
     }
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters, then create a static reference
     /// to it by leaking. Note that this version will produce a new memory leak for
     /// _every invocation_ of the answer function.
-    pub fn answers_leak<A, R, O>(mut self, func: A) -> Self
+    pub fn answers_leak<A, R, O>(mut self, func: A) -> CompleteCall<'p, F>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
         R: Into<O>,
@@ -130,34 +134,42 @@ where
             let owned_output = func(inputs).into();
             <F::Output as LeakInto>::leak_into(owned_output)
         }));
-        self
+        self.complete()
     }
 
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
-    pub fn panics(mut self, message: impl Into<String>) -> Self {
+    pub fn panics(mut self, message: impl Into<String>) -> CompleteCall<'p, F> {
         let message = message.into();
         self.pattern_mut().responder =
             mock::Responder::Closure(Box::new(move |_| panic!("{}", message)));
-        self
+        self.complete()
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
-    pub fn unmock(mut self) -> Self
+    pub fn unmocked(mut self) -> CompleteCall<'p, F>
     where
         F: Unmock,
     {
         self.pattern_mut().responder = mock::Responder::Unmock;
-        self
+        self.complete()
     }
 
-    /// Expect this call pattern to never be called.
-    pub fn never(mut self) -> Self {
-        self.pattern_mut()
-            .call_counter
-            .set_expectation(CountExpectation::Exactly(0));
-        self
+    fn pattern_mut(&mut self) -> &mut mock::CallPattern<F> {
+        match &mut self.kind {
+            CallKind::Grouped(p) => *p,
+            CallKind::Standalone(mock_impl) => mock_impl.patterns.last_mut().unwrap(),
+        }
     }
+}
 
+pub struct CompleteCall<'p, F: MockFn> {
+    kind: CallKind<'p, F>,
+}
+
+impl<'p, F> CompleteCall<'p, F>
+where
+    F: MockFn + 'static,
+{
     /// Expect this call pattern to be called exactly once.
     pub fn once(mut self) -> Self {
         self.pattern_mut()
@@ -167,7 +179,7 @@ where
     }
 
     /// Expect this call pattern to be called exactly the specified number of times.
-    pub fn times(mut self, times: usize) -> Self {
+    pub fn exactly(mut self, times: usize) -> Self {
         self.pattern_mut()
             .call_counter
             .set_expectation(CountExpectation::Exactly(times));
@@ -182,6 +194,7 @@ where
         self
     }
 
+    /// Expect the call to happen in the same order that the resulting clause appears in the list of clauses.
     pub fn in_order(self) -> Clause {
         match self.kind {
             CallKind::Standalone(mock_impl) => Clause {

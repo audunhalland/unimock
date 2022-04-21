@@ -76,6 +76,19 @@ pub(crate) struct TypedMockImpl<F: MockFn> {
 }
 
 impl<F: MockFn> TypedMockImpl<F> {
+    pub fn new_standalone(
+        input_debugger: InputDebugger<F>,
+        input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
+    ) -> Self {
+        let mut mock_impl = Self::with_input_debugger(input_debugger);
+        mock_impl.patterns.push(mock::CallPattern {
+            input_matcher,
+            call_counter: counter::CallCounter::default(),
+            responder: mock::Responder::Error,
+        });
+        mock_impl
+    }
+
     pub fn with_input_debugger(input_debugger: InputDebugger<F>) -> Self {
         Self {
             input_debugger,

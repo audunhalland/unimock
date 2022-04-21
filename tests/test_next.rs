@@ -36,9 +36,11 @@ fn owned_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &mock([Owned__foo::next_call(matching!(_, _))
-                .answers(|(a, b)| format!("{a}{b}"))
-                .in_order()]),
+            &mock(Some(
+                Owned__foo::next_call(matching!(_, _))
+                    .answers(|(a, b)| format!("{a}{b}"))
+                    .in_order()
+            )),
             "a",
             "b",
         )
@@ -46,9 +48,9 @@ fn owned_works() {
     assert_eq!(
         "lol",
         takes_owned(
-            &mock([Owned__foo::stub(|each| {
+            &mock(Some(Owned__foo::stub(|each| {
                 each.call(matching!(_, _)).returns("lol");
-            })]),
+            }))),
             "a",
             "b",
         )
@@ -96,7 +98,7 @@ fn referenced_with_default_return_value_works() {
             &mock([Referenced__foo::stub(|each| {
                 each.call(matching!("Æ")).panics("Should not be called");
                 each.call(matching!("a")).returns_default();
-            })]),
+            }),]),
             "a",
         )
     );
@@ -126,7 +128,7 @@ fn test_multiple() {
                 each.call(matching!("b")).returns("B").once();
             }),
             MultiArg__method2::stub(|each| {
-                each.call(matching!("a", _)).never().returns("fail");
+                each.call(matching!("a", _)).panics("should not call this");
                 each.call(matching!("B", "B")).returns("success").once();
             })
         ]))
@@ -137,7 +139,7 @@ fn test_multiple() {
 fn should_panic_for_nonexisting_mock() {
     assert_panics!(
         {
-            Unimock::empty().method1("hoi");
+            mock(None).method1("hoi");
         },
         includes("No mock implementation found for SingleArg::method1")
     );
@@ -199,7 +201,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
         {
             mock([
                 SingleArg__method1::stub(|each| {
-                    each.call(matching!("a")).once().returns_default();
+                    each.call(matching!("a")).returns_default().once();
                     each.call(matching!(_)).returns_default();
                 })
             ]).method1("b");
@@ -299,7 +301,11 @@ trait WithModule {
 #[test]
 fn test_with_module() {
     assert_panics!({
-        let _ = mock(Some(with_module::Funk::next_call(matching!(_)).in_order()));
+        let _ = mock(Some(
+            with_module::Funk::next_call(matching!(_))
+                .returns_leak(MyType)
+                .in_order(),
+        ));
     });
 }
 
@@ -409,14 +415,14 @@ fn unmock_simple() {
     assert_eq!(
         "ab",
         mock([Spyable__concat::stub(|each| {
-            each.call(matching!("a", "b")).once().unmock();
+            each.call(matching!("a", "b")).unmocked().once();
         })])
         .concat("a".to_string(), "b".to_string())
     );
 
     assert_eq!(
         "ab",
-        Unimock::empty()
+        mock(None)
             .otherwise_unmock()
             .concat("a".to_string(), "b".to_string())
     );
@@ -427,14 +433,14 @@ fn unmock_simple() {
                 "ab",
                 mock([
                     Spyable__concat::stub(|each| {
-                        each.call(matching!("", "")).returns("foobar").once();
-                        each.call(matching!(_)).unmock();
+                        each.call(matching!("", "")).returns("foobar").at_least(1);
+                        each.call(matching!(_, _)).unmocked();
                     }),
                 ])
                 .concat("a".to_string(), "b".to_string())
             );
         },
-        includes("Spyable::concat: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
+        includes("Spyable::concat: Expected call pattern #0 to match at least 1 call, but it actually matched no calls.")
     );
 }
 
@@ -453,7 +459,7 @@ fn unmock_recursion() {
         120,
         mock([Factorial__factorial::stub(|each| {
             each.call(matching!((input) if *input <= 1)).returns(1u32);
-            each.call(matching!(_)).unmock();
+            each.call(matching!(_)).unmocked();
         })])
         .factorial(5)
     );
@@ -475,7 +481,7 @@ async fn unmock_async() {
         120,
         mock(Some(AsyncFactorial__factorial::stub(|each| {
             each.call(matching!((input) if *input <= 1)).returns(1u32);
-            each.call(matching!(_)).unmock();
+            each.call(matching!(_)).unmocked();
         })))
         .factorial(5)
         .await

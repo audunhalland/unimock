@@ -180,16 +180,10 @@ pub struct Unimock {
     has_panicked: AtomicBool,
 }
 
-impl Unimock {
-    /// Create a new, empty Unimock. Attempting to call implemented traits on an empty instance will panic at runtime.
-    pub fn empty() -> Unimock {
-        Self {
-            fallback_mode: FallbackMode::Error,
-            impls: HashMap::new(),
-            has_panicked: AtomicBool::new(false),
-        }
-    }
+// TODO: Should implement Clone using Arc for data.
+// When the _original_ gets dropped, it should verify that there are no copies left alive.
 
+impl Unimock {
     /// Create a unimock that instead of trying to mock, tries to call some original implementation of any API.
     ///
     /// What is considered an original implementation, is not something that unimock concerns itself with,
@@ -221,12 +215,15 @@ impl Unimock {
             self.fallback_mode,
         ) {
             Ok(outcome) => outcome,
-            Err(mock_error) => {
-                self.has_panicked
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
-                mock_error.panic()
-            }
+            Err(mock_error) => panic!("{}", self.panic_msg(mock_error)),
         }
+    }
+
+    fn panic_msg(&self, error: error::MockError) -> String {
+        let msg = error.to_string();
+        self.has_panicked
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        msg
     }
 }
 
@@ -294,20 +291,20 @@ pub trait MockFn: Sized + 'static {
     fn stub<'c, S>(setup: S) -> builders::Clause
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
-        S: FnOnce(&mut builders::GroupEach<Self>) + 'c,
+        S: FnOnce(&mut builders::Each<Self>) + 'c,
     {
-        let mut group_each = builders::GroupEach::new(mock::InputDebugger::new_debug());
-        setup(&mut group_each);
-        group_each.to_clause()
+        let mut each = builders::Each::new(mock::InputDebugger::new_debug());
+        setup(&mut each);
+        each.to_clause()
     }
 
     fn nodebug_stub<'c, S>(setup: S) -> builders::Clause
     where
-        S: FnOnce(&mut builders::GroupEach<Self>) + 'c,
+        S: FnOnce(&mut builders::Each<Self>) + 'c,
     {
-        let mut group_each = builders::GroupEach::new(mock::InputDebugger::new_nodebug());
-        setup(&mut group_each);
-        group_each.to_clause()
+        let mut each = builders::Each::new(mock::InputDebugger::new_nodebug());
+        setup(&mut each);
+        each.to_clause()
     }
 
     fn next_call<'c, M>(matching: M) -> builders::MatchedCall<'c, Self>
@@ -315,15 +312,10 @@ pub trait MockFn: Sized + 'static {
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + 'static,
     {
-        let mut mock_impl =
-            mock::TypedMockImpl::<Self>::with_input_debugger(mock::InputDebugger::new_debug());
-        mock_impl.patterns.push(mock::CallPattern {
-            input_matcher: Box::new(matching),
-            call_counter: counter::CallCounter::default(),
-            responder: mock::Responder::Error,
-        });
-
-        builders::MatchedCall::new_standalone(mock_impl)
+        builders::MatchedCall::new_standalone(mock::TypedMockImpl::new_standalone(
+            mock::InputDebugger::new_debug(),
+            Box::new(matching),
+        ))
     }
 }
 
@@ -384,13 +376,18 @@ pub trait MockFn: Sized + 'static {
 ///
 pub trait Unmock: MockFn {}
 
+#[inline]
 pub fn mock<I>(clauses: I) -> Unimock
 where
     I: IntoIterator<Item = builders::Clause>,
 {
+    mock_from_iterator(&mut clauses.into_iter())
+}
+
+fn mock_from_iterator(clause_iterator: &mut dyn Iterator<Item = builders::Clause>) -> Unimock {
     let mut impls = HashMap::new();
 
-    for clause in clauses.into_iter() {
+    for clause in clause_iterator {
         let mut dyn_impl = clause.dyn_impl;
         dyn_impl.0.assemble_into(&mut impls);
     }
