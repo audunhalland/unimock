@@ -52,8 +52,10 @@
 // For the mock-fn feature:
 #![feature(generic_associated_types)]
 
-/// Various builder-like types for composing mock behaviour on functions.
-pub mod builders;
+/// Types for used for building and defining mock behaviour.
+pub mod build;
+
+/// Things that can go wrong.
 pub mod error;
 
 mod counter;
@@ -97,7 +99,7 @@ pub use unimock_macros::unimock;
 
 ///
 /// Macro to ease argument pattern matching.
-/// This macro produces a closure expression suitable for passing to [builders::Each::call].
+/// This macro produces a closure expression suitable for passing to [build::Each::call].
 ///
 /// Takes inspiration from [std::matches] and works similarly, except that the value to match
 /// can be removed as a macro argument, since it is instead received as the closure argument.
@@ -265,31 +267,31 @@ pub trait MockFn: Sized + 'static {
     /// The name to use for runtime errors.
     const NAME: &'static str;
 
-    fn stub<'c, S>(setup: S) -> Clause
+    fn stub<'c, S>(setup: S) -> build::Clause
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
-        S: FnOnce(&mut builders::Each<Self>) + 'c,
+        S: FnOnce(&mut build::Each<Self>) + 'c,
     {
-        let mut each = builders::Each::new(mock::InputDebugger::new_debug());
+        let mut each = build::Each::new(mock::InputDebugger::new_debug());
         setup(&mut each);
         each.to_clause()
     }
 
-    fn nodebug_stub<'c, S>(setup: S) -> Clause
+    fn nodebug_stub<'c, S>(setup: S) -> build::Clause
     where
-        S: FnOnce(&mut builders::Each<Self>) + 'c,
+        S: FnOnce(&mut build::Each<Self>) + 'c,
     {
-        let mut each = builders::Each::new(mock::InputDebugger::new_nodebug());
+        let mut each = build::Each::new(mock::InputDebugger::new_nodebug());
         setup(&mut each);
         each.to_clause()
     }
 
-    fn next_call<'c, M>(matching: M) -> builders::MatchedCall<'c, Self>
+    fn next_call<'c, M>(matching: M) -> build::ResponseBuilder<'c, Self>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + 'static,
     {
-        builders::MatchedCall::new_standalone(mock::TypedMockImpl::new_standalone(
+        build::ResponseBuilder::new_standalone(mock::TypedMockImpl::new_standalone(
             mock::InputDebugger::new_debug(),
             Box::new(matching),
         ))
@@ -353,22 +355,14 @@ pub trait MockFn: Sized + 'static {
 ///
 pub trait Unmock: MockFn {}
 
-/// A program clause for mock construction.
-#[must_use]
-pub struct Clause(ClauseKind);
-
-enum ClauseKind {
-    Stub(mock::DynImpl),
-}
-
-/// Construct a unimock instance that works like a mock or a stub, from a set of [Clause]es.
+/// Construct a unimock instance that works like a mock or a stub, from a set of [build::Clause]es.
 ///
 /// Every call hitting the instance must be declared in advance as an input clause,
 /// or else panic will ensue.
 #[inline]
 pub fn mock<I>(clauses: I) -> Unimock
 where
-    I: IntoIterator<Item = Clause>,
+    I: IntoIterator<Item = build::Clause>,
 {
     mock_from_iterator(&mut clauses.into_iter(), FallbackMode::Error)
 }
@@ -379,20 +373,20 @@ where
 #[inline]
 pub fn spy<I>(clauses: I) -> Unimock
 where
-    I: IntoIterator<Item = Clause>,
+    I: IntoIterator<Item = build::Clause>,
 {
     mock_from_iterator(&mut clauses.into_iter(), FallbackMode::Unmock)
 }
 
 fn mock_from_iterator(
-    clause_iterator: &mut dyn Iterator<Item = Clause>,
+    clause_iterator: &mut dyn Iterator<Item = build::Clause>,
     fallback_mode: FallbackMode,
 ) -> Unimock {
     let mut impls = HashMap::new();
 
     for clause in clause_iterator {
         match clause.0 {
-            ClauseKind::Stub(mut dyn_impl) => {
+            build::ClauseKind::Stub(mut dyn_impl) => {
                 dyn_impl.0.assemble_into(&mut impls);
             }
         }
