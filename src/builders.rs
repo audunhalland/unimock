@@ -4,12 +4,6 @@ use crate::counter::*;
 use crate::mock::TypedMockImpl;
 use crate::*;
 
-/// Program clause for mock building
-#[must_use]
-pub struct Clause {
-    pub(crate) dyn_impl: mock::DynImpl,
-}
-
 pub struct Each<F: MockFn> {
     mock_impl: mock::TypedMockImpl<F>,
 }
@@ -25,9 +19,7 @@ where
     }
 
     pub(crate) fn to_clause(self) -> Clause {
-        Clause {
-            dyn_impl: mock::DynImpl(Box::new(self.mock_impl)),
-        }
+        Clause(ClauseKind::Stub(mock::DynImpl(Box::new(self.mock_impl))))
     }
 
     pub fn call<'c, M>(&'c mut self, matching: M) -> MatchedCall<'c, F>
@@ -197,9 +189,9 @@ where
     /// Expect the call to happen in the same order that the resulting clause appears in the list of clauses.
     pub fn in_order(self) -> Clause {
         match self.kind {
-            CallKind::Standalone(mock_impl) => Clause {
-                dyn_impl: mock::DynImpl(Box::new(mock_impl)),
-            },
+            CallKind::Standalone(mock_impl) => {
+                Clause(ClauseKind::Stub(mock::DynImpl(Box::new(mock_impl))))
+            }
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }

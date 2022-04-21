@@ -61,10 +61,13 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
                 };
             }
 
-            Err(MockError::NoMatchingCallPatterns {
-                name: F::NAME,
-                inputs_debug: mock_impl.debug_inputs(&inputs),
-            })
+            match fallback_mode {
+                FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
+                    name: F::NAME,
+                    inputs_debug: mock_impl.debug_inputs(&inputs),
+                }),
+                FallbackMode::Unmock => Ok(Outcome::Unmock(inputs)),
+            }
         }
     }
 }

@@ -184,30 +184,7 @@ pub struct Unimock {
 // When the _original_ gets dropped, it should verify that there are no copies left alive.
 
 impl Unimock {
-    /// Create a unimock that instead of trying to mock, tries to call some original implementation of any API.
-    ///
-    /// What is considered an original implementation, is not something that unimock concerns itself with,
-    /// the behaviour is completely customized for each trait and it is also opt-in.
-    ///
-    /// If some implementation has no way to call an "original implementation", it should panic.
-    ///
-    /// A call-original unimock may be `union`ed together with normal mocks, effectively
-    /// creating a mix of real and mocked APIs, allowing deeper tests than mock-only mode can provide.
-    pub fn unmocked() -> Unimock {
-        Self {
-            fallback_mode: FallbackMode::Unmock,
-            impls: HashMap::new(),
-            has_panicked: AtomicBool::new(false),
-        }
-    }
-
-    /// Change unregistered [MockFn] fallback behaviour from explicitly panicking to trying to unmock them.
-    pub fn otherwise_unmock(mut self) -> Unimock {
-        self.fallback_mode = FallbackMode::Unmock;
-        self
-    }
-
-    /// Perform function-application against some [MockFn].
+    /// Perform function application against some [MockFn].
     pub fn apply<'i, F: MockFn + 'static>(&'i self, inputs: F::Inputs<'i>) -> Outcome<'i, F> {
         match mock::apply(
             self.impls.get(&TypeId::of::<F>()),
@@ -288,7 +265,7 @@ pub trait MockFn: Sized + 'static {
     /// The name to use for runtime errors.
     const NAME: &'static str;
 
-    fn stub<'c, S>(setup: S) -> builders::Clause
+    fn stub<'c, S>(setup: S) -> Clause
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         S: FnOnce(&mut builders::Each<Self>) + 'c,
@@ -298,7 +275,7 @@ pub trait MockFn: Sized + 'static {
         each.to_clause()
     }
 
-    fn nodebug_stub<'c, S>(setup: S) -> builders::Clause
+    fn nodebug_stub<'c, S>(setup: S) -> Clause
     where
         S: FnOnce(&mut builders::Each<Self>) + 'c,
     {
@@ -319,10 +296,10 @@ pub trait MockFn: Sized + 'static {
     }
 }
 
-/// [MockFn] that can "unmock" into a single "true" implementation.
+/// [MockFn] with the ability to unmock into a unique true implementation.
 ///
-/// A real implementation is a free-standing function, not part of a trait,
-/// where the first parameter is generic (`self`-replacement), and the rest of the parameters are
+/// A true implementation must be a standalone function, not part of a trait,
+/// where the first parameter is generic (a `self`-replacement), and the rest of the parameters are
 /// identical to [MockFn::Inputs]:
 ///
 /// ```rust
@@ -333,18 +310,18 @@ pub trait MockFn: Sized + 'static {
 ///     fn double_number(&self, a: i32) -> i32;
 /// }
 ///
-/// // A _real function_ which performs number doubling!
+/// // The true implementation is a regular, generic function which performs number doubling!
 /// fn my_original<T>(_: T, a: i32) -> i32 {
 ///     a * 2
 /// }
 /// ```
 ///
-/// Real functions make sense when the reason to define a mockable trait
+/// The unmock feature makes sense when the reason to define a mockable trait
 /// is _solely_ for the purpose of inversion-of-control at test-time: Release code
 /// need only one way to double a number.
 ///
-/// Free-standing original functions enables arbitrarily deep integration testing
-/// in unimock-based application architectures. When unimock calls an original,
+/// Standalone functions enables arbitrarily deep integration testing
+/// in unimock-based application architectures. When unimock calls the true implementation,
 /// it inserts itself as the generic first parameter. When this parameter is
 /// bounded by traits, the original `fn` is given capabilities to call other APIs,
 /// though only indirectly. Each method invocation happening during a test will invisibly pass
@@ -376,24 +353,53 @@ pub trait MockFn: Sized + 'static {
 ///
 pub trait Unmock: MockFn {}
 
+/// A program clause for mock construction.
+#[must_use]
+pub struct Clause(ClauseKind);
+
+enum ClauseKind {
+    Stub(mock::DynImpl),
+}
+
+/// Construct a unimock instance that works like a mock or a stub, from a set of [Clause]es.
+///
+/// Every call hitting the instance must be declared in advance as an input clause,
+/// or else panic will ensue.
 #[inline]
 pub fn mock<I>(clauses: I) -> Unimock
 where
-    I: IntoIterator<Item = builders::Clause>,
+    I: IntoIterator<Item = Clause>,
 {
-    mock_from_iterator(&mut clauses.into_iter())
+    mock_from_iterator(&mut clauses.into_iter(), FallbackMode::Error)
 }
 
-fn mock_from_iterator(clause_iterator: &mut dyn Iterator<Item = builders::Clause>) -> Unimock {
+/// Construct a unimock instance that works like a spy, where every clause
+/// acts as an override over the default behaviour, which is to hit
+/// "real world" code using the [Unmock] feature.
+#[inline]
+pub fn spy<I>(clauses: I) -> Unimock
+where
+    I: IntoIterator<Item = Clause>,
+{
+    mock_from_iterator(&mut clauses.into_iter(), FallbackMode::Unmock)
+}
+
+fn mock_from_iterator(
+    clause_iterator: &mut dyn Iterator<Item = Clause>,
+    fallback_mode: FallbackMode,
+) -> Unimock {
     let mut impls = HashMap::new();
 
     for clause in clause_iterator {
-        let mut dyn_impl = clause.dyn_impl;
-        dyn_impl.0.assemble_into(&mut impls);
+        match clause.0 {
+            ClauseKind::Stub(mut dyn_impl) => {
+                dyn_impl.0.assemble_into(&mut impls);
+            }
+        }
     }
 
     Unimock {
-        fallback_mode: FallbackMode::Error,
+        fallback_mode,
         impls,
         has_panicked: AtomicBool::new(false),
     }

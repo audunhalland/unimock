@@ -324,10 +324,9 @@ async fn test_async_trait() {
     assert_eq!(
         "42",
         takes_async(
-            &mock(Some(Async__func::stub(|each| {
+            &mock([Async__func::stub(|each| {
                 each.call(matching!(_)).returns("42");
-            })))
-            .otherwise_unmock(),
+            })]),
             21
         )
         .await
@@ -414,18 +413,39 @@ fn unmock_simple() {
 
     assert_eq!(
         "ab",
-        mock([Spyable__concat::stub(|each| {
-            each.call(matching!("a", "b")).unmocked().once();
-        })])
-        .concat("a".to_string(), "b".to_string())
+        spy(None).concat("a".to_string(), "b".to_string()),
+        "unmock works with empty spy"
     );
 
     assert_eq!(
         "ab",
-        mock(None)
-            .otherwise_unmock()
-            .concat("a".to_string(), "b".to_string())
+        spy(Some(Spyable__concat::stub(|each| {
+            each.call(matching!("something", "else"))
+                .panics("not matched");
+        })))
+        .concat("a".to_string(), "b".to_string()),
+        "unmock works with a spy having a stub with non-matching pattern"
     );
+
+    assert_eq!(
+        "42",
+        spy(Some(Spyable__concat::stub(|each| {
+            each.call(matching!("a", "b")).returns("42");
+        })))
+        .concat("a".to_string(), "b".to_string()),
+        "spy returns the matched pattern if overridden"
+    );
+
+    assert_eq!(
+        "ab",
+        mock([Spyable__concat::stub(|each| {
+            each.call(matching!("a", "b")).unmocked().once();
+        })])
+        .concat("a".to_string(), "b".to_string()),
+        "unmock works on a mock instance with explicit unmock setup"
+    );
+
+    assert_eq!("ab", spy([]).concat("a".to_string(), "b".to_string()));
 
     assert_panics!(
         {
@@ -479,12 +499,23 @@ async fn unmock_async() {
 
     assert_eq!(
         120,
+        spy(Some(AsyncFactorial__factorial::stub(|each| {
+            each.call(matching!((input) if *input <= 1)).returns(1u32);
+        })))
+        .factorial(5)
+        .await,
+        "works using spy"
+    );
+
+    assert_eq!(
+        120,
         mock(Some(AsyncFactorial__factorial::stub(|each| {
             each.call(matching!((input) if *input <= 1)).returns(1u32);
             each.call(matching!(_)).unmocked();
         })))
         .factorial(5)
-        .await
+        .await,
+        "works using mock"
     );
 }
 
