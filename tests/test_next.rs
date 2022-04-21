@@ -15,9 +15,9 @@ fn noarg_works() {
 
     assert_eq!(
         1_000_000,
-        mock(NoArg__no_arg, |each| {
-            each.call(matching!()).returns(1_000_000);
-        })
+        mock([NoArg__no_arg::next_call(matching!())
+            .returns(1_000_000)
+            .in_order()])
         .no_arg()
     );
 }
@@ -36,10 +36,9 @@ fn owned_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &mock(Owned__foo, |each| {
-                each.call(matching!(_, _))
-                    .answers(|(a, b)| format!("{a}{b}"));
-            }),
+            &mock([Owned__foo::next_call(matching!(_, _))
+                .answers(|(a, b)| format!("{a}{b}"))
+                .in_order()]),
             "a",
             "b",
         )
@@ -47,9 +46,9 @@ fn owned_works() {
     assert_eq!(
         "lol",
         takes_owned(
-            &mock(Owned__foo, |each| {
+            &mock([Owned__foo::stub(|each| {
                 each.call(matching!(_, _)).returns("lol");
-            }),
+            })]),
             "a",
             "b",
         )
@@ -57,9 +56,9 @@ fn owned_works() {
     assert_eq!(
         "",
         takes_owned(
-            &mock(Owned__foo, |each| {
+            &mock(Some(Owned__foo::stub(|each| {
                 each.call(matching!("a", "b")).returns_default();
-            }),
+            }))),
             "a",
             "b",
         )
@@ -81,9 +80,9 @@ fn referenced_with_static_return_value_works() {
     assert_eq!(
         "answer",
         takes_referenced(
-            &mock(Referenced__foo, |each| {
+            &mock(vec![Referenced__foo::stub(|each| {
                 each.call(matching!("a")).returns("answer");
-            }),
+            })]),
             "a",
         )
     );
@@ -94,10 +93,10 @@ fn referenced_with_default_return_value_works() {
     assert_eq!(
         "",
         takes_referenced(
-            &mock(Referenced__foo, |each| {
+            &mock([Referenced__foo::stub(|each| {
                 each.call(matching!("Æ")).panics("Should not be called");
                 each.call(matching!("a")).returns_default();
-            }),
+            })]),
             "a",
         )
     );
@@ -122,27 +121,15 @@ fn test_multiple() {
 
     assert_eq!(
         "success",
-        takes_single_multi(
-            &mock(SingleArg__method1, |each| {
+        takes_single_multi(&mock([
+            SingleArg__method1::stub(|each| {
                 each.call(matching!("b")).returns("B").once();
-            })
-            .also(MultiArg__method2, |each| {
+            }),
+            MultiArg__method2::stub(|each| {
                 each.call(matching!("a", _)).never().returns("fail");
                 each.call(matching!("B", "B")).returns("success").once();
             })
-        )
-    );
-    assert_eq!(
-        "success",
-        takes_single_multi(
-            &mock(SingleArg__method1, |each| {
-                each.call(matching!("b")).returns("B").once();
-            })
-            .also(MultiArg__method2, |each| {
-                each.call(matching!("a", _)).never().returns("fail");
-                each.call(matching!("B", "B")).returns("success").once();
-            })
-        )
+        ]))
     );
 }
 
@@ -157,10 +144,12 @@ fn should_panic_for_nonexisting_mock() {
 }
 
 #[test]
-fn should_panic_for_unused_mock() {
+fn should_panic_for_unused_stub() {
     assert_panics!(
         {
-            mock(SingleArg__method1, |_| {});
+            mock(Some(SingleArg__method1::stub(|each| {
+                each.call(matching!(_));
+            })));
         },
         includes("Mock for SingleArg::method1 was never called. Dead mocks should be removed.")
     );
@@ -170,19 +159,19 @@ fn should_panic_for_unused_mock() {
 fn should_panic_for_call_with_no_accepted_patterns() {
     assert_panics!(
         {
-            mock(SingleArg__method1, |_| {}).method1("b");
+            mock([SingleArg__method1::stub(|_| {})]).method1("b");
         },
-        includes("SingleArg::method1(_): No registered call patterns")
+        includes("SingleArg::method1(\"b\"): No registered call patterns")
     );
 }
 
 #[test]
-fn call_pattern_without_return_factory_should_crash() {
+fn call_pattern_without_output_factory_should_crash() {
     assert_panics!(
         {
-            mock(SingleArg__method1, |each| {
+            mock([SingleArg__method1::stub(|each| {
                 each.call(matching!(_));
-            })
+            })])
             .method1("whatever");
         },
         includes(
@@ -192,12 +181,12 @@ fn call_pattern_without_return_factory_should_crash() {
 }
 
 #[test]
-fn should_panic_if_no_call_patterns_are_matched() {
+fn should_panic_if_no_call_patterns_in_stub_are_matched() {
     assert_panics!(
         {
-            mock(SingleArg__method1, |each| {
+            mock([SingleArg__method1::stub(|each| {
                 each.call(matching!("something"));
-            })
+            })])
             .method1("anything");
         },
         includes("SingleArg::method1(\"anything\"): No matching call patterns.")
@@ -208,10 +197,12 @@ fn should_panic_if_no_call_patterns_are_matched() {
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     assert_panics!(
         {
-            mock(SingleArg__method1, |each| {
-                each.call(matching!("a")).once().returns_default();
-                each.call(matching!(_)).returns_default();
-            }).method1("b");
+            mock([
+                SingleArg__method1::stub(|each| {
+                    each.call(matching!("a")).once().returns_default();
+                    each.call(matching!(_)).returns_default();
+                })
+            ]).method1("b");
         },
         includes("SingleArg::method1: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
     );
@@ -221,9 +212,9 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
 fn should_panic_with_explicit_message() {
     assert_panics!(
         {
-            mock(SingleArg__method1, |each| {
+            mock([SingleArg__method1::stub(|each| {
                 each.call(matching!(_)).panics("foobar!");
-            })
+            })])
             .method1("b");
         },
         includes("foobar!")
@@ -242,10 +233,10 @@ fn primitive_mocking_without_debug() {
         fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
     }
 
-    match mock(VeryPrimitive__primitive, |each| {
-        each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
+    match mock(Some(VeryPrimitive__primitive::nodebug_stub(|each| {
+        each.call(matching!(PrimitiveEnum::Bar, _))
             .answers(|_| PrimitiveEnum::Foo);
-    })
+    })))
     .primitive(PrimitiveEnum::Bar, "")
     {
         PrimitiveEnum::Foo => {}
@@ -254,10 +245,10 @@ fn primitive_mocking_without_debug() {
 
     assert_panics!(
         {
-            mock(VeryPrimitive__primitive, |each| {
-                each.nodebug_call(matching!(PrimitiveEnum::Bar, _))
+            mock([VeryPrimitive__primitive::nodebug_stub(|each| {
+                each.call(matching!(PrimitiveEnum::Bar, _))
                     .answers(|_| PrimitiveEnum::Foo);
-            })
+            })])
             .primitive(PrimitiveEnum::Foo, "");
         },
         includes("VeryPrimitive::primitive(_, _): No matching call patterns.")
@@ -277,19 +268,22 @@ fn borrowing_with_memory_leak() {
     assert_eq!(
         "foo",
         get_str(
-            &mock(Borrowing__borrow, |each| {
-                each.call(matching!(_)).returns_leak("foo");
-            }),
+            &mock(Some(
+                Borrowing__borrow::next_call(matching!(_))
+                    .returns_leak("foo")
+                    .in_order()
+            )),
             ""
         )
     );
     assert_eq!(
         "yoyo",
         get_str(
-            &mock(Borrowing__borrow, |each| {
-                each.call(matching!(_))
-                    .answers_leak(|input| format!("{input}{input}"));
-            }),
+            &mock(Some(
+                Borrowing__borrow::next_call(matching!(_))
+                    .answers_leak(|input| format!("{input}{input}"))
+                    .in_order()
+            )),
             "yo"
         )
     );
@@ -305,7 +299,7 @@ trait WithModule {
 #[test]
 fn test_with_module() {
     assert_panics!({
-        let _ = mock(with_module::Funk, |_| {});
+        let _ = mock(Some(with_module::Funk::next_call(matching!(_)).in_order()));
     });
 }
 
@@ -324,9 +318,9 @@ async fn test_async_trait() {
     assert_eq!(
         "42",
         takes_async(
-            &mock(Async__func, |each| {
+            &mock(Some(Async__func::stub(|each| {
                 each.call(matching!(_)).returns("42");
-            })
+            })))
             .otherwise_unmock(),
             21
         )
@@ -350,9 +344,9 @@ fn test_cow() {
     assert_eq!(
         "output",
         takes(
-            &mock(CowBased__func, |each| {
+            &mock(Some(CowBased__func::stub(|each| {
                 each.call(matching!(("input") | ("foo"))).returns("output");
-            }),
+            }))),
             "input".into()
         )
     )
@@ -385,9 +379,9 @@ fn newtype() {
     }
 
     let _ = takes(
-        &mock(NewtypeString__func, |each| {
-            each.nodebug_call(matching!("input")).returns("output");
-        }),
+        &mock(Some(NewtypeString__func::nodebug_stub(|each| {
+            each.call(matching!("input")).returns("output");
+        }))),
         "input".into(),
     );
 }
@@ -407,11 +401,16 @@ fn unmock_simple() {
         format!("{a}{b}")
     }
 
+    #[unimock]
+    trait Dummy {
+        fn dummy(&self);
+    }
+
     assert_eq!(
         "ab",
-        mock(Spyable__concat, |each| {
+        mock([Spyable__concat::stub(|each| {
             each.call(matching!("a", "b")).once().unmock();
-        })
+        })])
         .concat("a".to_string(), "b".to_string())
     );
 
@@ -424,11 +423,16 @@ fn unmock_simple() {
 
     assert_panics!(
         {
-            let unimock = mock(Spyable__concat, |each| {
-                each.call(matching!("", "")).returns("foobar").once();
-                each.call(matching!(_, _)).unmock();
-            });
-            assert_eq!("ab", unimock.concat("a".to_string(), "b".to_string()));
+            assert_eq!(
+                "ab",
+                mock([
+                    Spyable__concat::stub(|each| {
+                        each.call(matching!("", "")).returns("foobar").once();
+                        each.call(matching!(_)).unmock();
+                    }),
+                ])
+                .concat("a".to_string(), "b".to_string())
+            );
         },
         includes("Spyable::concat: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.")
     );
@@ -447,10 +451,10 @@ fn unmock_recursion() {
 
     assert_eq!(
         120,
-        mock(Factorial__factorial, |each| {
+        mock([Factorial__factorial::stub(|each| {
             each.call(matching!((input) if *input <= 1)).returns(1u32);
             each.call(matching!(_)).unmock();
-        })
+        })])
         .factorial(5)
     );
 }
@@ -469,10 +473,10 @@ async fn unmock_async() {
 
     assert_eq!(
         120,
-        mock(AsyncFactorial__factorial, |each| {
+        mock(Some(AsyncFactorial__factorial::stub(|each| {
             each.call(matching!((input) if *input <= 1)).returns(1u32);
             each.call(matching!(_)).unmock();
-        })
+        })))
         .factorial(5)
         .await
     );
@@ -493,8 +497,8 @@ fn intricate_lifetimes() {
         i.foo(&I(std::marker::PhantomData));
     }
 
-    takes_intricate(&mock(Intricate__foo, |each| {
-        each.nodebug_call(|_| true)
+    takes_intricate(&mock([Intricate__foo::nodebug_stub(|each| {
+        each.call(matching!(_))
             .returns_leak(O("foobar".to_string().leak()));
-    }));
+    })]));
 }

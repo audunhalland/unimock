@@ -207,32 +207,10 @@ impl Unimock {
         }
     }
 
-    /// Extend this instance with a mock of another [MockFn].
-    pub fn also<F: MockFn + 'static>(
-        mut self,
-        _: F,
-        setup: impl FnOnce(&mut builders::Each<F>),
-    ) -> Unimock {
-        let mut each = builders::Each::new();
-        setup(&mut each);
-
-        self.impls
-            .insert(TypeId::of::<F>(), mock::DynImpl::from_each(each));
-        self
-    }
-
     /// Change unregistered [MockFn] fallback behaviour from explicitly panicking to trying to unmock them.
     pub fn otherwise_unmock(mut self) -> Unimock {
         self.fallback_mode = FallbackMode::Unmock;
         self
-    }
-
-    pub(crate) fn with_single_mock(type_id: TypeId, dyn_impl: mock::DynImpl) -> Unimock {
-        Self {
-            fallback_mode: FallbackMode::Error,
-            impls: [(type_id, dyn_impl)].into(),
-            has_panicked: AtomicBool::new(false),
-        }
     }
 
     /// Perform function-application against some [MockFn].
@@ -300,7 +278,7 @@ impl Drop for Unimock {
 /// /* impl MockFn for Mockable_method ... */
 /// ```
 ///
-pub trait MockFn: Sized {
+pub trait MockFn: Sized + 'static {
     /// The inputs to the function.
     type Inputs<'i>;
 
@@ -312,6 +290,41 @@ pub trait MockFn: Sized {
 
     /// The name to use for runtime errors.
     const NAME: &'static str;
+
+    fn stub<'c, S>(setup: S) -> builders::Clause
+    where
+        for<'i> Self::Inputs<'i>: std::fmt::Debug,
+        S: FnOnce(&mut builders::GroupEach<Self>) + 'c,
+    {
+        let mut group_each = builders::GroupEach::new(mock::InputDebugger::new_debug());
+        setup(&mut group_each);
+        group_each.to_clause()
+    }
+
+    fn nodebug_stub<'c, S>(setup: S) -> builders::Clause
+    where
+        S: FnOnce(&mut builders::GroupEach<Self>) + 'c,
+    {
+        let mut group_each = builders::GroupEach::new(mock::InputDebugger::new_nodebug());
+        setup(&mut group_each);
+        group_each.to_clause()
+    }
+
+    fn next_call<'c, M>(matching: M) -> builders::MatchedCall<'c, Self>
+    where
+        for<'i> Self::Inputs<'i>: std::fmt::Debug,
+        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + 'static,
+    {
+        let mut mock_impl =
+            mock::TypedMockImpl::<Self>::with_input_debugger(mock::InputDebugger::new_debug());
+        mock_impl.patterns.push(mock::CallPattern {
+            input_matcher: Box::new(matching),
+            call_counter: counter::CallCounter::default(),
+            responder: mock::Responder::Error,
+        });
+
+        builders::MatchedCall::new_standalone(mock_impl)
+    }
 }
 
 /// [MockFn] that can "unmock" into a single "true" implementation.
@@ -371,11 +384,22 @@ pub trait MockFn: Sized {
 ///
 pub trait Unmock: MockFn {}
 
-/// Mock a single [MockFn].
-pub fn mock<F: MockFn + 'static>(_: F, setup: impl FnOnce(&mut builders::Each<F>)) -> Unimock {
-    let mut each = builders::Each::new();
-    setup(&mut each);
-    Unimock::with_single_mock(TypeId::of::<F>(), mock::DynImpl::from_each(each))
+pub fn mock<I>(clauses: I) -> Unimock
+where
+    I: IntoIterator<Item = builders::Clause>,
+{
+    let mut impls = HashMap::new();
+
+    for clause in clauses.into_iter() {
+        let mut dyn_impl = clause.dyn_impl;
+        dyn_impl.0.assemble_into(&mut impls);
+    }
+
+    Unimock {
+        fallback_mode: FallbackMode::Error,
+        impls,
+        has_panicked: AtomicBool::new(false),
+    }
 }
 
 /// The outcome of an api application/call on a mock object.

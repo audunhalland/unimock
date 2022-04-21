@@ -7,6 +7,12 @@ pub(crate) struct CallCounter {
     expectation: CountExpectation,
 }
 
+impl Default for CallCounter {
+    fn default() -> Self {
+        CallCounter::new(CountExpectation::None)
+    }
+}
+
 impl CallCounter {
     pub fn new(expectation: CountExpectation) -> Self {
         Self {

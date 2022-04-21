@@ -1,22 +1,16 @@
 use crate::error::MockError;
 use crate::*;
 
-use std::any::Any;
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 
 pub(crate) struct DynImpl(pub Box<dyn TypeErasedMockImpl + Send + Sync + 'static>);
 
-impl DynImpl {
-    pub(crate) fn from_each<F: MockFn + 'static>(each: builders::Each<F>) -> DynImpl {
-        DynImpl(Box::new(TypedMockImpl {
-            patterns: each.patterns,
-            input_debugger: each.input_debugger,
-            has_applications: AtomicBool::new(false),
-        }))
-    }
-}
-
 pub(crate) trait TypeErasedMockImpl: Any {
     fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn assemble_into(&mut self, target: &mut HashMap<TypeId, DynImpl>);
 
     fn verify(&self, errors: &mut Vec<MockError>);
 }
@@ -49,7 +43,7 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
                 });
             }
 
-            for pattern in mock_impl.patterns.iter() {
+            for (pat_index, pattern) in mock_impl.patterns.iter().enumerate() {
                 if !(*pattern.input_matcher)(&inputs) {
                     continue;
                 }
@@ -62,7 +56,7 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
                     Responder::Error => Err(MockError::NoOutputAvailableForCallPattern {
                         name: F::NAME,
                         inputs_debug: mock_impl.debug_inputs(&inputs),
-                        pat_index: pattern.pat_index,
+                        pat_index,
                     }),
                 };
             }
@@ -76,12 +70,20 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
 }
 
 pub(crate) struct TypedMockImpl<F: MockFn> {
-    patterns: Vec<CallPattern<F>>,
-    input_debugger: InputDebugger<F>,
-    has_applications: AtomicBool,
+    pub input_debugger: InputDebugger<F>,
+    pub patterns: Vec<CallPattern<F>>,
+    pub has_applications: AtomicBool,
 }
 
 impl<F: MockFn> TypedMockImpl<F> {
+    pub fn with_input_debugger(input_debugger: InputDebugger<F>) -> Self {
+        Self {
+            input_debugger,
+            patterns: vec![],
+            has_applications: AtomicBool::new(false),
+        }
+    }
+
     fn debug_inputs<'i>(&self, inputs: &F::Inputs<'i>) -> String {
         self.input_debugger
             .debug_input_as_tuple(inputs, F::N_INPUTS)
@@ -93,11 +95,31 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn assemble_into(&mut self, target: &mut HashMap<TypeId, DynImpl>) {
+        let stored_dyn = target.entry(TypeId::of::<F>()).or_insert_with(|| {
+            DynImpl(Box::new(Self::with_input_debugger(
+                InputDebugger::new_nodebug(),
+            )))
+        });
+        let stored_typed = stored_dyn
+            .0
+            .as_any_mut()
+            .downcast_mut::<TypedMockImpl<F>>()
+            .unwrap();
+
+        stored_typed.patterns.append(&mut self.patterns);
+        stored_typed
+            .input_debugger
+            .steal_debug_if_necessary(&mut self.input_debugger);
+    }
+
     fn verify(&self, errors: &mut Vec<MockError>) {
-        for pattern in self.patterns.iter() {
-            pattern
-                .call_counter
-                .verify(F::NAME, pattern.pat_index, errors);
+        for (pat_index, pattern) in self.patterns.iter().enumerate() {
+            pattern.call_counter.verify(F::NAME, pat_index, errors);
         }
 
         if !self
@@ -110,7 +132,6 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
 }
 
 pub(crate) struct CallPattern<F: MockFn> {
-    pub pat_index: usize,
     pub input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
     pub call_counter: counter::CallCounter,
     pub responder: Responder<F>,
@@ -123,16 +144,31 @@ pub(crate) enum Responder<F: MockFn> {
 }
 
 pub(crate) struct InputDebugger<F: MockFn> {
-    pub func: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> String) + Send + Sync>>,
+    pub debug_func: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> String) + Send + Sync>>,
 }
 
 impl<F: MockFn> InputDebugger<F> {
-    pub fn new() -> Self {
-        Self { func: None }
+    pub fn new_nodebug() -> Self {
+        Self { debug_func: None }
+    }
+
+    pub fn new_debug() -> Self
+    where
+        for<'i> F::Inputs<'i>: std::fmt::Debug,
+    {
+        Self {
+            debug_func: Some(Box::new(|args| format!("{:?}", args))),
+        }
+    }
+
+    pub fn steal_debug_if_necessary(&mut self, other: &mut InputDebugger<F>) {
+        if self.debug_func.is_none() {
+            self.debug_func = other.debug_func.take()
+        }
     }
 
     pub fn debug_input_as_tuple<'i>(&self, inputs: &F::Inputs<'i>, n_args: u8) -> String {
-        if let Some(func) = self.func.as_ref() {
+        if let Some(func) = self.debug_func.as_ref() {
             let debug = func(inputs);
             match n_args {
                 1 => format!("({})", debug),
