@@ -18,6 +18,7 @@ fn noarg_works() {
         1_000_000,
         mock([NoArg__no_arg::next_call(matching!())
             .returns(1_000_000)
+            .once()
             .in_order()])
         .no_arg()
     );
@@ -40,6 +41,7 @@ fn owned_works() {
             &mock(Some(
                 Owned__foo::next_call(matching!(_, _))
                     .answers(|(a, b)| format!("{a}{b}"))
+                    .once()
                     .in_order()
             )),
             "a",
@@ -186,6 +188,7 @@ fn borrowing_with_memory_leak() {
             &mock(Some(
                 Borrowing__borrow::next_call(matching!(_))
                     .returns_leak("foo")
+                    .once()
                     .in_order()
             )),
             ""
@@ -197,6 +200,7 @@ fn borrowing_with_memory_leak() {
             &mock(Some(
                 Borrowing__borrow::next_call(matching!(_))
                     .answers_leak(|input| format!("{input}{input}"))
+                    .once()
                     .in_order()
             )),
             "yo"
@@ -217,6 +221,7 @@ fn test_with_module() {
         let _ = mock(Some(
             with_module::Funk::next_call(matching!(_))
                 .returns_leak(MyType)
+                .once()
                 .in_order(),
         ));
     });

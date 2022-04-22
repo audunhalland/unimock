@@ -28,7 +28,7 @@ where
     /// The new call pattern will be matched after any previously defined call patterns on the same [Each] instance.
     ///
     /// The method returns a [ResponseBuilder], which is used to define how unimock responds to the matched call.
-    pub fn call<'c, M>(&'c mut self, matching: M) -> ResponseBuilder<'c, F>
+    pub fn call<'c, M>(&'c mut self, matching: M) -> DefineOutput<'c, F>
     where
         M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
@@ -49,14 +49,14 @@ where
 fn borrow_new_matched_call_mut<'a, F: MockFn + 'static>(
     mock_impl: &'a mut TypedMockImpl<F>,
     input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
-) -> ResponseBuilder<'a, F> {
+) -> DefineOutput<'a, F> {
     mock_impl.patterns.push(mock::CallPattern {
         input_matcher,
         call_counter: counter::CallCounter::new(counter::CountExpectation::None),
         responder: mock::Responder::Error,
     });
 
-    ResponseBuilder {
+    DefineOutput {
         pattern: PatternWrapper::Grouped(mock_impl.patterns.last_mut().unwrap()),
     }
 }
@@ -76,18 +76,18 @@ impl<'p, F: MockFn> PatternWrapper<'p, F> {
 }
 
 /// A builder for setting up the response for a matched call pattern.
-pub struct ResponseBuilder<'p, F: MockFn> {
+pub struct DefineOutput<'p, F: MockFn> {
     pattern: PatternWrapper<'p, F>,
 }
 
-impl<'p, F> ResponseBuilder<'p, F>
+impl<'p, F> DefineOutput<'p, F>
 where
     F: MockFn + 'static,
 {
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement [Clone] and cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
-    pub fn returns(mut self, value: impl Into<F::Output>) -> VerificationBuilder<'p, F>
+    pub fn returns(mut self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F>
     where
         F::Output: Send + Sync + Clone + RefUnwindSafe + 'static,
     {
@@ -98,7 +98,7 @@ where
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
-    pub fn returns_default(mut self) -> VerificationBuilder<'p, F>
+    pub fn returns_default(mut self) -> QuantifyResponse<'p, F>
     where
         F::Output: Default,
     {
@@ -109,7 +109,7 @@ where
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters.
-    pub fn answers<A, R>(mut self, func: A) -> VerificationBuilder<'p, F>
+    pub fn answers<A, R>(mut self, func: A) -> QuantifyResponse<'p, F>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<F::Output>,
@@ -121,7 +121,7 @@ where
 
     /// Specify the output of the call pattern to be a static reference to the
     /// passed owned value, by leaking its memory. This version leaks the value once.
-    pub fn returns_leak<T>(mut self, value: impl Into<T>) -> VerificationBuilder<'p, F>
+    pub fn returns_leak<T>(mut self, value: impl Into<T>) -> QuantifyResponse<'p, F>
     where
         F::Output: Send + Sync + RefUnwindSafe + Copy + LeakInto<Owned = T> + 'static,
     {
@@ -134,7 +134,7 @@ where
     /// can then compute it based on input parameters, then create a static reference
     /// to it by leaking. Note that this version will produce a new memory leak for
     /// _every invocation_ of the answer function.
-    pub fn answers_leak<A, R, O>(mut self, func: A) -> VerificationBuilder<'p, F>
+    pub fn answers_leak<A, R, O>(mut self, func: A) -> QuantifyResponse<'p, F>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<O>,
@@ -148,7 +148,7 @@ where
     }
 
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
-    pub fn panics(mut self, message: impl Into<String>) -> VerificationBuilder<'p, F> {
+    pub fn panics(mut self, message: impl Into<String>) -> QuantifyResponse<'p, F> {
         let message = message.into();
         self.pattern.get_mut().responder =
             mock::Responder::Closure(Box::new(move |_| panic!("{}", message)));
@@ -156,7 +156,7 @@ where
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
-    pub fn unmocked(mut self) -> VerificationBuilder<'p, F>
+    pub fn unmocked(mut self) -> QuantifyResponse<'p, F>
     where
         F: Unmock,
     {
@@ -174,50 +174,97 @@ where
         }
     }
 
-    fn next_state(self) -> VerificationBuilder<'p, F> {
-        VerificationBuilder {
+    fn next_state(self) -> QuantifyResponse<'p, F> {
+        QuantifyResponse {
             pattern: self.pattern,
         }
     }
 }
 
 /// Builder for defining how a call pattern gets verified.
-pub struct VerificationBuilder<'p, F: MockFn> {
+pub struct QuantifyResponse<'p, F: MockFn> {
     pattern: PatternWrapper<'p, F>,
 }
 
-impl<'p, F> VerificationBuilder<'p, F>
+impl<'p, F> QuantifyResponse<'p, F>
 where
     F: MockFn + 'static,
 {
     /// Expect this call pattern to be called exactly once.
-    pub fn once(mut self) -> Self {
+    pub fn once(mut self) -> ExactlyQuantifiedResponse<'p, F> {
         self.pattern
             .get_mut()
             .call_counter
             .set_expectation(CountExpectation::Exactly(1));
-        self
+        self.into_exact()
     }
 
     /// Expect this call pattern to be called exactly the specified number of times.
-    pub fn exactly(mut self, times: usize) -> Self {
+    pub fn exactly(mut self, times: usize) -> ExactlyQuantifiedResponse<'p, F> {
         self.pattern
             .get_mut()
             .call_counter
             .set_expectation(CountExpectation::Exactly(times));
-        self
+        self.into_exact()
     }
 
     /// Expect this call pattern to be called at least the specified number of times.
-    pub fn at_least(mut self, times: usize) -> Self {
+    pub fn at_least(mut self, times: usize) {
         self.pattern
             .get_mut()
             .call_counter
             .set_expectation(CountExpectation::AtLeast(times));
-        self
     }
 
-    /// Expect the call to happen in the same order that the resulting clause appears in the list of clauses.
+    fn into_exact(self) -> ExactlyQuantifiedResponse<'p, F> {
+        ExactlyQuantifiedResponse {
+            pattern: self.pattern,
+        }
+    }
+}
+
+/// End of response definition
+pub struct ExactlyQuantifiedResponse<'p, F: MockFn> {
+    pattern: PatternWrapper<'p, F>,
+}
+
+impl<'p, F> ExactlyQuantifiedResponse<'p, F>
+where
+    F: MockFn + 'static,
+{
+    /// After a response has been exactly quantified, prepare to define a new output
+    /// that will be returned after the quantification has been met.
+    pub fn then(self) -> DefineOutput<'p, F> {
+        DefineOutput {
+            pattern: self.pattern,
+        }
+    }
+
+    /// Turn this _exactly quantified_ definition into a [Clause] expectation, that can be included
+    /// in a sequence of ordered clauses that specify calls to different functions
+    /// that must be called in the exact order specified.
+    ///
+    /// # Example
+    /// ```rust
+    /// # #![feature(generic_associated_types)]
+    /// use unimock::*;
+    ///
+    /// #[unimock]
+    /// trait Trait {
+    ///     fn method(&self, arg: i32) -> &'static str;
+    /// }
+    ///
+    /// let m = mock([
+    ///     // the first call MUST be method(1) and it will return "a"
+    ///     Trait__method::next_call!(matching!(1)).returns("a").once().in_order(),
+    ///     // the second call MUST be method(1) and it will return "b"
+    ///     Trait__method::next_call!(matching!(2)).returns("b").once().in_order(),
+    ///     // there may be no more calls to this mock, as it has no stubs in it
+    /// ]);
+    ///
+    /// assert_eq!("a", m.method(1));
+    /// assert_eq!("b", m.method(2));
+    /// ```
     pub fn in_order(self) -> Clause {
         match self.pattern {
             PatternWrapper::Standalone(mock_impl) => {

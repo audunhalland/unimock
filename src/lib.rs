@@ -350,12 +350,12 @@ pub trait MockFn: Sized + 'static {
         each.to_clause()
     }
 
-    fn next_call<'c, M>(matching: M) -> build::ResponseBuilder<'c, Self>
+    fn next_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
-        build::ResponseBuilder::new_standalone(mock::TypedMockImpl::new_standalone(
+        build::DefineOutput::new_standalone(mock::TypedMockImpl::new_standalone(
             mock::InputDebugger::new_debug(),
             Box::new(matching),
         ))
