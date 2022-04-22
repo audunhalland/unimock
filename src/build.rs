@@ -7,11 +7,7 @@ use crate::*;
 
 /// A program clause for mock construction.
 #[must_use]
-pub struct Clause(pub(crate) ClauseKind);
-
-pub(crate) enum ClauseKind {
-    Stub(mock::DynImpl),
-}
+pub struct Clause(pub(crate) mock::DynImpl);
 
 /// Builder for defining a series of cascading call patterns
 /// on a specific [MockFn].
@@ -35,14 +31,17 @@ where
         borrow_new_matched_call_mut(&mut self.mock_impl, Box::new(matching))
     }
 
-    pub(crate) fn new(input_debugger: mock::InputDebugger<F>) -> Self {
+    pub(crate) fn new_stub(input_debugger: mock::InputDebugger<F>) -> Self {
         Self {
-            mock_impl: mock::TypedMockImpl::with_input_debugger(input_debugger),
+            mock_impl: mock::TypedMockImpl::with_input_debugger(
+                input_debugger,
+                mock::MockImplKind::Stub,
+            ),
         }
     }
 
     pub(crate) fn to_clause(self) -> Clause {
-        Clause(ClauseKind::Stub(mock::DynImpl(Box::new(self.mock_impl))))
+        Clause(mock::DynImpl(Box::new(self.mock_impl)))
     }
 }
 
@@ -52,7 +51,8 @@ fn borrow_new_matched_call_mut<'a, F: MockFn + 'static>(
 ) -> DefineOutput<'a, F> {
     mock_impl.patterns.push(mock::CallPattern {
         input_matcher,
-        call_counter: counter::CallCounter::new(counter::CountExpectation::None),
+        call_index_range: Default::default(),
+        call_counter: counter::CallCounter::new(counter::CountExpectation::AtLeast(0)),
         responder: mock::Responder::Error,
     });
 
@@ -267,9 +267,7 @@ where
     /// ```
     pub fn in_order(self) -> Clause {
         match self.pattern {
-            PatternWrapper::Standalone(mock_impl) => {
-                Clause(ClauseKind::Stub(mock::DynImpl(Box::new(mock_impl))))
-            }
+            PatternWrapper::Standalone(mock_impl) => Clause(mock::DynImpl(Box::new(mock_impl))),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }

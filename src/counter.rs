@@ -9,7 +9,7 @@ pub(crate) struct CallCounter {
 
 impl Default for CallCounter {
     fn default() -> Self {
-        CallCounter::new(CountExpectation::None)
+        CallCounter::new(CountExpectation::AtLeast(0))
     }
 }
 
@@ -25,16 +25,22 @@ impl CallCounter {
         self.expectation = expectation;
     }
 
+    pub fn get_expected_exact_count(&self) -> Option<usize> {
+        match self.expectation {
+            CountExpectation::Exactly(count) => Some(count),
+            CountExpectation::AtLeast(_) => None,
+        }
+    }
+
     pub fn tick(&self) {
         self.actual_count
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn verify(&self, name: &'static str, pat_index: usize, errors: &mut Vec<MockError>) {
-        let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::Relaxed));
+        let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::SeqCst));
 
         match self.expectation {
-            CountExpectation::None => {}
             CountExpectation::Exactly(target) => {
                 if actual_calls.0 != target {
                     let target_calls = NCalls(target);
@@ -52,7 +58,6 @@ impl CallCounter {
 }
 
 pub(crate) enum CountExpectation {
-    None,
     Exactly(usize),
     AtLeast(usize),
 }

@@ -66,7 +66,7 @@ mod mock;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::panic::RefUnwindSafe;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
 ///
@@ -188,6 +188,7 @@ pub struct Unimock {
 
 struct SharedState {
     impls: HashMap<TypeId, mock::DynImpl>,
+    next_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
 
@@ -198,6 +199,7 @@ impl Unimock {
         match mock::eval::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
+            &self.state.next_call_index,
             self.fallback_mode,
         ) {
             Ok(macro_api::ConditionalEval::Yes(output)) => output,
@@ -221,6 +223,7 @@ impl Unimock {
         match mock::eval(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
+            &self.state.next_call_index,
             self.fallback_mode,
         ) {
             Ok(evaluated) => evaluated,
@@ -341,7 +344,7 @@ pub trait MockFn: Sized + 'static {
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         S: FnOnce(&mut build::Each<Self>) + 'c,
     {
-        let mut each = build::Each::new(mock::InputDebugger::new_debug());
+        let mut each = build::Each::new_stub(mock::InputDebugger::new_debug());
         setup(&mut each);
         each.to_clause()
     }
@@ -350,7 +353,7 @@ pub trait MockFn: Sized + 'static {
     where
         S: FnOnce(&mut build::Each<Self>) + 'c,
     {
-        let mut each = build::Each::new(mock::InputDebugger::new_nodebug());
+        let mut each = build::Each::new_stub(mock::InputDebugger::new_nodebug());
         setup(&mut each);
         each.to_clause()
     }
@@ -366,7 +369,7 @@ pub trait MockFn: Sized + 'static {
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
-        build::DefineOutput::new_standalone(mock::TypedMockImpl::new_standalone(
+        build::DefineOutput::new_standalone(mock::TypedMockImpl::new_standalone_mock(
             mock::InputDebugger::new_debug(),
             Box::new(matching),
         ))
@@ -457,13 +460,12 @@ fn mock_from_iterator(
     clause_iterator: &mut dyn Iterator<Item = build::Clause>,
     fallback_mode: FallbackMode,
 ) -> Unimock {
-    let mut impls = HashMap::new();
+    let mut assembler = mock::MockAssembler::new();
 
-    for clause in clause_iterator {
-        match clause.0 {
-            build::ClauseKind::Stub(mut dyn_impl) => {
-                dyn_impl.0.assemble_into(&mut impls);
-            }
+    for build::Clause(mut dyn_impl) in clause_iterator {
+        match dyn_impl.0.assemble_into(&mut assembler) {
+            Ok(_) => {}
+            Err(error) => panic!("{}", error.to_string()),
         }
     }
 
@@ -471,7 +473,8 @@ fn mock_from_iterator(
         fallback_mode,
         original_instance: true,
         state: Arc::new(SharedState {
-            impls,
+            impls: assembler.impls,
+            next_call_index: AtomicUsize::new(0),
             panic_reasons: Mutex::new(vec![]),
         }),
     }
