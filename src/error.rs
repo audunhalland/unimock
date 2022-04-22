@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub enum MockError {
     Downcast {
         name: &'static str,
@@ -28,11 +29,7 @@ pub enum MockError {
 }
 
 impl MockError {
-    pub fn panic<T>(&self) -> T {
-        panic!("{}", self.to_string())
-    }
-
-    pub(crate) fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             MockError::Downcast { name } => {
                 format!("Fatal: Failed to downcast for {name}")

@@ -55,15 +55,14 @@
 /// Types for used for building and defining mock behaviour.
 pub mod build;
 
-/// Things that can go wrong.
-pub mod error;
-
 mod counter;
+mod error;
 mod mock;
 
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
@@ -178,44 +177,99 @@ enum FallbackMode {
 /// the traits that it implements.
 pub struct Unimock {
     fallback_mode: FallbackMode,
+    original_instance: bool,
+    state: Arc<SharedState>,
+}
+
+struct SharedState {
     impls: HashMap<TypeId, mock::DynImpl>,
-    has_panicked: AtomicBool,
+    panic_reason: Mutex<Option<error::MockError>>,
 }
 
 // TODO: Should implement Clone using Arc for data.
 // When the _original_ gets dropped, it should verify that there are no copies left alive.
 
 impl Unimock {
-    /// Perform function application against some [MockFn].
-    pub fn apply<'i, F: MockFn + 'static>(&'i self, inputs: F::Inputs<'i>) -> Outcome<'i, F> {
-        match mock::apply(
-            self.impls.get(&TypeId::of::<F>()),
+    /// Evaluate a [MockFn] given some inputs, to produce its output.
+    /// Any failure will result in panic.
+    pub fn eval<'i, F: MockFn + 'static>(&'i self, inputs: F::Inputs<'i>) -> F::Output {
+        match mock::eval::<F>(
+            self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             self.fallback_mode,
         ) {
-            Ok(outcome) => outcome,
-            Err(mock_error) => panic!("{}", self.panic_msg(mock_error)),
+            Ok(ConditionalEval::Yes(output)) => output,
+            Ok(ConditionalEval::No(_)) => panic!(
+                "{}",
+                self.prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
+            ),
+            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
     }
 
-    fn panic_msg(&self, error: error::MockError) -> String {
+    /// Conditionally evaluate a [MockFn] given some inputs.
+    /// Unimock conditionally evaluates it based on internal state.
+    /// There are two outcomes, either it is evaluated producing outputs,
+    /// or it stays unevaluated and returns its inputs back to the caller,
+    /// with the intention of the caller then _unmocking_ the call.
+    pub fn conditional_eval<'i, F: MockFn + 'static>(
+        &'i self,
+        inputs: F::Inputs<'i>,
+    ) -> ConditionalEval<'i, F> {
+        match mock::eval(
+            self.state.impls.get(&TypeId::of::<F>()),
+            inputs,
+            self.fallback_mode,
+        ) {
+            Ok(evaluated) => evaluated,
+            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
+        }
+    }
+
+    fn prepare_panic(&self, error: error::MockError) -> String {
         let msg = error.to_string();
-        self.has_panicked
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+
+        let mut panic_reason = self.state.panic_reason.lock().unwrap();
+        if panic_reason.is_none() {
+            *panic_reason = Some(error.clone());
+        }
+
         msg
+    }
+}
+
+impl Clone for Unimock {
+    fn clone(&self) -> Unimock {
+        Unimock {
+            fallback_mode: self.fallback_mode,
+            original_instance: false,
+            state: self.state.clone(),
+        }
     }
 }
 
 impl Drop for Unimock {
     fn drop(&mut self) {
-        // skip verification if panic already occured.
-        if self.has_panicked.load(std::sync::atomic::Ordering::Relaxed) || std::thread::panicking()
-        {
+        // skip verification if not the original instance.
+        if !self.original_instance {
             return;
         }
 
+        // skip verification if already panicking in the original thread.
+        if std::thread::panicking() {
+            return;
+        }
+
+        // if already panicked, it must be in another thread. Forward that panic.
+        {
+            let mut panic_reason = self.state.panic_reason.lock().unwrap();
+            if let Some(panic_reason) = panic_reason.take() {
+                panic!("{}", panic_reason.to_string());
+            }
+        }
+
         let mut mock_errors = Vec::new();
-        for (_, dyn_impl) in self.impls.iter() {
+        for (_, dyn_impl) in self.state.impls.iter() {
             dyn_impl.0.verify(&mut mock_errors);
         }
 
@@ -394,18 +448,23 @@ fn mock_from_iterator(
 
     Unimock {
         fallback_mode,
-        impls,
-        has_panicked: AtomicBool::new(false),
+        original_instance: true,
+        state: Arc::new(SharedState {
+            impls,
+            panic_reason: Mutex::new(None),
+        }),
     }
 }
 
-/// The outcome of an api application/call on a mock object.
-pub enum Outcome<'i, F: MockFn> {
-    /// The mock evaluated the call and produced an output.
-    Evaluated(F::Output),
-    /// The mock only matched the inputs, and registered that fact.
-    /// How to produce the output is left to the caller.
-    Unmock(F::Inputs<'i>),
+/// The conditional evaluation result of a [MockFn].
+///
+/// Used to tell trait implementations whether to do perform their own
+/// evaluation of a call.
+pub enum ConditionalEval<'i, F: MockFn> {
+    /// Function evaluated to its output.
+    Yes(F::Output),
+    /// Function not yet evaluated.
+    No(F::Inputs<'i>),
 }
 
 /// Conveniently leak some value to produce a static reference.

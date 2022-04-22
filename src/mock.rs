@@ -15,15 +15,15 @@ pub(crate) trait TypeErasedMockImpl: Any {
     fn verify(&self, errors: &mut Vec<MockError>);
 }
 
-pub(crate) fn apply<'i, F: MockFn + 'static>(
+pub(crate) fn eval<'i, F: MockFn + 'static>(
     dyn_impl: Option<&'i DynImpl>,
     inputs: F::Inputs<'i>,
     fallback_mode: FallbackMode,
-) -> Result<Outcome<'i, F>, MockError> {
+) -> Result<ConditionalEval<'i, F>, MockError> {
     match dyn_impl {
         None => match fallback_mode {
             FallbackMode::Error => Err(MockError::NoMockImplementation { name: F::NAME }),
-            FallbackMode::Unmock => Ok(Outcome::Unmock(inputs)),
+            FallbackMode::Unmock => Ok(ConditionalEval::No(inputs)),
         },
         Some(dyn_impl) => {
             let mock_impl = dyn_impl
@@ -51,8 +51,8 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
                 pattern.call_counter.tick();
 
                 return match &pattern.responder {
-                    Responder::Closure(closure) => Ok(Outcome::Evaluated(closure(inputs))),
-                    Responder::Unmock => Ok(Outcome::Unmock(inputs)),
+                    Responder::Closure(closure) => Ok(ConditionalEval::Yes(closure(inputs))),
+                    Responder::Unmock => Ok(ConditionalEval::No(inputs)),
                     Responder::Error => Err(MockError::NoOutputAvailableForCallPattern {
                         name: F::NAME,
                         inputs_debug: mock_impl.debug_inputs(&inputs),
@@ -66,7 +66,7 @@ pub(crate) fn apply<'i, F: MockFn + 'static>(
                     name: F::NAME,
                     inputs_debug: mock_impl.debug_inputs(&inputs),
                 }),
-                FallbackMode::Unmock => Ok(Outcome::Unmock(inputs)),
+                FallbackMode::Unmock => Ok(ConditionalEval::No(inputs)),
             }
         }
     }

@@ -331,25 +331,21 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         })
         .collect::<Vec<_>>();
 
-    let unmock_pat = if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
+    if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
         let opt_dot_await = sig.asyncness.map(|_| quote! { .await });
 
         quote! {
-            ::unimock::Outcome::Unmock((#(#parameters),*)) => #unmock_path(self, #(#parameters),*) #opt_dot_await
+            #sig {
+                match self.conditional_eval::<#mock_fn_path>((#(#parameters),*)) {
+                    ::unimock::ConditionalEval::Yes(output) => output,
+                    ::unimock::ConditionalEval::No((#(#parameters),*)) => #unmock_path(self, #(#parameters),*) #opt_dot_await
+                }
+            }
         }
     } else {
         quote! {
-            ::unimock::Outcome::Unmock(_) => {
-                ::unimock::error::MockError::CannotUnmock { name: <#mock_fn_path as ::unimock::MockFn>::NAME }.panic()
-            }
-        }
-    };
-
-    quote! {
-        #sig {
-            match self.apply::<#mock_fn_path>((#(#parameters),*)) {
-                ::unimock::Outcome::Evaluated(output) => output,
-                #unmock_pat,
+            #sig {
+                self.eval::<#mock_fn_path>((#(#parameters),*))
             }
         }
     }
