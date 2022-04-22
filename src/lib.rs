@@ -54,6 +54,7 @@
 
 /// Types for used for building and defining mock behaviour.
 pub mod build;
+pub mod util;
 
 mod counter;
 mod error;
@@ -162,7 +163,7 @@ pub use unimock_macros::unimock;
 /// }
 /// ```
 ///
-/// Internally it works by calling [as_str_ref] on inputs matched by a string literal.
+/// Internally it works by calling [util::as_str_ref] on inputs matched by a string literal.
 pub use unimock_macros::matching;
 
 #[derive(Clone, Copy)]
@@ -207,7 +208,7 @@ impl Unimock {
 
     /// Conditionally evaluate a [MockFn] given some inputs.
     /// Unimock conditionally evaluates it based on internal state.
-    /// There are two outcomes, either it is evaluated producing outputs,
+    /// There are two outcomes, either it is evaluated producing the output,
     /// or it stays unevaluated and returns its inputs back to the caller,
     /// with the intention of the caller then _unmocking_ the call.
     pub fn conditional_eval<'i, F: MockFn + 'static>(
@@ -256,6 +257,12 @@ impl Drop for Unimock {
             return;
         }
 
+        let strong_count = Arc::strong_count(&self.state);
+
+        if strong_count > 1 {
+            panic!("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.");
+        }
+
         fn panic_if_nonempty(errors: &[error::MockError]) {
             if errors.is_empty() {
                 return;
@@ -270,14 +277,9 @@ impl Drop for Unimock {
 
         {
             // if already panicked, it must be in another thread. Forward that panic to the original thread.
+            // (if original is even still in the original thread.. But panic as close to the test "root" as possible)
             let panic_reasons = self.state.panic_reasons.lock().unwrap();
             panic_if_nonempty(&panic_reasons);
-        }
-
-        let strong_count = Arc::strong_count(&self.state);
-
-        if strong_count > 1 {
-            panic!("Unimock cannot verify calls, as the original instance got dropped while there are clones still alive.");
         }
 
         let mut mock_errors = Vec::new();
@@ -470,45 +472,4 @@ pub enum ConditionalEval<'i, F: MockFn> {
     Yes(F::Output),
     /// Function not yet evaluated.
     No(F::Inputs<'i>),
-}
-
-/// Conveniently leak some value to produce a static reference.
-pub trait Leak {
-    fn leak(self) -> &'static Self;
-}
-
-impl<T: 'static> Leak for T {
-    fn leak(self) -> &'static Self {
-        Box::leak(Box::new(self))
-    }
-}
-
-///
-/// Internal trait implemented by references that allows transforming from `&T` to `&'static T`
-/// by leaking memory.
-///
-/// The trait is implemented for all `&T`. It allows functions to refer to the non-referenced owned value `T`,
-/// and leak that.
-///
-pub trait LeakInto {
-    type Owned: 'static;
-
-    fn leak_into(value: Self::Owned) -> Self;
-}
-
-impl<T: 'static> LeakInto for &T {
-    type Owned = T;
-
-    fn leak_into(value: Self::Owned) -> Self {
-        Box::leak(Box::new(value))
-    }
-}
-
-/// Convert any type implementing `AsRef<str>` to a `&str`.
-/// Used by [matching].
-pub fn as_str_ref<T>(input: &T) -> &str
-where
-    T: AsRef<str>,
-{
-    input.as_ref()
 }

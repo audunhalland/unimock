@@ -1,5 +1,6 @@
 #![feature(generic_associated_types)]
 
+use unimock::util::Leak;
 use unimock::*;
 
 use async_trait::async_trait;

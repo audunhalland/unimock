@@ -2,6 +2,7 @@ use std::panic;
 
 use crate::counter::*;
 use crate::mock::TypedMockImpl;
+use crate::util::*;
 use crate::*;
 
 /// A program clause for mock construction.
