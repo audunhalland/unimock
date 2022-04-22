@@ -108,7 +108,7 @@ fn should_crash_when_the_original_instance_disappears_before_the_clone() {
                 clone
             };
         },
-        includes("Unimock cannot verify calls, as the original instance got dropped while there are clones still alive.")
+        includes("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.")
     )
 }
 
