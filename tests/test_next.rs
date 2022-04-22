@@ -16,7 +16,7 @@ fn noarg_works() {
 
     assert_eq!(
         1_000_000,
-        mock([NoArg__no_arg::next_call(matching!())
+        mock([NoArg__no_arg::next(matching!())
             .returns(1_000_000)
             .once()
             .in_order()])
@@ -39,7 +39,7 @@ fn owned_works() {
         "ab",
         takes_owned(
             &mock(Some(
-                Owned__foo::next_call(matching!(_, _))
+                Owned__foo::next(matching!(_, _))
                     .answers(|(a, b)| format!("{a}{b}"))
                     .once()
                     .in_order()
@@ -186,7 +186,7 @@ fn borrowing_with_memory_leak() {
         "foo",
         get_str(
             &mock(Some(
-                Borrowing__borrow::next_call(matching!(_))
+                Borrowing__borrow::next(matching!(_))
                     .returns_leak("foo")
                     .once()
                     .in_order()
@@ -198,7 +198,7 @@ fn borrowing_with_memory_leak() {
         "yoyo",
         get_str(
             &mock(Some(
-                Borrowing__borrow::next_call(matching!(_))
+                Borrowing__borrow::next(matching!(_))
                     .answers_leak(|input| format!("{input}{input}"))
                     .once()
                     .in_order()
@@ -219,7 +219,7 @@ trait WithModule {
 fn test_with_module() {
     assert_panics!({
         let _ = mock(Some(
-            with_module::Funk::next_call(matching!(_))
+            with_module::Funk::next(matching!(_))
                 .returns_leak(MyType)
                 .once()
                 .in_order(),

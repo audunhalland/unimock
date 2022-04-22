@@ -27,7 +27,7 @@ where
     ///
     /// The new call pattern will be matched after any previously defined call patterns on the same [Each] instance.
     ///
-    /// The method returns a [ResponseBuilder], which is used to define how unimock responds to the matched call.
+    /// The method returns a [DefineOutput], which is used to define how unimock responds to the matched call.
     pub fn call<'c, M>(&'c mut self, matching: M) -> DefineOutput<'c, F>
     where
         M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,

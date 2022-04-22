@@ -331,6 +331,11 @@ pub trait MockFn: Sized + 'static {
     /// The name to use for runtime errors.
     const NAME: &'static str;
 
+    /// Create a stubbing clause.
+    ///
+    /// A stub sets up call patterns on a single function, that can be matched in any order.
+    ///
+    /// For exact order verification, reach for [Self::next] instead.
     fn stub<'c, S>(setup: S) -> build::Clause
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
@@ -350,7 +355,13 @@ pub trait MockFn: Sized + 'static {
         each.to_clause()
     }
 
-    fn next_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self>
+    /// Initiate a call pattern builder intended to be used as a [build::Clause]
+    /// with exact order verification. The build sequence should end with [build::ExactlyQuantifiedResponse::in_order].
+    ///
+    /// This differens from [Self::stub], in that that a stub defines all call patterns without any
+    /// specific required call order. This function takes only single input matcher, that MUST be
+    /// matched in the order specified, relative to other next calls.
+    fn next<'c, M>(matching: M) -> build::DefineOutput<'c, Self>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
