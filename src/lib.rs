@@ -54,6 +54,9 @@
 
 /// Types for used for building and defining mock behaviour.
 pub mod build;
+/// APIs used by macros, not intended to be used directly.
+pub mod macro_api;
+/// Extra utilities
 pub mod util;
 
 mod counter;
@@ -163,7 +166,7 @@ pub use unimock_macros::unimock;
 /// }
 /// ```
 ///
-/// Internally it works by calling [util::as_str_ref] on inputs matched by a string literal.
+/// Internally it works by calling [macro_api::as_str_ref] on inputs matched by a string literal.
 pub use unimock_macros::matching;
 
 #[derive(Clone, Copy)]
@@ -197,8 +200,8 @@ impl Unimock {
             inputs,
             self.fallback_mode,
         ) {
-            Ok(ConditionalEval::Yes(output)) => output,
-            Ok(ConditionalEval::No(_)) => panic!(
+            Ok(macro_api::ConditionalEval::Yes(output)) => output,
+            Ok(macro_api::ConditionalEval::No(_)) => panic!(
                 "{}",
                 self.prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
             ),
@@ -214,7 +217,7 @@ impl Unimock {
     pub fn conditional_eval<'i, F: MockFn + 'static>(
         &'i self,
         inputs: F::Inputs<'i>,
-    ) -> ConditionalEval<'i, F> {
+    ) -> macro_api::ConditionalEval<'i, F> {
         match mock::eval(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
@@ -461,15 +464,4 @@ fn mock_from_iterator(
             panic_reasons: Mutex::new(vec![]),
         }),
     }
-}
-
-/// The conditional evaluation result of a [MockFn].
-///
-/// Used to tell trait implementations whether to do perform their own
-/// evaluation of a call.
-pub enum ConditionalEval<'i, F: MockFn> {
-    /// Function evaluated to its output.
-    Yes(F::Output),
-    /// Function not yet evaluated.
-    No(F::Inputs<'i>),
 }

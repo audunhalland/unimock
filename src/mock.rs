@@ -1,4 +1,5 @@
 use crate::error::MockError;
+use crate::macro_api::ConditionalEval;
 use crate::*;
 
 use std::any::{Any, TypeId};

@@ -337,8 +337,8 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         quote! {
             #sig {
                 match self.conditional_eval::<#mock_fn_path>((#(#parameters),*)) {
-                    ::unimock::ConditionalEval::Yes(output) => output,
-                    ::unimock::ConditionalEval::No((#(#parameters),*)) => #unmock_path(self, #(#parameters),*) #opt_dot_await
+                    ::unimock::macro_api::ConditionalEval::Yes(output) => output,
+                    ::unimock::macro_api::ConditionalEval::No((#(#parameters),*)) => #unmock_path(self, #(#parameters),*) #opt_dot_await
                 }
             }
         }

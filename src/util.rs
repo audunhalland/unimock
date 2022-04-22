@@ -29,12 +29,3 @@ impl<T: 'static> LeakInto for &T {
         Box::leak(Box::new(value))
     }
 }
-
-/// Convert any type implementing `AsRef<str>` to a `&str`.
-/// Used by [crate::matching].
-pub fn as_str_ref<T>(input: &T) -> &str
-where
-    T: AsRef<str>,
-{
-    input.as_ref()
-}
