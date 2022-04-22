@@ -3,8 +3,9 @@ use crate::*;
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::panic::RefUnwindSafe;
 
-pub(crate) struct DynImpl(pub Box<dyn TypeErasedMockImpl + Send + Sync + 'static>);
+pub(crate) struct DynImpl(pub Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>);
 
 pub(crate) trait TypeErasedMockImpl: Any {
     fn as_any(&self) -> &dyn Any;
@@ -81,7 +82,7 @@ pub(crate) struct TypedMockImpl<F: MockFn> {
 impl<F: MockFn> TypedMockImpl<F> {
     pub fn new_standalone(
         input_debugger: InputDebugger<F>,
-        input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
+        input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
     ) -> Self {
         let mut mock_impl = Self::with_input_debugger(input_debugger);
         mock_impl.patterns.push(mock::CallPattern {
@@ -148,19 +149,20 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
 }
 
 pub(crate) struct CallPattern<F: MockFn> {
-    pub input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
+    pub input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
     pub call_counter: counter::CallCounter,
     pub responder: Responder<F>,
 }
 
 pub(crate) enum Responder<F: MockFn> {
-    Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync>),
+    Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync + RefUnwindSafe>),
     Unmock,
     Error,
 }
 
 pub(crate) struct InputDebugger<F: MockFn> {
-    pub debug_func: Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> String) + Send + Sync>>,
+    pub debug_func:
+        Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> String) + Send + Sync + RefUnwindSafe>>,
 }
 
 impl<F: MockFn> InputDebugger<F> {

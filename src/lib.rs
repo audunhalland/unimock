@@ -61,6 +61,7 @@ mod mock;
 
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::panic::RefUnwindSafe;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
@@ -183,11 +184,8 @@ pub struct Unimock {
 
 struct SharedState {
     impls: HashMap<TypeId, mock::DynImpl>,
-    panic_reason: Mutex<Option<error::MockError>>,
+    panic_reasons: Mutex<Vec<error::MockError>>,
 }
-
-// TODO: Should implement Clone using Arc for data.
-// When the _original_ gets dropped, it should verify that there are no copies left alive.
 
 impl Unimock {
     /// Evaluate a [MockFn] given some inputs, to produce its output.
@@ -229,10 +227,8 @@ impl Unimock {
     fn prepare_panic(&self, error: error::MockError) -> String {
         let msg = error.to_string();
 
-        let mut panic_reason = self.state.panic_reason.lock().unwrap();
-        if panic_reason.is_none() {
-            *panic_reason = Some(error.clone());
-        }
+        let mut panic_reasons = self.state.panic_reasons.lock().unwrap();
+        panic_reasons.push(error.clone());
 
         msg
     }
@@ -260,26 +256,35 @@ impl Drop for Unimock {
             return;
         }
 
-        // if already panicked, it must be in another thread. Forward that panic.
-        {
-            let mut panic_reason = self.state.panic_reason.lock().unwrap();
-            if let Some(panic_reason) = panic_reason.take() {
-                panic!("{}", panic_reason.to_string());
+        fn panic_if_nonempty(errors: &[error::MockError]) {
+            if errors.is_empty() {
+                return;
             }
+
+            let error_strings = errors
+                .into_iter()
+                .map(|err| err.to_string())
+                .collect::<Vec<_>>();
+            panic!("{}", error_strings.join("/n"));
+        }
+
+        {
+            // if already panicked, it must be in another thread. Forward that panic to the original thread.
+            let panic_reasons = self.state.panic_reasons.lock().unwrap();
+            panic_if_nonempty(&panic_reasons);
+        }
+
+        let strong_count = Arc::strong_count(&self.state);
+
+        if strong_count > 1 {
+            panic!("Unimock cannot verify calls, as the original instance got dropped while there are clones still alive.");
         }
 
         let mut mock_errors = Vec::new();
         for (_, dyn_impl) in self.state.impls.iter() {
             dyn_impl.0.verify(&mut mock_errors);
         }
-
-        if !mock_errors.is_empty() {
-            let error_strings = mock_errors
-                .into_iter()
-                .map(|err| err.to_string())
-                .collect::<Vec<_>>();
-            panic!("{}", error_strings.join("/n"));
-        }
+        panic_if_nonempty(&mock_errors);
     }
 }
 
@@ -343,7 +348,7 @@ pub trait MockFn: Sized + 'static {
     fn next_call<'c, M>(matching: M) -> build::ResponseBuilder<'c, Self>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
-        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + 'static,
+        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
         build::ResponseBuilder::new_standalone(mock::TypedMockImpl::new_standalone(
             mock::InputDebugger::new_debug(),
@@ -451,7 +456,7 @@ fn mock_from_iterator(
         original_instance: true,
         state: Arc::new(SharedState {
             impls,
-            panic_reason: Mutex::new(None),
+            panic_reasons: Mutex::new(vec![]),
         }),
     }
 }

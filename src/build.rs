@@ -29,7 +29,7 @@ where
     /// The method returns a [ResponseBuilder], which is used to define how unimock responds to the matched call.
     pub fn call<'c, M>(&'c mut self, matching: M) -> ResponseBuilder<'c, F>
     where
-        M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + 'static,
+        M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
         borrow_new_matched_call_mut(&mut self.mock_impl, Box::new(matching))
     }
@@ -47,7 +47,7 @@ where
 
 fn borrow_new_matched_call_mut<'a, F: MockFn + 'static>(
     mock_impl: &'a mut TypedMockImpl<F>,
-    input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
+    input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
 ) -> ResponseBuilder<'a, F> {
     mock_impl.patterns.push(mock::CallPattern {
         input_matcher,
@@ -88,7 +88,7 @@ where
     /// It must also be [Send] and [Sync] because unimock needs to store it.
     pub fn returns(mut self, value: impl Into<F::Output>) -> VerificationBuilder<'p, F>
     where
-        F::Output: Send + Sync + Clone + 'static,
+        F::Output: Send + Sync + Clone + RefUnwindSafe + 'static,
     {
         let value = value.into();
         self.pattern.get_mut().responder =
@@ -110,7 +110,7 @@ where
     /// can then compute it based on input parameters.
     pub fn answers<A, R>(mut self, func: A) -> VerificationBuilder<'p, F>
     where
-        A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
+        A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<F::Output>,
     {
         self.pattern.get_mut().responder =
@@ -122,7 +122,7 @@ where
     /// passed owned value, by leaking its memory. This version leaks the value once.
     pub fn returns_leak<T>(mut self, value: impl Into<T>) -> VerificationBuilder<'p, F>
     where
-        F::Output: Send + Sync + Copy + LeakInto<Owned = T> + 'static,
+        F::Output: Send + Sync + RefUnwindSafe + Copy + LeakInto<Owned = T> + 'static,
     {
         let leaked = <F::Output as LeakInto>::leak_into(value.into());
         self.pattern.get_mut().responder = mock::Responder::Closure(Box::new(move |_| leaked));
@@ -135,7 +135,7 @@ where
     /// _every invocation_ of the answer function.
     pub fn answers_leak<A, R, O>(mut self, func: A) -> VerificationBuilder<'p, F>
     where
-        A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
+        A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<O>,
         F::Output: LeakInto<Owned = O>,
     {
