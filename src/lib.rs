@@ -24,12 +24,14 @@
 //!     assert_eq!(
 //!         42,
 //!         sum(
-//!             mock(Foo__foo, |each| {
-//!                 each.call(matching!()).returns(40);
-//!             })
-//!             .also(Bar__bar, |each| {
-//!                 each.call(matching!()).returns(2);
-//!             })
+//!             mock([
+//!                 Foo__foo::stub(|each| {
+//!                     each.call(matching!()).returns(40);
+//!                 }),
+//!                 Bar__bar::stub(|each| {
+//!                     each.call(matching!()).returns(2);
+//!                 })
+//!             ])
 //!         )
 //!     );
 //! }
@@ -95,7 +97,7 @@ use std::sync::{Arc, Mutex};
 /// }
 ///
 /// fn test() {
-///     let single_mock: Unimock = mock(Trait1__a, |_| {});
+///     let single_mock: Unimock = mock(Some(Trait1__a::stub(|_| {})));
 ///     sum(single_mock); // note: panics at runtime!
 /// }
 /// ```
@@ -423,10 +425,12 @@ pub trait MockFn: Sized + 'static {
 /// assert_eq!(
 ///     120,
 ///     // well, not in the test, at least!
-///     mock(Factorial__factorial, |each| {
-///         each.call(matching!((input) if *input <= 1)).returns(1_u32); // unimock controls the API call
-///         each.call(matching!(_)).unmock();
-///     })
+///     mock([
+///         Factorial__factorial::stub(|each| {
+///             each.call(matching!((input) if *input <= 1)).returns(1_u32); // unimock controls the API call
+///             each.call(matching!(_)).unmocked();
+///         })
+///     ])
 ///     .factorial(5)
 /// );
 /// ```

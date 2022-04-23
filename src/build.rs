@@ -256,9 +256,9 @@ where
     ///
     /// let m = mock([
     ///     // the first call MUST be method(1) and it will return "a"
-    ///     Trait__method::next_call!(matching!(1)).returns("a").once().in_order(),
+    ///     Trait__method::next(matching!(1)).returns("a").once().in_order(),
     ///     // the second call MUST be method(1) and it will return "b"
-    ///     Trait__method::next_call!(matching!(2)).returns("b").once().in_order(),
+    ///     Trait__method::next(matching!(2)).returns("b").once().in_order(),
     ///     // there may be no more calls to this mock, as it has no stubs in it
     /// ]);
     ///
