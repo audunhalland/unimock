@@ -418,9 +418,11 @@ async fn unmock_async() {
 
     assert_eq!(
         120,
-        spy(Some(AsyncFactorial__factorial::stub(|each| {
-            each.call(matching!((input) if *input <= 1)).returns(1u32);
-        })))
+        spy(Some(
+            AsyncFactorial__factorial::each_call(matching!(1))
+                .returns(1_u32)
+                .in_any_order()
+        ))
         .factorial(5)
         .await,
         "works using spy"
@@ -429,7 +431,7 @@ async fn unmock_async() {
     assert_eq!(
         120,
         mock(Some(AsyncFactorial__factorial::stub(|each| {
-            each.call(matching!((input) if *input <= 1)).returns(1u32);
+            each.call(matching!((input) if *input <= 1)).returns(1_u32);
             each.call(matching!(_)).unmocked();
         })))
         .factorial(5)
