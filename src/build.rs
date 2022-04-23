@@ -12,6 +12,8 @@ use crate::*;
 /// these will be combined together at construction time.
 ///
 /// Clauses are type-erased and uses dynamic dispatch internally.
+/// It also implements `From<I> where I: IntoIterator<Item = Clause>`,
+/// so one clause can contain several other clauses.
 /// This means that clauses can be returned from helper functions
 /// and reused several times:
 ///
@@ -51,14 +53,8 @@ use crate::*;
 #[must_use]
 pub struct Clause(pub(crate) ClausePrivate);
 
-impl From<Vec<Clause>> for Clause {
-    fn from(clauses: Vec<Clause>) -> Self {
-        Clause(ClausePrivate::Multiple(clauses))
-    }
-}
-
-impl<const N: usize> From<[Clause; N]> for Clause {
-    fn from(clauses: [Clause; N]) -> Self {
+impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
+    fn from(clauses: I) -> Self {
         Clause(ClausePrivate::Multiple(clauses.into_iter().collect()))
     }
 }

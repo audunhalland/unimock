@@ -363,6 +363,40 @@ pub trait MockFn: Sized + 'static {
         each.to_clause()
     }
 
+    /// Define a stub-like call pattern directly on the [MockFn].
+    ///
+    /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
+    /// that needs to be specified on this MockFn.
+    fn each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, build::kind::Stub>
+    where
+        for<'i> Self::Inputs<'i>: std::fmt::Debug,
+        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
+    {
+        build::new_standalone_define_output(
+            mock::TypedMockImpl::new_standalone(
+                mock::InputDebugger::new_debug(),
+                Box::new(matching),
+                mock::MockImplKind::Stub,
+            ),
+            build::kind::Stub,
+        )
+    }
+
+    /// [MockFn::each_call] variant that doesn't require inputs to implement [Debug] (but results in worse runtime debuggability)
+    fn nodebug_each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, build::kind::Stub>
+    where
+        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
+    {
+        build::new_standalone_define_output(
+            mock::TypedMockImpl::new_standalone(
+                mock::InputDebugger::new_nodebug(),
+                Box::new(matching),
+                mock::MockImplKind::Stub,
+            ),
+            build::kind::Stub,
+        )
+    }
+
     /// Initiate a call pattern builder intended to be used as a [build::Clause]
     /// with exact order verification. The build sequence should end with [build::ExactlyQuantifiedResponse::in_order].
     ///
@@ -381,21 +415,6 @@ pub trait MockFn: Sized + 'static {
                 mock::MockImplKind::StrictMock,
             ),
             build::kind::Mock,
-        )
-    }
-
-    fn each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, build::kind::Stub>
-    where
-        for<'i> Self::Inputs<'i>: std::fmt::Debug,
-        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
-    {
-        build::new_standalone_define_output(
-            mock::TypedMockImpl::new_standalone(
-                mock::InputDebugger::new_debug(),
-                Box::new(matching),
-                mock::MockImplKind::Stub,
-            ),
-            build::kind::Stub,
         )
     }
 }
