@@ -339,7 +339,7 @@ pub trait MockFn: Sized + 'static {
     /// The name to use for runtime errors.
     const NAME: &'static str;
 
-    /// Create a stubbing clause.
+    /// Create a stubbing clause by grouping calls.
     ///
     /// A stub sets up call patterns on a single function, that can be matched in any order.
     ///
@@ -369,15 +369,34 @@ pub trait MockFn: Sized + 'static {
     /// This differens from [Self::stub], in that that a stub defines all call patterns without any
     /// specific required call order. This function takes only single input matcher, that MUST be
     /// matched in the order specified, relative to other next calls.
-    fn next<'c, M>(matching: M) -> build::DefineOutput<'c, Self>
+    fn next<'c, M>(matching: M) -> build::DefineOutput<'c, Self, build::kind::Mock>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
-        build::DefineOutput::new_standalone(mock::TypedMockImpl::new_standalone_mock(
-            mock::InputDebugger::new_debug(),
-            Box::new(matching),
-        ))
+        build::new_standalone_define_output(
+            mock::TypedMockImpl::new_standalone(
+                mock::InputDebugger::new_debug(),
+                Box::new(matching),
+                mock::MockImplKind::StrictMock,
+            ),
+            build::kind::Mock,
+        )
+    }
+
+    fn each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, build::kind::Stub>
+    where
+        for<'i> Self::Inputs<'i>: std::fmt::Debug,
+        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
+    {
+        build::new_standalone_define_output(
+            mock::TypedMockImpl::new_standalone(
+                mock::InputDebugger::new_debug(),
+                Box::new(matching),
+                mock::MockImplKind::Stub,
+            ),
+            build::kind::Stub,
+        )
     }
 }
 
@@ -495,8 +514,25 @@ fn mock_from_iterator(
 ) -> Unimock {
     let mut assembler = mock::MockAssembler::new();
 
-    for build::Clause(mut dyn_impl) in clause_iterator {
-        match dyn_impl.0.assemble_into(&mut assembler) {
+    fn assemble(
+        clause: build::Clause,
+        assembler: &mut mock::MockAssembler,
+    ) -> Result<(), mock::AssembleError> {
+        match clause.0 {
+            build::ClausePrivate::Single(mut dyn_impl) => {
+                dyn_impl.0.assemble_into(assembler)?;
+            }
+            build::ClausePrivate::Multiple(vec) => {
+                for clause in vec.into_iter() {
+                    assemble(clause, assembler)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    for clause in clause_iterator {
+        match assemble(clause, &mut assembler) {
             Ok(_) => {}
             Err(error) => panic!("{}", error.to_string()),
         }

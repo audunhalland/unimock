@@ -1,5 +1,6 @@
 #![feature(generic_associated_types)]
 
+use unimock::build::Clause;
 use unimock::util::Leak;
 use unimock::*;
 
@@ -456,4 +457,35 @@ fn intricate_lifetimes() {
         each.call(matching!(_))
             .returns_leak(O("foobar".to_string().leak()));
     })]));
+}
+
+#[test]
+fn clause_helpers() {
+    #[unimock]
+    trait Foo {
+        fn m1(&self) -> i32;
+    }
+
+    #[unimock]
+    trait Bar {
+        fn m2(&self) -> i32;
+    }
+    #[unimock]
+    trait Baz {
+        fn m3(&self) -> i32;
+    }
+
+    fn setup_foo_bar() -> Clause {
+        [
+            Foo__m1::each_call(matching!(_)).returns(1).in_any_order(),
+            Bar__m2::each_call(matching!(_)).returns(2).in_any_order(),
+        ]
+        .into()
+    }
+
+    let unimock = mock([
+        setup_foo_bar(),
+        Baz__m3::each_call(matching!(_)).returns(3).in_any_order(),
+    ]);
+    assert_eq!(6, unimock.m1() + unimock.m2() + unimock.m3());
 }

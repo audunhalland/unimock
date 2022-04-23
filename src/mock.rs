@@ -119,7 +119,7 @@ fn match_pattern<'i, F: MockFn>(
     call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'i CallPattern<F>)>, MockError> {
     match mock_impl.kind {
-        MockImplKind::Mock => {
+        MockImplKind::StrictMock => {
             // increase call index here, because stubs should not influence it:
             let current_call_index = call_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
@@ -169,7 +169,7 @@ pub(crate) enum MockImplKind {
     /// A stub matches every incoming call with every pattern, using the first one that matches.
     Stub,
     /// A mock only matches one pattern at a time, based on call indexes.
-    Mock,
+    StrictMock,
 }
 
 pub(crate) struct TypedMockImpl<F: MockFn> {
@@ -181,11 +181,12 @@ pub(crate) struct TypedMockImpl<F: MockFn> {
 
 impl<F: MockFn> TypedMockImpl<F> {
     /// A standalone mock, used in the building stage.
-    pub fn new_standalone_mock(
+    pub fn new_standalone(
         input_debugger: InputDebugger<F>,
         input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
+        kind: MockImplKind,
     ) -> Self {
-        let mut mock_impl = Self::with_input_debugger(input_debugger, MockImplKind::Mock);
+        let mut mock_impl = Self::with_input_debugger(input_debugger, kind);
         mock_impl.patterns.push(mock::CallPattern {
             input_matcher,
             call_index_range: Default::default(),
@@ -241,7 +242,7 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         }
 
         match self.kind {
-            MockImplKind::Mock => {
+            MockImplKind::StrictMock => {
                 if self.patterns.len() != 1 {
                     panic!("Input mock should only have one pattern");
                 }
