@@ -76,7 +76,7 @@ use std::sync::{Arc, Mutex};
 ///
 /// Mock generation happens by declaring a new [MockFn]-implementing struct for each method.
 ///
-/// Example
+/// # Example
 /// ```rust
 /// #![feature(generic_associated_types)]
 /// use unimock::*;
@@ -97,8 +97,11 @@ use std::sync::{Arc, Mutex};
 /// }
 ///
 /// fn test() {
-///     let single_mock: Unimock = mock(Some(Trait1__a::stub(|_| {})));
-///     sum(single_mock); // note: panics at runtime!
+///     // Unimock now implements both traits:
+///     sum(mock(None)); // note: panics at runtime!
+///
+///     // Mock a single method (still panics, because all 3 must be mocked:):
+///     sum(mock(Some(Trait1__a::next(|_| true).returns(0).once().in_order())));
 /// }
 /// ```
 pub use unimock_macros::unimock;
@@ -452,6 +455,32 @@ where
 /// Construct a unimock instance that works like a spy, where every clause
 /// acts as an override over the default behaviour, which is to hit
 /// "real world" code using the [Unmock] feature.
+///
+/// # Example
+/// ```rust
+/// # #![feature(generic_associated_types)]
+/// # use unimock::*;
+///
+/// #[unimock(unmocked=[real_foo])]
+/// trait Trait {
+///     fn foo(&self);
+/// }
+///
+/// fn real_foo<T: std::any::Any>(_: &T) {
+///     println!("real thing");
+/// }
+///
+/// // Spy objects that spies on nothing:
+/// spy(None).foo();
+/// spy([]).foo();
+/// // prints "real thing" x 2
+///
+/// spy(Some(Trait__foo::next(matching!()).returns(()).once().in_order())).foo();
+/// // does not print
+///
+/// // spy object that prevents the real
+///
+/// ```
 #[inline]
 pub fn spy<I>(clauses: I) -> Unimock
 where
