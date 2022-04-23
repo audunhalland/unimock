@@ -4,62 +4,65 @@ use std::{fmt::Display, sync::atomic::AtomicUsize};
 
 pub(crate) struct CallCounter {
     actual_count: AtomicUsize,
-    expectation: CountExpectation,
+    minimum: usize,
+    exactness: Exactness,
 }
 
 impl Default for CallCounter {
     fn default() -> Self {
-        CallCounter::new(CountExpectation::AtLeast(0))
+        CallCounter::new(0, Exactness::AtLeast)
     }
 }
 
 impl CallCounter {
-    pub fn new(expectation: CountExpectation) -> Self {
+    pub fn new(minimum: usize, exactness: Exactness) -> Self {
         Self {
             actual_count: AtomicUsize::new(0),
-            expectation,
+            minimum,
+            exactness,
         }
     }
 
-    pub fn set_expectation(&mut self, expectation: CountExpectation) {
-        self.expectation = expectation;
+    pub fn add_to_minimum(&mut self, delta: usize, exactness: Exactness) {
+        self.minimum += delta;
+        self.exactness = exactness;
     }
 
     pub fn get_expected_exact_count(&self) -> Option<usize> {
-        match self.expectation {
-            CountExpectation::Exactly(count) => Some(count),
-            CountExpectation::AtLeast(_) => None,
+        match self.exactness {
+            Exactness::Exact => Some(self.minimum),
+            Exactness::AtLeast => None,
         }
     }
 
-    pub fn tick(&self) {
+    pub fn fetch_add(&self) -> usize {
         self.actual_count
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn verify(&self, name: &'static str, pat_index: usize, errors: &mut Vec<MockError>) {
         let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::SeqCst));
 
-        match self.expectation {
-            CountExpectation::Exactly(target) => {
-                if actual_calls.0 != target {
-                    let target_calls = NCalls(target);
-                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match exactly {target_calls}, but it actually matched {actual_calls}.")));
+        match self.exactness {
+            Exactness::Exact => {
+                if actual_calls.0 != self.minimum {
+                    let expected = NCalls(self.minimum);
+                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match exactly {expected}, but it actually matched {actual_calls}.")));
                 }
             }
-            CountExpectation::AtLeast(target) => {
-                if actual_calls.0 < target {
-                    let target_calls = NCalls(target);
-                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match at least {target_calls}, but it actually matched {actual_calls}.")));
+            Exactness::AtLeast => {
+                if actual_calls.0 < self.minimum {
+                    let expected = NCalls(self.minimum);
+                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match at least {expected}, but it actually matched {actual_calls}.")));
                 }
             }
         }
     }
 }
 
-pub(crate) enum CountExpectation {
-    Exactly(usize),
-    AtLeast(usize),
+pub(crate) enum Exactness {
+    Exact,
+    AtLeast,
 }
 
 struct NCalls(usize);

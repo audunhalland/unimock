@@ -89,18 +89,15 @@ pub(crate) fn eval<'i, F: MockFn + 'static>(
             }
 
             match match_pattern(mock_impl, &inputs, call_index)? {
-                Some((pat_index, pattern)) => {
-                    pattern.call_counter.tick();
-                    match &pattern.responder {
-                        Responder::Closure(closure) => Ok(ConditionalEval::Yes(closure(inputs))),
-                        Responder::Unmock => Ok(ConditionalEval::No(inputs)),
-                        Responder::Error => Err(MockError::NoOutputAvailableForCallPattern {
-                            name: F::NAME,
-                            inputs_debug: mock_impl.debug_inputs(&inputs),
-                            pat_index,
-                        }),
-                    }
-                }
+                Some((pat_index, pattern)) => match select_responder_for_call(pattern) {
+                    Some(Responder::Closure(closure)) => Ok(ConditionalEval::Yes(closure(inputs))),
+                    Some(Responder::Unmock) => Ok(ConditionalEval::No(inputs)),
+                    None => Err(MockError::NoOutputAvailableForCallPattern {
+                        name: F::NAME,
+                        inputs_debug: mock_impl.debug_inputs(&inputs),
+                        pat_index,
+                    }),
+                },
                 None => match fallback_mode {
                     FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
                         name: F::NAME,
@@ -164,6 +161,22 @@ fn match_pattern<'i, F: MockFn>(
     }
 }
 
+fn select_responder_for_call<F: MockFn>(pat: &CallPattern<F>) -> Option<&Responder<F>> {
+    let call_index = pat.call_counter.fetch_add();
+
+    let mut responder = None;
+
+    for call_index_responder in pat.responders.iter() {
+        if call_index_responder.response_index > call_index {
+            break;
+        }
+
+        responder = Some(&call_index_responder.responder)
+    }
+
+    responder
+}
+
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub(crate) enum MockImplKind {
     /// A stub matches every incoming call with every pattern, using the first one that matches.
@@ -191,7 +204,7 @@ impl<F: MockFn> TypedMockImpl<F> {
             input_matcher,
             call_index_range: Default::default(),
             call_counter: counter::CallCounter::default(),
-            responder: mock::Responder::Error,
+            responders: vec![],
         });
         mock_impl
     }
@@ -289,13 +302,17 @@ pub(crate) struct CallPattern<F: MockFn> {
     pub input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
     pub call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
+    pub responders: Vec<CallOrderResponder<F>>,
+}
+
+pub(crate) struct CallOrderResponder<F: MockFn> {
+    pub response_index: usize,
     pub responder: Responder<F>,
 }
 
 pub(crate) enum Responder<F: MockFn> {
     Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync + RefUnwindSafe>),
     Unmock,
-    Error,
 }
 
 pub(crate) struct InputDebugger<F: MockFn> {

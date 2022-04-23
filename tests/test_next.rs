@@ -372,7 +372,7 @@ fn unmock_simple() {
                 "ab",
                 mock([
                     Spyable__concat::stub(|each| {
-                        each.call(matching!("", "")).returns("foobar").at_least(1);
+                        each.call(matching!("", "")).returns("foobar").at_least_times(1);
                         each.call(matching!(_, _)).unmocked();
                     }),
                 ])
@@ -453,10 +453,9 @@ fn intricate_lifetimes() {
         i.foo(&I(std::marker::PhantomData));
     }
 
-    takes_intricate(&mock([Intricate__foo::nodebug_stub(|each| {
-        each.call(matching!(_))
-            .returns_leak(O("foobar".to_string().leak()));
-    })]));
+    takes_intricate(&mock([Intricate__foo::nodebug_each_call(matching!(_))
+        .returns_leak(O("foobar".to_string().leak()))
+        .in_any_order()]));
 }
 
 #[test]
@@ -488,4 +487,52 @@ fn clause_helpers() {
         Baz__m3::each_call(matching!(_)).returns(3).in_any_order(),
     ]);
     assert_eq!(6, unimock.m1() + unimock.m2() + unimock.m3());
+}
+
+#[test]
+fn responders_in_series() {
+    #[unimock]
+    trait Series {
+        fn series(&self) -> i32;
+    }
+
+    fn clause() -> unimock::build::Clause {
+        Series__series::each_call(matching!())
+            .returns(1)
+            .once()
+            .then()
+            .returns(2)
+            .n_times(2)
+            .then()
+            .returns(3)
+            .in_any_order()
+    }
+
+    {
+        let a = mock(Some(clause()));
+
+        assert_eq!(1, a.series());
+        assert_eq!(2, a.series());
+        assert_eq!(2, a.series());
+        // it will continue to return 3:
+        assert_eq!(3, a.series());
+        assert_eq!(3, a.series());
+        assert_eq!(3, a.series());
+        assert_eq!(3, a.series());
+    }
+
+    {
+        let b = mock(Some(clause()));
+
+        assert_eq!(1, b.series());
+        assert_eq!(2, b.series());
+
+        // Exact repetition was defined to be 3 (the last responder is not exactly quantified):
+        assert_panics!(
+            {
+                drop(b);
+            },
+            includes("Series::series: Expected call pattern #0 to match at least 3 calls, but it actually matched 2 calls.")
+        );
+    }
 }

@@ -24,7 +24,7 @@ fn two_fns_in_incorrect_order_should_fail_and_presence_of_a_stub_should_not_infl
         }),
         T2__c::next(matching!(0)).returns(0).once().in_order(),
         T1__a::next(matching!(0)).returns(0).once().in_order(),
-        T2__c::next(matching!(0)).returns(0).exactly(2).in_order(),
+        T2__c::next(matching!(0)).returns(0).n_times(2).in_order(),
     ]);
 
     m.b(33);
@@ -44,7 +44,7 @@ fn two_fns_in_incorrect_order_should_fail_and_presence_of_a_stub_should_not_infl
 #[test]
 fn calling_expired_pattern_should_fail() {
     let m = mock([
-        T1__a::next(matching!(0)).returns(0).exactly(2).in_order(),
+        T1__a::next(matching!(0)).returns(0).n_times(2).in_order(),
         T1__a::next(matching!(1)).returns(1).once().in_order(),
     ]);
 

@@ -1,6 +1,5 @@
 use std::panic;
 
-use crate::counter::*;
 use crate::util::*;
 use crate::*;
 
@@ -66,10 +65,16 @@ pub(crate) enum ClausePrivate {
 
 // Different kinds of builders,
 pub mod kind {
+    // TODO: Naming
     pub trait StubKind {}
+
+    // TODO: Naming
     pub trait MockKind {}
 
+    // TODO: Naming
     pub struct Mock;
+
+    // TODO: Naming
     pub struct Stub;
 
     impl MockKind for Mock {}
@@ -98,12 +103,13 @@ where
         self.mock_impl.patterns.push(mock::CallPattern {
             input_matcher: Box::new(matching),
             call_index_range: Default::default(),
-            call_counter: counter::CallCounter::new(counter::CountExpectation::AtLeast(0)),
-            responder: mock::Responder::Error,
+            call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
+            responders: vec![],
         });
 
         DefineOutput {
             pattern: PatternWrapper::Grouped(self.mock_impl.patterns.last_mut().unwrap()),
+            response_index: 0,
             kind: kind::Stub,
         }
     }
@@ -148,6 +154,7 @@ pub(crate) fn new_standalone_define_output<'p, F: MockFn + 'static, K>(
 ) -> DefineOutput<'p, F, K> {
     DefineOutput {
         pattern: PatternWrapper::Standalone(mock_impl),
+        response_index: 0,
         kind,
     }
 }
@@ -155,6 +162,7 @@ pub(crate) fn new_standalone_define_output<'p, F: MockFn + 'static, K>(
 /// A builder for setting up the response for a matched call pattern.
 pub struct DefineOutput<'p, F: MockFn, K> {
     pattern: PatternWrapper<'p, F>,
+    response_index: usize,
     kind: K,
 }
 
@@ -165,86 +173,88 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement [Clone] and cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
-    pub fn returns(mut self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F, K>
+    pub fn returns(self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F, K>
     where
         F::Output: Send + Sync + Clone + RefUnwindSafe + 'static,
     {
         let value = value.into();
-        self.pattern.get_mut().responder =
-            mock::Responder::Closure(Box::new(move |_| value.clone()));
-        self.next_state()
+        self.responder(mock::Responder::Closure(Box::new(move |_| value.clone())))
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
-    pub fn returns_default(mut self) -> QuantifyResponse<'p, F, K>
+    pub fn returns_default(self) -> QuantifyResponse<'p, F, K>
     where
         F::Output: Default,
     {
-        self.pattern.get_mut().responder =
-            mock::Responder::Closure(Box::new(|_| Default::default()));
-        self.next_state()
+        self.responder(mock::Responder::Closure(Box::new(|_| Default::default())))
     }
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters.
-    pub fn answers<A, R>(mut self, func: A) -> QuantifyResponse<'p, F, K>
+    pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, K>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<F::Output>,
     {
-        self.pattern.get_mut().responder =
-            mock::Responder::Closure(Box::new(move |inputs| func(inputs).into()));
-        self.next_state()
+        self.responder(mock::Responder::Closure(Box::new(move |inputs| {
+            func(inputs).into()
+        })))
     }
 
     /// Specify the output of the call pattern to be a static reference to the
     /// passed owned value, by leaking its memory. This version leaks the value once.
-    pub fn returns_leak<T>(mut self, value: impl Into<T>) -> QuantifyResponse<'p, F, K>
+    pub fn returns_leak<T>(self, value: impl Into<T>) -> QuantifyResponse<'p, F, K>
     where
         F::Output: Send + Sync + RefUnwindSafe + Copy + LeakInto<Owned = T> + 'static,
     {
         let leaked = <F::Output as LeakInto>::leak_into(value.into());
-        self.pattern.get_mut().responder = mock::Responder::Closure(Box::new(move |_| leaked));
-        self.next_state()
+        self.responder(mock::Responder::Closure(Box::new(move |_| leaked)))
     }
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters, then create a static reference
     /// to it by leaking. Note that this version will produce a new memory leak for
     /// _every invocation_ of the answer function.
-    pub fn answers_leak<A, R, O>(mut self, func: A) -> QuantifyResponse<'p, F, K>
+    pub fn answers_leak<A, R, O>(self, func: A) -> QuantifyResponse<'p, F, K>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<O>,
         F::Output: LeakInto<Owned = O>,
     {
-        self.pattern.get_mut().responder = mock::Responder::Closure(Box::new(move |inputs| {
+        self.responder(mock::Responder::Closure(Box::new(move |inputs| {
             let owned_output = func(inputs).into();
             <F::Output as LeakInto>::leak_into(owned_output)
-        }));
-        self.next_state()
+        })))
     }
 
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
-    pub fn panics(mut self, message: impl Into<String>) -> QuantifyResponse<'p, F, K> {
+    pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, K> {
         let message = message.into();
-        self.pattern.get_mut().responder =
-            mock::Responder::Closure(Box::new(move |_| panic!("{}", message)));
-        self.next_state()
+
+        self.responder(mock::Responder::Closure(Box::new(move |_| {
+            panic!("{}", message)
+        })))
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
-    pub fn unmocked(mut self) -> QuantifyResponse<'p, F, K>
+    pub fn unmocked(self) -> QuantifyResponse<'p, F, K>
     where
         F: Unmock,
     {
-        self.pattern.get_mut().responder = mock::Responder::Unmock;
-        self.next_state()
+        self.responder(mock::Responder::Unmock)
     }
 
-    fn next_state(self) -> QuantifyResponse<'p, F, K> {
+    fn responder(mut self, responder: mock::Responder<F>) -> QuantifyResponse<'p, F, K> {
+        self.pattern
+            .get_mut()
+            .responders
+            .push(mock::CallOrderResponder {
+                response_index: self.response_index,
+                responder,
+            });
         QuantifyResponse {
             pattern: self.pattern,
+            response_index: self.response_index,
             kind: self.kind,
         }
     }
@@ -253,6 +263,7 @@ where
 /// Builder for defining how a call pattern gets verified.
 pub struct QuantifyResponse<'p, F: MockFn, K> {
     pattern: PatternWrapper<'p, F>,
+    response_index: usize,
     kind: K,
 }
 
@@ -265,25 +276,25 @@ where
         self.pattern
             .get_mut()
             .call_counter
-            .set_expectation(CountExpectation::Exactly(1));
-        self.into_exact()
+            .add_to_minimum(1, counter::Exactness::Exact);
+        self.into_exact(1)
     }
 
     /// Expect this call pattern to be called exactly the specified number of times.
-    pub fn exactly(mut self, times: usize) -> ExactlyQuantifiedResponse<'p, F, K> {
+    pub fn n_times(mut self, times: usize) -> ExactlyQuantifiedResponse<'p, F, K> {
         self.pattern
             .get_mut()
             .call_counter
-            .set_expectation(CountExpectation::Exactly(times));
-        self.into_exact()
+            .add_to_minimum(times, counter::Exactness::Exact);
+        self.into_exact(times)
     }
 
     /// Expect this call pattern to be called at least the specified number of times.
-    pub fn at_least(mut self, times: usize) {
+    pub fn at_least_times(mut self, times: usize) {
         self.pattern
             .get_mut()
             .call_counter
-            .set_expectation(CountExpectation::AtLeast(times));
+            .add_to_minimum(times, counter::Exactness::AtLeast);
     }
 
     /// Turn the call pattern into a stubbing clause, without any overall call order verification.
@@ -299,17 +310,20 @@ where
         }
     }
 
-    fn into_exact(self) -> ExactlyQuantifiedResponse<'p, F, K> {
+    fn into_exact(self, times: usize) -> ExactlyQuantifiedResponse<'p, F, K> {
         ExactlyQuantifiedResponse {
             pattern: self.pattern,
+            response_index: self.response_index + times,
             kind: self.kind,
         }
     }
 }
 
-/// End of response definition
+/// An exactly quantified response, i.e. the number of times it
+/// is expected to respond is an exact number.
 pub struct ExactlyQuantifiedResponse<'p, F: MockFn, K> {
     pattern: PatternWrapper<'p, F>,
+    response_index: usize,
     kind: K,
 }
 
@@ -317,11 +331,19 @@ impl<'p, F, K> ExactlyQuantifiedResponse<'p, F, K>
 where
     F: MockFn + 'static,
 {
-    /// After a response has been exactly quantified, prepare to define a new output
-    /// that will be returned after the quantification has been met.
-    pub fn then(self) -> DefineOutput<'p, F, K> {
+    /// Prepare to set up a new response, which will take effect after the current
+    /// response has been yielded
+    pub fn then(mut self) -> DefineOutput<'p, F, K> {
+        // Opening for a new response, which will be non-exactly quantified unless otherwise specified,
+        // set the exactness to AtLeast now.
+        self.pattern
+            .get_mut()
+            .call_counter
+            .add_to_minimum(0, counter::Exactness::AtLeast);
+
         DefineOutput {
             pattern: self.pattern,
+            response_index: self.response_index,
             kind: self.kind,
         }
     }
@@ -359,7 +381,7 @@ where
             PatternWrapper::Standalone(mock_impl) => {
                 Clause(ClausePrivate::Single(mock::DynImpl(Box::new(mock_impl))))
             }
-            _ => panic!("Cannot expect a next call among group of call patterns"),
+            _ => panic!(),
         }
     }
 
@@ -371,7 +393,7 @@ where
             PatternWrapper::Standalone(mock_impl) => {
                 Clause(ClausePrivate::Single(mock::DynImpl(Box::new(mock_impl))))
             }
-            _ => panic!("Cannot expect a next call among group of call patterns"),
+            _ => panic!(),
         }
     }
 }
