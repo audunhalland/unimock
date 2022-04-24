@@ -14,8 +14,8 @@ pub(crate) struct MockAssembler {
 pub(crate) enum AssembleError {
     IncompatibleKind {
         name: &'static str,
-        old_kind: MockImplKind,
-        new_kind: MockImplKind,
+        old_kind: PatternMatchMode,
+        new_kind: PatternMatchMode,
     },
     MockHasNoExactExpectation {
         name: &'static str,
@@ -116,7 +116,7 @@ fn match_pattern<'i, F: MockFn>(
     call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'i CallPattern<F>)>, MockError> {
     match mock_impl.kind {
-        MockImplKind::StrictMock => {
+        PatternMatchMode::StrictCallOrder => {
             // increase call index here, because stubs should not influence it:
             let current_call_index = call_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
@@ -153,7 +153,7 @@ fn match_pattern<'i, F: MockFn>(
 
             Ok(Some((pat_index, pattern_by_call_index)))
         }
-        MockImplKind::Stub => Ok(mock_impl
+        PatternMatchMode::FullCascadeForEveryCall => Ok(mock_impl
             .patterns
             .iter()
             .enumerate()
@@ -178,16 +178,18 @@ fn select_responder_for_call<F: MockFn>(pat: &CallPattern<F>) -> Option<&Respond
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub(crate) enum MockImplKind {
-    /// A stub matches every incoming call with every pattern, using the first one that matches.
-    Stub,
-    /// A mock only matches one pattern at a time, based on call indexes.
-    StrictMock,
+pub(crate) enum PatternMatchMode {
+    /// Each new call starts at the first call pattern, tries to
+    /// match it and then goes on to the next one until success.
+    FullCascadeForEveryCall,
+    /// Each new call starts off where the previous one ended.
+    /// E.g. match pattern[0] 1 time, match pattern[1] 3 times, etc.
+    StrictCallOrder,
 }
 
 pub(crate) struct TypedMockImpl<F: MockFn> {
     pub input_debugger: InputDebugger<F>,
-    pub kind: MockImplKind,
+    pub kind: PatternMatchMode,
     pub patterns: Vec<CallPattern<F>>,
     pub has_applications: AtomicBool,
 }
@@ -197,7 +199,7 @@ impl<F: MockFn> TypedMockImpl<F> {
     pub fn new_standalone(
         input_debugger: InputDebugger<F>,
         input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
-        kind: MockImplKind,
+        kind: PatternMatchMode,
     ) -> Self {
         let mut mock_impl = Self::with_input_debugger(input_debugger, kind);
         mock_impl.patterns.push(mock::CallPattern {
@@ -209,7 +211,7 @@ impl<F: MockFn> TypedMockImpl<F> {
         mock_impl
     }
 
-    pub fn with_input_debugger(input_debugger: InputDebugger<F>, kind: MockImplKind) -> Self {
+    pub fn with_input_debugger(input_debugger: InputDebugger<F>, kind: PatternMatchMode) -> Self {
         Self {
             input_debugger,
             kind,
@@ -255,7 +257,7 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         }
 
         match self.kind {
-            MockImplKind::StrictMock => {
+            PatternMatchMode::StrictCallOrder => {
                 if self.patterns.len() != 1 {
                     panic!("Input mock should only have one pattern");
                 }

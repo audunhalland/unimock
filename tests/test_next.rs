@@ -1,6 +1,5 @@
 #![feature(generic_associated_types)]
 
-use unimock::build::Clause;
 use unimock::util::Leak;
 use unimock::*;
 
@@ -17,7 +16,7 @@ fn noarg_works() {
 
     assert_eq!(
         1_000_000,
-        mock([NoArg__no_arg::next(matching!())
+        mock([NoArg__no_arg::next_call(matching!())
             .returns(1_000_000)
             .once()
             .in_order()])
@@ -40,7 +39,7 @@ fn owned_works() {
         "ab",
         takes_owned(
             &mock(Some(
-                Owned__foo::next(matching!(_, _))
+                Owned__foo::next_call(matching!(_, _))
                     .answers(|(a, b)| format!("{a}{b}"))
                     .once()
                     .in_order()
@@ -187,7 +186,7 @@ fn borrowing_with_memory_leak() {
         "foo",
         get_str(
             &mock(Some(
-                Borrowing__borrow::next(matching!(_))
+                Borrowing__borrow::next_call(matching!(_))
                     .returns_leak("foo")
                     .once()
                     .in_order()
@@ -199,7 +198,7 @@ fn borrowing_with_memory_leak() {
         "yoyo",
         get_str(
             &mock(Some(
-                Borrowing__borrow::next(matching!(_))
+                Borrowing__borrow::next_call(matching!(_))
                     .answers_leak(|input| format!("{input}{input}"))
                     .once()
                     .in_order()
@@ -220,7 +219,7 @@ trait WithModule {
 fn test_with_module() {
     assert_panics!({
         let _ = mock(Some(
-            with_module::Funk::next(matching!(_))
+            with_module::Funk::next_call(matching!(_))
                 .returns_leak(MyType)
                 .once()
                 .in_order(),
@@ -498,7 +497,7 @@ fn responders_in_series() {
         fn series(&self) -> i32;
     }
 
-    fn clause() -> unimock::build::Clause {
+    fn clause() -> Clause {
         Series__series::each_call(matching!())
             .returns(1)
             .once()
@@ -529,12 +528,12 @@ fn responders_in_series() {
         assert_eq!(1, b.series());
         assert_eq!(2, b.series());
 
-        // Exact repetition was defined to be 3 (the last responder is not exactly quantified):
+        // Exact repetition was defined to be 4 (the last responder is not exactly quantified), but it contained a `.then` call so minimum 1.
         assert_panics!(
             {
                 drop(b);
             },
-            includes("Series::series: Expected call pattern #0 to match at least 3 calls, but it actually matched 2 calls.")
+            includes("Series::series: Expected call pattern #0 to match at least 4 calls, but it actually matched 2 calls.")
         );
     }
 }

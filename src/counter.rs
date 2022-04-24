@@ -31,7 +31,7 @@ impl CallCounter {
     pub fn get_expected_exact_count(&self) -> Option<usize> {
         match self.exactness {
             Exactness::Exact => Some(self.minimum),
-            Exactness::AtLeast => None,
+            _ => None,
         }
     }
 
@@ -50,9 +50,15 @@ impl CallCounter {
                     errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match exactly {expected}, but it actually matched {actual_calls}.")));
                 }
             }
-            Exactness::AtLeast => {
-                if actual_calls.0 < self.minimum {
-                    let expected = NCalls(self.minimum);
+            Exactness::AtLeast | Exactness::AtLeastPlusOne => {
+                let minimum = if let Exactness::AtLeastPlusOne = self.exactness {
+                    self.minimum + 1
+                } else {
+                    self.minimum
+                };
+
+                if actual_calls.0 < minimum {
+                    let expected = NCalls(minimum);
                     errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match at least {expected}, but it actually matched {actual_calls}.")));
                 }
             }
@@ -63,6 +69,7 @@ impl CallCounter {
 pub(crate) enum Exactness {
     Exact,
     AtLeast,
+    AtLeastPlusOne,
 }
 
 struct NCalls(usize);

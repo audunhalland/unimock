@@ -317,7 +317,7 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     let sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(cfg);
 
-    let parameters = sig
+    let inputs = sig
         .inputs
         .iter()
         .filter_map(|fn_arg| match fn_arg {
@@ -336,16 +336,16 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
 
         quote! {
             #sig {
-                match self.conditional_eval::<#mock_fn_path>((#(#parameters),*)) {
+                match self.conditional_eval::<#mock_fn_path>((#(#inputs),*)) {
                     ::unimock::macro_api::ConditionalEval::Yes(output) => output,
-                    ::unimock::macro_api::ConditionalEval::No((#(#parameters),*)) => #unmock_path(self, #(#parameters),*) #opt_dot_await
+                    ::unimock::macro_api::ConditionalEval::No((#(#inputs),*)) => #unmock_path(self, #(#inputs),*) #opt_dot_await
                 }
             }
         }
     } else {
         quote! {
             #sig {
-                self.eval::<#mock_fn_path>((#(#parameters),*))
+                self.eval::<#mock_fn_path>((#(#inputs),*))
             }
         }
     }
