@@ -6,7 +6,7 @@ use cool_asserts::*;
 
 #[unimock]
 trait SingleArg {
-    fn method1(&self, a: &str) -> &str;
+    fn method1<'s>(&'s self, a: &'s str) -> &'s str;
 }
 
 #[test]
@@ -75,8 +75,8 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
         {
             mock([
                 SingleArg__method1::stub(|each| {
-                    each.call(matching!("a")).returns_default().once();
-                    each.call(matching!(_)).returns_default();
+                    each.call(matching!("a")).returns_ref(format!("")).once();
+                    each.call(matching!(_)).returns_ref(format!(""));
                 })
             ]).method1("b");
         },

@@ -34,6 +34,10 @@ pub enum MockError {
         actual_call_order: CallOrder,
         pat_index: usize,
     },
+    CannotBorrowValueStatically {
+        name: &'static str,
+        pat_index: usize,
+    },
     FailedVerification(String),
     CannotUnmock {
         name: &'static str,
@@ -81,6 +85,10 @@ impl MockError {
             } => {
                 format!("{name}{inputs_debug}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern #{pat_index}.")
             }
+            MockError::CannotBorrowValueStatically {
+                name,
+                pat_index,
+            } => format!("{name}(_): Cannot borrow output value statically for call pattern ({pat_index}). Consider using .returns_static()."),
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")

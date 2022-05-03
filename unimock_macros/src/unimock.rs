@@ -6,7 +6,6 @@ pub struct Cfg {
     unmocks: Vec<Unmock>,
     mock_fn_idents: Vec<syn::Ident>,
     input_lifetime: syn::Lifetime,
-    static_lifetime: syn::Lifetime,
 }
 
 impl Cfg {
@@ -68,7 +67,6 @@ impl syn::parse::Parse for Cfg {
             unmocks,
             mock_fn_idents,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
-            static_lifetime: syn::Lifetime::new("'static", proc_macro2::Span::call_site()),
         })
     }
 }
@@ -172,6 +170,8 @@ struct Method<'s> {
     method: &'s syn::TraitItemMethod,
     mock_fn_ident: syn::Ident,
     mock_fn_name: syn::LitStr,
+    output_ownership: OutputOwnership,
+    output_ty: Option<&'s syn::Type>,
 }
 
 impl<'s> Method<'s> {
@@ -209,10 +209,20 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
                 quote::format_ident!("{}__{}", item_trait.ident, mock_fn_ident_method_part)
             };
 
+            let (output_ownership, output_ty) = match &method.sig.output {
+                syn::ReturnType::Default => (OutputOwnership::Owned, None),
+                syn::ReturnType::Type(_, ty) => {
+                    let (ownership, ty) = determine_ownership(ty);
+                    (ownership, Some(ty))
+                }
+            };
+
             Ok(Method {
                 method,
                 mock_fn_ident,
                 mock_fn_name,
+                output_ownership,
+                output_ty,
             })
         })
         .collect()
@@ -224,7 +234,6 @@ struct MockFnDef {
 }
 
 fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: &Cfg) -> MockFnDef {
-    let sig = &method.method.sig;
     let mock_fn_ident = &method.mock_fn_ident;
     let mock_fn_path = method.mock_fn_path(cfg);
     let mock_fn_name = &method.mock_fn_name;
@@ -255,12 +264,9 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
             quote! { #ty }
         });
 
-    let output = match &sig.output {
-        syn::ReturnType::Default => quote! { () },
-        syn::ReturnType::Type(_, ty) => {
-            let ty = substitute_lifetimes(ty, &cfg.static_lifetime);
-            quote! { #ty }
-        }
+    let output = match method.output_ty {
+        Some(ty) => quote! { #ty },
+        None => quote! { () },
     };
 
     let unmock_impl = cfg.get_unmock_fn_path(index).map(|_| {
@@ -313,6 +319,28 @@ fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
     ty
 }
 
+enum OutputOwnership {
+    Owned,
+    SelfReference,
+    StaticReference,
+}
+
+fn determine_ownership(ty: &syn::Type) -> (OutputOwnership, &syn::Type) {
+    match ty {
+        syn::Type::Reference(type_reference) => {
+            if let Some(lifetime) = type_reference.lifetime.as_ref() {
+                match lifetime.ident.to_string().as_ref() {
+                    "static" => (OutputOwnership::StaticReference, &type_reference.elem),
+                    _ => (OutputOwnership::SelfReference, &type_reference.elem),
+                }
+            } else {
+                (OutputOwnership::SelfReference, &type_reference.elem)
+            }
+        }
+        _ => (OutputOwnership::Owned, ty),
+    }
+}
+
 fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(cfg);
@@ -343,10 +371,22 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
             }
         }
     } else {
-        quote! {
-            #sig {
-                self.eval::<#mock_fn_path>((#(#inputs),*))
-            }
+        match method.output_ownership {
+            OutputOwnership::Owned => quote! {
+                #sig {
+                    self.eval::<#mock_fn_path>((#(#inputs),*))
+                }
+            },
+            OutputOwnership::SelfReference => quote! {
+                #sig {
+                    self.eval_self_ref::<#mock_fn_path>((#(#inputs),*))
+                }
+            },
+            OutputOwnership::StaticReference => quote! {
+                #sig {
+                    self.eval_static_ref::<#mock_fn_path>((#(#inputs),*))
+                }
+            },
         }
     }
 }

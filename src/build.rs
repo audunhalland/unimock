@@ -1,6 +1,5 @@
 use std::panic;
 
-use crate::util::*;
 use crate::*;
 
 impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
@@ -144,41 +143,56 @@ where
         self.responder(mock::Responder::Closure(Box::new(|_| Default::default())))
     }
 
+    /// Specify the output of the call to be a borrow of the provided value.
+    /// This works well when the lifetime of the returned reference is the same as `self`.
+    /// Using this for `'static` references will produce a runtime error. For static
+    /// references, use [DefineOutput::returns_static].
+    pub fn returns_ref<T>(self, value: T) -> QuantifyResponse<'p, F, C>
+    where
+        T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + RefUnwindSafe + 'static,
+    {
+        self.responder(mock::Responder::Borrowable(Box::new(value)))
+    }
+
+    /// Specify the output of the call to be a reference to static value.
+    /// This must be used when the returned reference in the mocked trait is `'static`.
+    pub fn returns_static(self, value: &'static F::Output) -> QuantifyResponse<'p, F, C>
+    where
+        F::Output: Send + Sync + RefUnwindSafe + 'static,
+    {
+        self.responder(mock::Responder::StaticRefClosure(Box::new(move |_| value)))
+    }
+
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters.
     pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, C>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<F::Output>,
+        F::Output: Sized,
     {
         self.responder(mock::Responder::Closure(Box::new(move |inputs| {
             func(inputs).into()
         })))
     }
 
-    /// Specify the output of the call pattern to be a static reference to the
-    /// passed owned value, by leaking its memory. This version leaks the value once.
-    pub fn returns_leak<T>(self, value: impl Into<T>) -> QuantifyResponse<'p, F, C>
-    where
-        F::Output: Send + Sync + RefUnwindSafe + Copy + LeakInto<Owned = T> + 'static,
-    {
-        let leaked = <F::Output as LeakInto>::leak_into(value.into());
-        self.responder(mock::Responder::Closure(Box::new(move |_| leaked)))
-    }
-
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters, then create a static reference
-    /// to it by leaking. Note that this version will produce a new memory leak for
+    /// to it by leaking its memory. Note that this version will produce a new memory leak for
     /// _every invocation_ of the answer function.
-    pub fn answers_leak<A, R, O>(self, func: A) -> QuantifyResponse<'p, F, C>
+    ///
+    /// This method should only be used when computing a reference based
+    /// on input parameters is necessary, which should not be a common use case.
+    pub fn answers_leaked_ref<A, R>(self, func: A) -> QuantifyResponse<'p, F, C>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
-        R: Into<O>,
-        F::Output: LeakInto<Owned = O>,
+        R: std::borrow::Borrow<F::Output> + 'static,
+        F::Output: Sized,
     {
-        self.responder(mock::Responder::Closure(Box::new(move |inputs| {
-            let owned_output = func(inputs).into();
-            <F::Output as LeakInto>::leak_into(owned_output)
+        self.responder(mock::Responder::StaticRefClosure(Box::new(move |inputs| {
+            let value = func(inputs);
+            let leaked_ref = Box::leak(Box::new(value));
+            <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
         })))
     }
 
@@ -186,9 +200,7 @@ where
     pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, C> {
         let message = message.into();
 
-        self.responder(mock::Responder::Closure(Box::new(move |_| {
-            panic!("{}", message)
-        })))
+        self.responder(mock::Responder::Panic(message))
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.

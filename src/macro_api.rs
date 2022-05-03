@@ -4,7 +4,10 @@ use crate::*;
 ///
 /// Used to tell trait implementations whether to do perform their own
 /// evaluation of a call.
-pub enum ConditionalEval<'i, F: MockFn> {
+pub enum ConditionalEval<'i, F: MockFn>
+where
+    F::Output: Sized,
+{
     /// Function evaluated to its output.
     Yes(F::Output),
     /// Function not yet evaluated.

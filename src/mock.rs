@@ -1,8 +1,8 @@
 use crate::error::MockError;
-use crate::macro_api::ConditionalEval;
 use crate::*;
 
 use std::any::{Any, TypeId};
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::panic::RefUnwindSafe;
 
@@ -59,16 +59,107 @@ pub(crate) trait TypeErasedMockImpl: Any {
     fn verify(&self, errors: &mut Vec<MockError>);
 }
 
-pub(crate) fn eval<'i, F: MockFn + 'static>(
+pub(crate) enum SizedEvaluation<'i, F: MockFn>
+where
+    F::Output: Sized,
+{
+    Evaluated(F::Output),
+    Unmock(F::Inputs<'i>),
+}
+
+pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
     dyn_impl: Option<&'i DynImpl>,
     inputs: F::Inputs<'i>,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
-) -> Result<ConditionalEval<'i, F>, MockError> {
+) -> Result<SizedEvaluation<'i, F>, MockError>
+where
+    F::Output: Sized,
+{
+    match eval_responder(dyn_impl, &inputs, call_index, fallback_mode)? {
+        EvaluatedResponder::Responder(_, responder) => match responder {
+            Responder::Closure(closure) => Ok(SizedEvaluation::Evaluated(closure(inputs))),
+            Responder::StaticRefClosure(_) => panic!(),
+            Responder::Borrowable(_) => panic!(),
+            Responder::Panic(msg) => panic!("{}", msg),
+            Responder::Unmock => Ok(SizedEvaluation::Unmock(inputs)),
+        },
+        EvaluatedResponder::Unmock => Ok(SizedEvaluation::Unmock(inputs)),
+    }
+}
+
+pub(crate) enum SelfBorrowedEvaluation<'i, 's: 'i, F: MockFn> {
+    Evaluated(&'s F::Output),
+    Unmock(F::Inputs<'i>),
+}
+
+pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
+    dyn_impl: Option<&'s DynImpl>,
+    inputs: F::Inputs<'i>,
+    call_index: &AtomicUsize,
+    fallback_mode: FallbackMode,
+) -> Result<SelfBorrowedEvaluation<'i, 's, F>, MockError> {
+    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
+        EvaluatedResponder::Responder(_, responder) => match responder {
+            Responder::Closure(_) => panic!(), // FIXME
+            Responder::StaticRefClosure(closure) => {
+                Ok(SelfBorrowedEvaluation::Evaluated(closure(inputs)))
+            }
+            Responder::Borrowable(borrowable) => {
+                let borrowable: &dyn Borrow<<F as MockFn>::Output> = borrowable.as_ref();
+                let borrow = borrowable.borrow();
+                Ok(SelfBorrowedEvaluation::Evaluated(borrow))
+            }
+            Responder::Panic(msg) => panic!("{}", msg),
+            Responder::Unmock => Ok(SelfBorrowedEvaluation::Unmock(inputs)),
+        },
+        EvaluatedResponder::Unmock => Ok(SelfBorrowedEvaluation::Unmock(inputs)),
+    }
+}
+
+pub(crate) enum StaticRefEvaluation<'i, F: MockFn> {
+    Evaluated(&'static F::Output),
+    Unmock(F::Inputs<'i>),
+}
+
+pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
+    dyn_impl: Option<&'s DynImpl>,
+    inputs: F::Inputs<'i>,
+    call_index: &AtomicUsize,
+    fallback_mode: FallbackMode,
+) -> Result<StaticRefEvaluation<'i, F>, MockError> {
+    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
+        EvaluatedResponder::Responder(pat_index, responder) => match responder {
+            Responder::Closure(_) => panic!(), // FIXME
+            Responder::StaticRefClosure(closure) => {
+                Ok(StaticRefEvaluation::Evaluated(closure(inputs)))
+            }
+            Responder::Borrowable(_) => Err(MockError::CannotBorrowValueStatically {
+                name: F::NAME,
+                pat_index,
+            }),
+            Responder::Panic(msg) => panic!("{}", msg),
+            Responder::Unmock => Ok(StaticRefEvaluation::Unmock(inputs)),
+        },
+        EvaluatedResponder::Unmock => Ok(StaticRefEvaluation::Unmock(inputs)),
+    }
+}
+
+enum EvaluatedResponder<'s, F: MockFn> {
+    Responder(usize, &'s Responder<F>),
+    Unmock,
+}
+
+fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
+    dyn_impl: Option<&'s DynImpl>,
+    inputs: &F::Inputs<'i>,
+    call_index: &AtomicUsize,
+    fallback_mode: FallbackMode,
+) -> Result<EvaluatedResponder<'s, F>, MockError> {
     match dyn_impl {
         None => match fallback_mode {
             FallbackMode::Error => Err(MockError::NoMockImplementation { name: F::NAME }),
-            FallbackMode::Unmock => Ok(ConditionalEval::No(inputs)),
+            FallbackMode::Unmock => Ok(EvaluatedResponder::Unmock),
         },
         Some(dyn_impl) => {
             let mock_impl = dyn_impl
@@ -88,10 +179,9 @@ pub(crate) fn eval<'i, F: MockFn + 'static>(
                 });
             }
 
-            match match_pattern(mock_impl, &inputs, call_index)? {
+            match match_pattern(mock_impl, inputs, call_index)? {
                 Some((pat_index, pattern)) => match select_responder_for_call(pattern) {
-                    Some(Responder::Closure(closure)) => Ok(ConditionalEval::Yes(closure(inputs))),
-                    Some(Responder::Unmock) => Ok(ConditionalEval::No(inputs)),
+                    Some(responder) => Ok(EvaluatedResponder::Responder(pat_index, responder)),
                     None => Err(MockError::NoOutputAvailableForCallPattern {
                         name: F::NAME,
                         inputs_debug: mock_impl.debug_inputs(&inputs),
@@ -103,18 +193,18 @@ pub(crate) fn eval<'i, F: MockFn + 'static>(
                         name: F::NAME,
                         inputs_debug: mock_impl.debug_inputs(&inputs),
                     }),
-                    FallbackMode::Unmock => Ok(ConditionalEval::No(inputs)),
+                    FallbackMode::Unmock => Ok(EvaluatedResponder::Unmock),
                 },
             }
         }
     }
 }
 
-fn match_pattern<'i, F: MockFn>(
-    mock_impl: &'i TypedMockImpl<F>,
+fn match_pattern<'i, 's, F: MockFn>(
+    mock_impl: &'s TypedMockImpl<F>,
     inputs: &F::Inputs<'i>,
     call_index: &AtomicUsize,
-) -> Result<Option<(usize, &'i CallPattern<F>)>, MockError> {
+) -> Result<Option<(usize, &'s CallPattern<F>)>, MockError> {
     match mock_impl.kind {
         PatternMatchMode::StrictCallOrder => {
             // increase call index here, because stubs should not influence it:
@@ -314,6 +404,11 @@ pub(crate) struct CallOrderResponder<F: MockFn> {
 
 pub(crate) enum Responder<F: MockFn> {
     Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync + RefUnwindSafe>),
+    StaticRefClosure(
+        Box<dyn (for<'i> Fn(F::Inputs<'i>) -> &'static F::Output) + Send + Sync + RefUnwindSafe>,
+    ),
+    Borrowable(Box<dyn Borrow<F::Output> + Send + Sync + RefUnwindSafe>),
+    Panic(String),
     Unmock,
 }
 
