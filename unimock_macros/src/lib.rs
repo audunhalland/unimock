@@ -7,11 +7,6 @@ mod unimock;
 
 extern crate proc_macro;
 
-///
-/// Autogenerate a mock implementation of a trait.
-/// # Attributes
-/// TODO
-///
 #[proc_macro_attribute]
 pub fn unimock(
     attr: proc_macro::TokenStream,

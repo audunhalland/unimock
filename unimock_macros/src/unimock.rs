@@ -3,25 +3,54 @@ use syn::spanned::Spanned;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
-    unmocks: Vec<Unmock>,
-    mock_fn_idents: Vec<syn::Ident>,
+    mock_fn_idents: Option<WithSpan<Vec<syn::Ident>>>,
+    unmocks: Option<WithSpan<Vec<Unmock>>>,
     input_lifetime: syn::Lifetime,
 }
 
+struct WithSpan<T>(T, proc_macro2::Span);
+
 impl Cfg {
     fn get_unmock_fn_path(&self, index: usize) -> Option<&syn::Path> {
-        self.unmocks
-            .get(index)
-            .map(|opt| opt.0.as_ref())
-            .unwrap_or(None)
+        self.unmocks.as_ref().and_then(|unmocked| {
+            unmocked
+                .0
+                .get(index)
+                .map(|opt| opt.0.as_ref())
+                .unwrap_or(None)
+        })
+    }
+
+    fn validate(&self, methods: &[Method]) -> syn::Result<()> {
+        match &self.mock_fn_idents {
+            Some(idents) if idents.0.len() != methods.len() => {
+                return Err(syn::Error::new(
+                    idents.1,
+                    "Length must equal the number of trait methods",
+                ))
+            }
+            _ => {}
+        }
+
+        match &self.unmocks {
+            Some(unmocked) if unmocked.0.len() != methods.len() => {
+                return Err(syn::Error::new(
+                    unmocked.1,
+                    "Length must equal the number of trait methods",
+                ))
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 }
 
 impl syn::parse::Parse for Cfg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut module = None;
-        let mut unmocks = vec![];
-        let mut mock_fn_idents = vec![];
+        let mut mock_fn_idents = None;
+        let mut unmocks = None;
 
         while !input.is_empty() {
             if input.peek(syn::token::Mod) {
@@ -33,11 +62,14 @@ impl syn::parse::Parse for Cfg {
                 let _: syn::token::Eq = input.parse()?;
                 let content;
                 let _ = syn::bracketed!(content in input);
-                mock_fn_idents.push(content.parse()?);
+
+                let mut idents: Vec<syn::Ident> = vec![];
+                idents.push(content.parse()?);
                 while content.peek(syn::token::Comma) {
                     let _: syn::token::Comma = content.parse()?;
-                    mock_fn_idents.push(content.parse()?);
+                    idents.push(content.parse()?);
                 }
+                mock_fn_idents = Some(WithSpan(idents, content.span()));
             } else {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
@@ -45,11 +77,14 @@ impl syn::parse::Parse for Cfg {
                     "unmocked" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
-                        unmocks.push(content.parse()?);
+                        let mut unmocked: Vec<Unmock> = vec![];
+
+                        unmocked.push(content.parse()?);
                         while content.peek(syn::token::Comma) {
                             let _: syn::token::Comma = content.parse()?;
-                            unmocks.push(content.parse()?);
+                            unmocked.push(content.parse()?);
                         }
+                        unmocks = Some(WithSpan(unmocked, content.span()));
                     }
                     _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
                 };
@@ -108,6 +143,7 @@ impl syn::parse::Parse for UnimockInnerAttr {
 
 pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let methods = extract_methods(&item_trait, &cfg)?;
+    cfg.validate(&methods)?;
 
     let trait_ident = &item_trait.ident;
     let impl_attributes = item_trait
@@ -200,8 +236,11 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
                 item_trait.ident.span(),
             );
 
-            let mock_fn_ident_method_part =
-                cfg.mock_fn_idents.get(index).unwrap_or(&method.sig.ident);
+            let mock_fn_ident_method_part = cfg
+                .mock_fn_idents
+                .as_ref()
+                .and_then(|idents| idents.0.get(index))
+                .unwrap_or(&method.sig.ident);
 
             let mock_fn_ident = if cfg.module.is_some() {
                 mock_fn_ident_method_part.clone()

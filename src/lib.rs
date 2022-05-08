@@ -20,9 +20,9 @@
 //! takes_foo(mock(None));
 //! ```
 //!
-//! 1. `trait Foo` is declared with a `#[unimock]` annotation which makes its behaviour mockable.
+//! 1. `trait Foo` is declared with a [`#[unimock]`](unimock) annotation which makes its behaviour mockable.
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-//! 3. A mock instantiation by calling `mock(None)`, which returns a [Unimock] value which is passed into `takes_foo`.
+//! 3. A mock instantiation by calling [`mock(None)`](mock()), which returns a [Unimock] value which is passed into `takes_foo`.
 //!
 //! The [mock()] function takes an argument, in this case the value `None`. The argument is _what behaviour are we mocking_, in this case [None] at all!
 //! `Foo` contains no methods, so there is no behaviour to mock.
@@ -304,6 +304,14 @@ use std::sync::{Arc, Mutex};
 ///     sum(mock(Some(Trait1__a::next_call(|_| true).returns(0).once().in_order())));
 /// }
 /// ```
+///
+/// # Arguments
+/// The unimock macro accepts a number of comma-separated key-value configuration parameters:
+///
+/// * `#[unimock(mod=ident)]`: Puts the [MockFn] types in a new module named `ident`.
+/// * `#[unimock(as=[a, b, c])]`: Given there are e.g. 3 methods in the annotated trait, assigns the names `a`, `b` and `c` for the [MockFn] types respectively, in the same order as the trait methods.
+/// * `#[unimock(unmock=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations. The functions are assigned to the methods
+///   in the same order as the methods are listed in the trait. A value of `_` means _no unmock support_ for that method. See [Unmock](crate::Unmock) for more information.
 pub use unimock_macros::unimock;
 
 ///
