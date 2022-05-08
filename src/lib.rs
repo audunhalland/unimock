@@ -399,8 +399,10 @@ struct SharedState {
 
 impl Unimock {
     /// Evaluate a [MockFn] given some inputs, to produce its output.
-    /// Any failure will result in panic.
-    pub fn eval<'i, 's: 'i, F: MockFn + 'static>(&'s self, inputs: F::Inputs<'i>) -> F::Output
+    pub fn eval<'i, 's: 'i, F: MockFn + 'static>(
+        &'s self,
+        inputs: F::Inputs<'i>,
+    ) -> macro_api::Evaluation<'i, F::Output, F>
     where
         F::Output: Sized,
     {
@@ -410,73 +412,39 @@ impl Unimock {
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
-            Ok(mock::SizedEvaluation::Evaluated(output)) => output,
-            Ok(mock::SizedEvaluation::Unmock(_)) => panic!(
-                "{}",
-                self.prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
-            ),
+            Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
     }
 
-    pub fn eval_self_ref<'i, 's: 'i, F: MockFn + 'static>(
+    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
+    pub fn eval_borrowed<'i, 's: 'i, F: MockFn + 'static>(
         &'s self,
         inputs: F::Inputs<'i>,
-    ) -> &'s F::Output {
+    ) -> macro_api::Evaluation<'i, &'s F::Output, F> {
         match mock::eval_unsized_self_borrowed::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
-            Ok(mock::SelfBorrowedEvaluation::Evaluated(output)) => output,
-            Ok(mock::SelfBorrowedEvaluation::Unmock(_)) => panic!(
-                "{}",
-                self.prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
-            ),
+            Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
     }
 
+    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
     pub fn eval_static_ref<'i, 's: 'i, F: MockFn + 'static>(
         &'s self,
         inputs: F::Inputs<'i>,
-    ) -> &'static F::Output {
+    ) -> macro_api::Evaluation<'i, &'static F::Output, F> {
         match mock::eval_unsized_static_ref::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
-            Ok(mock::StaticRefEvaluation::Evaluated(output)) => output,
-            Ok(mock::StaticRefEvaluation::Unmock(_)) => panic!(
-                "{}",
-                self.prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
-            ),
-            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
-        }
-    }
-
-    /// Conditionally evaluate a [MockFn] given some inputs.
-    /// Unimock conditionally evaluates it based on internal state.
-    /// There are two outcomes, either it is evaluated producing the output,
-    /// or it stays unevaluated and returns its inputs back to the caller,
-    /// with the intention of the caller then _unmocking_ the call.
-    pub fn conditional_eval<'i, F: MockFn + 'static>(
-        &'i self,
-        inputs: F::Inputs<'i>,
-    ) -> macro_api::ConditionalEval<'i, F>
-    where
-        F::Output: Sized,
-    {
-        match mock::eval_sized::<F>(
-            self.state.impls.get(&TypeId::of::<F>()),
-            inputs,
-            &self.state.next_call_index,
-            self.fallback_mode,
-        ) {
-            Ok(mock::SizedEvaluation::Evaluated(output)) => macro_api::ConditionalEval::Yes(output),
-            Ok(mock::SizedEvaluation::Unmock(inputs)) => macro_api::ConditionalEval::No(inputs),
+            Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
     }

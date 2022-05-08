@@ -345,13 +345,19 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     let sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(cfg);
 
+    let eval_fn = match method.output_ownership {
+        OutputOwnership::Owned => quote::format_ident!("eval"),
+        OutputOwnership::SelfReference => quote::format_ident!("eval_borrowed"),
+        OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
+    };
+
     let inputs = sig
         .inputs
         .iter()
         .filter_map(|fn_arg| match fn_arg {
             syn::FnArg::Receiver(_) => None,
             syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-                syn::Pat::Ident(ident) => Some(quote! { #ident }),
+                syn::Pat::Ident(pat_ident) => Some(quote! { #pat_ident }),
                 _ => Some(
                     syn::Error::new(pat_type.span(), "Unprocessable argument").to_compile_error(),
                 ),
@@ -364,29 +370,17 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
 
         quote! {
             #sig {
-                match self.conditional_eval::<#mock_fn_path>((#(#inputs),*)) {
-                    ::unimock::macro_api::ConditionalEval::Yes(output) => output,
-                    ::unimock::macro_api::ConditionalEval::No((#(#inputs),*)) => #unmock_path(self, #(#inputs),*) #opt_dot_await
+                match self.#eval_fn::<#mock_fn_path>((#(#inputs),*)) {
+                    ::unimock::macro_api::Evaluation::Evaluated(output) => output,
+                    ::unimock::macro_api::Evaluation::Skipped((#(#inputs),*)) => #unmock_path(self, #(#inputs),*) #opt_dot_await
                 }
             }
         }
     } else {
-        match method.output_ownership {
-            OutputOwnership::Owned => quote! {
-                #sig {
-                    self.eval::<#mock_fn_path>((#(#inputs),*))
-                }
-            },
-            OutputOwnership::SelfReference => quote! {
-                #sig {
-                    self.eval_self_ref::<#mock_fn_path>((#(#inputs),*))
-                }
-            },
-            OutputOwnership::StaticReference => quote! {
-                #sig {
-                    self.eval_static_ref::<#mock_fn_path>((#(#inputs),*))
-                }
-            },
+        quote! {
+            #sig {
+                self.#eval_fn::<#mock_fn_path>((#(#inputs),*)).unwrap(self)
+            }
         }
     }
 }
