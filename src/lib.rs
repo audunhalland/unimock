@@ -226,7 +226,7 @@
 //! }
 //!
 //! fn a(deps: &impl B, arg: i32) -> i32 {
-//!     deps.b(arg) + 1;
+//!     deps.b(arg) + 1
 //! }
 //!
 //! fn b(deps: &impl Any, arg: i32) -> i32 {
