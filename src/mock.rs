@@ -4,6 +4,7 @@ use crate::*;
 
 use std::any::{Any, TypeId};
 use std::borrow::Borrow;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::panic::RefUnwindSafe;
 
@@ -79,18 +80,36 @@ impl DynMockImpl {
     }
 
     pub fn assemble_into(mut self, assembler: &mut MockAssembler) -> Result<(), AssembleError> {
-        if let Some(dyn_impl) = assembler.impls.get(&self.typed_impl.type_id()) {
-            if dyn_impl.pattern_match_mode != self.pattern_match_mode {
-                return Err(AssembleError::IncompatiblePatternMatchMode {
-                    name: self.typed_impl.name(),
-                    old_mode: dyn_impl.pattern_match_mode,
-                    new_mode: self.pattern_match_mode,
-                });
+        let description = self.typed_impl.describe();
+
+        match assembler.impls.entry(description.type_id) {
+            Entry::Occupied(mut entry) => {
+                if entry.get().pattern_match_mode != self.pattern_match_mode {
+                    return Err(AssembleError::IncompatiblePatternMatchMode {
+                        name: description.name,
+                        old_mode: entry.get().pattern_match_mode,
+                        new_mode: self.pattern_match_mode,
+                    });
+                }
+
+                self.typed_impl.assemble(
+                    Some(entry.get_mut()),
+                    self.pattern_match_mode,
+                    &mut assembler.current_call_index,
+                )?;
+            }
+            Entry::Vacant(entry) => {
+                self.typed_impl.assemble(
+                    None,
+                    self.pattern_match_mode,
+                    &mut assembler.current_call_index,
+                )?;
+
+                entry.insert(self);
             }
         }
 
-        self.typed_impl
-            .assemble_into(self.pattern_match_mode, assembler)
+        Ok(())
     }
 
     pub fn verify(&self, errors: &mut Vec<MockError>) {
@@ -99,7 +118,7 @@ impl DynMockImpl {
             .load(std::sync::atomic::Ordering::SeqCst)
         {
             errors.push(error::MockError::MockNeverCalled {
-                name: self.typed_impl.name(),
+                name: self.typed_impl.describe().name,
             });
         }
 
@@ -111,15 +130,21 @@ pub(crate) trait TypeErasedMockImpl: Any {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn name(&self) -> &'static str;
+    fn describe(&self) -> Description;
 
-    fn assemble_into(
+    fn assemble(
         &mut self,
+        target: Option<&mut DynMockImpl>,
         pattern_match_mode: PatternMatchMode,
-        assembler: &mut MockAssembler,
+        assembler_call_index: &mut usize,
     ) -> Result<(), AssembleError>;
 
     fn verify(&self, errors: &mut Vec<MockError>);
+}
+
+pub(crate) struct Description {
+    type_id: TypeId,
+    name: &'static str,
 }
 
 enum Eval<C> {
@@ -377,30 +402,19 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         self
     }
 
-    fn name(&self) -> &'static str {
-        F::NAME
+    fn describe(&self) -> Description {
+        Description {
+            type_id: TypeId::of::<F>(),
+            name: F::NAME,
+        }
     }
 
-    fn assemble_into(
+    fn assemble(
         &mut self,
+        merge_target: Option<&mut DynMockImpl>,
         pattern_match_mode: PatternMatchMode,
-        assembler: &mut MockAssembler,
+        assembler_call_index: &mut usize,
     ) -> Result<(), AssembleError> {
-        let stored_dyn = assembler
-            .impls
-            .entry(TypeId::of::<F>())
-            .or_insert_with(|| DynMockImpl {
-                typed_impl: Box::new(Self::with_input_debugger(InputDebugger::new_nodebug())),
-                pattern_match_mode,
-                has_applications: AtomicBool::new(false),
-            });
-
-        let stored_typed = stored_dyn
-            .typed_impl
-            .as_any_mut()
-            .downcast_mut::<TypedMockImpl<F>>()
-            .unwrap();
-
         match pattern_match_mode {
             PatternMatchMode::StrictCallOrder => {
                 if self.patterns.len() != 1 {
@@ -413,20 +427,28 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
                         .get_expected_exact_count()
                         .ok_or(AssembleError::MockHasNoExactExpectation { name: F::NAME })?;
 
-                    pattern.call_index_range.start = assembler.current_call_index;
-                    pattern.call_index_range.end = assembler.current_call_index + exact_count;
+                    pattern.call_index_range.start = *assembler_call_index;
+                    pattern.call_index_range.end = *assembler_call_index + exact_count;
 
-                    assembler.current_call_index = pattern.call_index_range.end;
+                    *assembler_call_index = pattern.call_index_range.end;
                 }
             }
             _ => {}
         }
 
-        stored_typed.patterns.append(&mut self.patterns);
+        if let Some(merge_target) = merge_target {
+            let existing_impl = merge_target
+                .typed_impl
+                .as_any_mut()
+                .downcast_mut::<Self>()
+                .unwrap();
 
-        stored_typed
-            .input_debugger
-            .steal_debug_if_necessary(&mut self.input_debugger);
+            existing_impl.patterns.append(&mut self.patterns);
+
+            existing_impl
+                .input_debugger
+                .steal_debug_if_necessary(&mut self.input_debugger);
+        }
 
         Ok(())
     }
