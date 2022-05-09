@@ -1,5 +1,6 @@
 /// Trait for describing expected call ordering.
 pub trait Ordering {
+    /// The kind of ordering.
     type Kind;
 }
 
@@ -19,13 +20,14 @@ impl Ordering for InOrder {
 
 /// Trait for describing the repetition class of output sequences
 pub trait Repetition {
+    /// The kind of repetition.
     type Kind;
 }
 
 /// Marker type for output sequences of finite, exact size.
 pub struct Exact;
 
-/// Marker type for output sequences of potentially infinite size, with a minimum.
+/// Marker type for output sequences of potentially infinite size.
 pub struct AtLeast;
 
 impl Repetition for Exact {

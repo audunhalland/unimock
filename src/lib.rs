@@ -253,6 +253,7 @@
 //! with generic traits or traits with associated types.
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 // For the mock-fn feature:
 #![feature(generic_associated_types)]
 
@@ -577,6 +578,10 @@ pub trait MockFn: Sized + 'static {
         each.to_clause()
     }
 
+    /// Create a stubbing clause by grouping calls.
+    ///
+    /// Works like [MockFn::stub], except that it does not require method inputs to implement [Debug].
+    /// This will result in poorer debuggability when things fail at test time.
     fn nodebug_stub<'c, S>(setup: S) -> Clause
     where
         S: FnOnce(&mut build::Each<Self>) + 'c,
