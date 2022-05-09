@@ -353,6 +353,7 @@ where
         }
     }
 
+    /// Turn the call pattern into a stubbing clause, without any overall call order verification.
     pub fn in_any_order(self) -> Clause
     where
         O: Ordering<Kind = InAnyOrder>,
