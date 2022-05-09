@@ -9,7 +9,7 @@ impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
 }
 
 pub(crate) enum ClausePrivate {
-    Single(mock::DynImpl),
+    Single(mock::DynMockImpl),
     Multiple(Vec<Clause>),
 }
 
@@ -38,7 +38,7 @@ pub mod quantification {
 /// Builder for defining a series of cascading call patterns
 /// on a specific [MockFn].
 pub struct Each<F: MockFn> {
-    mock_impl: mock::TypedMockImpl<F>,
+    typed_impl: mock::TypedMockImpl<F>,
 }
 
 impl<F> Each<F>
@@ -54,7 +54,7 @@ where
     where
         M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
-        self.mock_impl.patterns.push(mock::CallPattern {
+        self.typed_impl.patterns.push(mock::CallPattern {
             input_matcher: Box::new(matching),
             call_index_range: Default::default(),
             call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
@@ -62,7 +62,7 @@ where
         });
 
         DefineOutput {
-            pattern: PatternWrapper::Grouped(self.mock_impl.patterns.last_mut().unwrap()),
+            pattern: PatternWrapper::Grouped(self.typed_impl.patterns.last_mut().unwrap()),
             response_index: 0,
             call_order: call_order::Lenient,
         }
@@ -70,17 +70,14 @@ where
 
     pub(crate) fn new_stub(input_debugger: mock::InputDebugger<F>) -> Self {
         Self {
-            mock_impl: mock::TypedMockImpl::with_input_debugger(
-                input_debugger,
-                mock::PatternMatchMode::FullCascadeForEveryCall,
-            ),
+            typed_impl: mock::TypedMockImpl::with_input_debugger(input_debugger),
         }
     }
 
     pub(crate) fn to_clause(self) -> Clause {
-        Clause(ClausePrivate::Single(mock::DynImpl(Box::new(
-            self.mock_impl,
-        ))))
+        Clause(ClausePrivate::Single(mock::DynMockImpl::new_full_cascade(
+            Box::new(self.typed_impl),
+        )))
     }
 }
 
@@ -279,9 +276,9 @@ where
         C: call_order::LenientKind,
     {
         match self.pattern {
-            PatternWrapper::Standalone(mock_impl) => {
-                Clause(ClausePrivate::Single(mock::DynImpl(Box::new(mock_impl))))
-            }
+            PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
+                mock::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
+            )),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }
@@ -365,9 +362,9 @@ where
         Q: quantification::ExactKind,
     {
         match self.pattern {
-            PatternWrapper::Standalone(mock_impl) => {
-                Clause(ClausePrivate::Single(mock::DynImpl(Box::new(mock_impl))))
-            }
+            PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
+                mock::DynMockImpl::new_strict_order(Box::new(typed_impl)),
+            )),
             _ => panic!(),
         }
     }
@@ -377,9 +374,9 @@ where
         C: call_order::LenientKind,
     {
         match self.pattern {
-            PatternWrapper::Standalone(mock_impl) => {
-                Clause(ClausePrivate::Single(mock::DynImpl(Box::new(mock_impl))))
-            }
+            PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
+                mock::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
+            )),
             _ => panic!(),
         }
     }

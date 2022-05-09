@@ -8,15 +8,15 @@ use std::collections::HashMap;
 use std::panic::RefUnwindSafe;
 
 pub(crate) struct MockAssembler {
-    pub impls: HashMap<TypeId, DynImpl>,
+    pub impls: HashMap<TypeId, DynMockImpl>,
     current_call_index: usize,
 }
 
 pub(crate) enum AssembleError {
-    IncompatibleKind {
+    IncompatiblePatternMatchMode {
         name: &'static str,
-        old_kind: PatternMatchMode,
-        new_kind: PatternMatchMode,
+        old_mode: PatternMatchMode,
+        new_mode: PatternMatchMode,
     },
     MockHasNoExactExpectation {
         name: &'static str,
@@ -26,12 +26,12 @@ pub(crate) enum AssembleError {
 impl AssembleError {
     pub fn to_string(&self) -> String {
         match self {
-            AssembleError::IncompatibleKind {
+            AssembleError::IncompatiblePatternMatchMode {
                 name,
-                old_kind,
-                new_kind,
+                old_mode,
+                new_mode,
             } => {
-                format!("A clause {name} has already been registered as a {old_kind:?}, but got re-registered as a {new_kind:?}. They cannot be mixed.")
+                format!("A clause {name} has already been registered as a {old_mode:?}, but got re-registered as a {new_mode:?}. They cannot be mixed.")
             }
             AssembleError::MockHasNoExactExpectation { name } => {
                 format!("{name} mock has no exact count expectation, which is needed for a mock.")
@@ -49,19 +49,86 @@ impl MockAssembler {
     }
 }
 
-pub(crate) struct DynImpl(pub Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>);
+pub(crate) struct DynMockImpl {
+    typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>,
+    pattern_match_mode: PatternMatchMode,
+    has_applications: AtomicBool,
+}
+
+impl DynMockImpl {
+    #[inline(never)]
+    pub fn new_full_cascade(
+        typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>,
+    ) -> DynMockImpl {
+        DynMockImpl {
+            typed_impl,
+            pattern_match_mode: PatternMatchMode::FullCascadeForEveryCall,
+            has_applications: AtomicBool::new(false),
+        }
+    }
+
+    #[inline(never)]
+    pub fn new_strict_order(
+        typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>,
+    ) -> DynMockImpl {
+        DynMockImpl {
+            typed_impl,
+            pattern_match_mode: PatternMatchMode::StrictCallOrder,
+            has_applications: AtomicBool::new(false),
+        }
+    }
+
+    pub fn assemble_into(mut self, assembler: &mut MockAssembler) -> Result<(), AssembleError> {
+        if let Some(dyn_impl) = assembler.impls.get(&self.typed_impl.type_id()) {
+            if dyn_impl.pattern_match_mode != self.pattern_match_mode {
+                return Err(AssembleError::IncompatiblePatternMatchMode {
+                    name: self.typed_impl.name(),
+                    old_mode: dyn_impl.pattern_match_mode,
+                    new_mode: self.pattern_match_mode,
+                });
+            }
+        }
+
+        self.typed_impl
+            .assemble_into(self.pattern_match_mode, assembler)
+    }
+
+    pub fn verify(&self, errors: &mut Vec<MockError>) {
+        if !self
+            .has_applications
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            errors.push(error::MockError::MockNeverCalled {
+                name: self.typed_impl.name(),
+            });
+        }
+
+        self.typed_impl.verify(errors);
+    }
+}
 
 pub(crate) trait TypeErasedMockImpl: Any {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn assemble_into(&mut self, assembler: &mut MockAssembler) -> Result<(), AssembleError>;
+    fn name(&self) -> &'static str;
+
+    fn assemble_into(
+        &mut self,
+        pattern_match_mode: PatternMatchMode,
+        assembler: &mut MockAssembler,
+    ) -> Result<(), AssembleError>;
 
     fn verify(&self, errors: &mut Vec<MockError>);
 }
 
+enum Eval<C> {
+    Continue(C),
+    Unmock,
+}
+
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'i DynImpl>,
+    dyn_impl: Option<&'i DynMockImpl>,
     inputs: F::Inputs<'i>,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
@@ -70,25 +137,25 @@ where
     F::Output: Sized,
 {
     match eval_responder(dyn_impl, &inputs, call_index, fallback_mode)? {
-        EvaluatedResponder::Responder(_, responder) => match responder {
+        Eval::Continue((_, responder)) => match responder {
             Responder::Closure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::StaticRefClosure(_) => panic!(),
             Responder::Borrowable(_) => panic!(),
             Responder::Panic(msg) => panic!("{}", msg),
             Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
-        EvaluatedResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
+        Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
     }
 }
 
 pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'s DynImpl>,
+    dyn_impl: Option<&'s DynMockImpl>,
     inputs: F::Inputs<'i>,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'s F::Output, F>, MockError> {
     match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
-        EvaluatedResponder::Responder(_, responder) => match responder {
+        Eval::Continue((_, responder)) => match responder {
             Responder::Closure(_) => panic!(), // FIXME
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::Borrowable(borrowable) => {
@@ -99,18 +166,18 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
             Responder::Panic(msg) => panic!("{}", msg),
             Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
-        EvaluatedResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
+        Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
     }
 }
 
 pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'s DynImpl>,
+    dyn_impl: Option<&'s DynMockImpl>,
     inputs: F::Inputs<'i>,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
     match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
-        EvaluatedResponder::Responder(pat_index, responder) => match responder {
+        Eval::Continue((pat_index, responder)) => match responder {
             Responder::Closure(_) => panic!(), // FIXME
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::Borrowable(_) => Err(MockError::CannotBorrowValueStatically {
@@ -120,71 +187,82 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
             Responder::Panic(msg) => panic!("{}", msg),
             Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
-        EvaluatedResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
+        Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
     }
 }
 
-enum EvaluatedResponder<'s, F: MockFn> {
-    Responder(usize, &'s Responder<F>),
-    Unmock,
-}
-
 fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'s DynImpl>,
+    dyn_impl: Option<&'s DynMockImpl>,
     inputs: &F::Inputs<'i>,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
-) -> Result<EvaluatedResponder<'s, F>, MockError> {
-    match dyn_impl {
-        None => match fallback_mode {
-            FallbackMode::Error => Err(MockError::NoMockImplementation { name: F::NAME }),
-            FallbackMode::Unmock => Ok(EvaluatedResponder::Unmock),
-        },
-        Some(dyn_impl) => {
-            let mock_impl = dyn_impl
-                .0
-                .as_any()
+) -> Result<Eval<(usize, &'s Responder<F>)>, MockError> {
+    match eval_type_erased_mock_impl(dyn_impl, F::NAME, fallback_mode)? {
+        Eval::Continue((any, pattern_match_mode)) => {
+            let typed_impl = any
                 .downcast_ref::<TypedMockImpl<F>>()
                 .ok_or_else(|| MockError::Downcast { name: F::NAME })?;
 
-            mock_impl
-                .has_applications
-                .store(true, std::sync::atomic::Ordering::SeqCst);
-
-            if mock_impl.patterns.is_empty() {
+            if typed_impl.patterns.is_empty() {
                 return Err(MockError::NoRegisteredCallPatterns {
                     name: F::NAME,
-                    inputs_debug: mock_impl.debug_inputs(&inputs),
+                    inputs_debug: typed_impl.debug_inputs(&inputs),
                 });
             }
 
-            match match_pattern(mock_impl, inputs, call_index)? {
+            match match_pattern(pattern_match_mode, typed_impl, inputs, call_index)? {
                 Some((pat_index, pattern)) => match select_responder_for_call(pattern) {
-                    Some(responder) => Ok(EvaluatedResponder::Responder(pat_index, responder)),
+                    Some(responder) => Ok(Eval::Continue((pat_index, responder))),
                     None => Err(MockError::NoOutputAvailableForCallPattern {
                         name: F::NAME,
-                        inputs_debug: mock_impl.debug_inputs(&inputs),
+                        inputs_debug: typed_impl.debug_inputs(&inputs),
                         pat_index,
                     }),
                 },
                 None => match fallback_mode {
                     FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
                         name: F::NAME,
-                        inputs_debug: mock_impl.debug_inputs(&inputs),
+                        inputs_debug: typed_impl.debug_inputs(&inputs),
                     }),
-                    FallbackMode::Unmock => Ok(EvaluatedResponder::Unmock),
+                    FallbackMode::Unmock => Ok(Eval::Unmock),
                 },
             }
+        }
+        Eval::Unmock => Ok(Eval::Unmock),
+    }
+}
+
+#[inline(never)]
+fn eval_type_erased_mock_impl<'s>(
+    dyn_impl: Option<&'s DynMockImpl>,
+    name: &'static str,
+    fallback_mode: FallbackMode,
+) -> Result<Eval<(&'s dyn Any, PatternMatchMode)>, MockError> {
+    match dyn_impl {
+        None => match fallback_mode {
+            FallbackMode::Error => Err(MockError::NoMockImplementation { name }),
+            FallbackMode::Unmock => Ok(Eval::Unmock),
+        },
+        Some(dyn_impl) => {
+            dyn_impl
+                .has_applications
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+
+            Ok(Eval::Continue((
+                dyn_impl.typed_impl.as_ref().as_any(),
+                dyn_impl.pattern_match_mode,
+            )))
         }
     }
 }
 
 fn match_pattern<'i, 's, F: MockFn>(
+    pattern_match_mode: PatternMatchMode,
     mock_impl: &'s TypedMockImpl<F>,
     inputs: &F::Inputs<'i>,
     call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'s CallPattern<F>)>, MockError> {
-    match mock_impl.kind {
+    match pattern_match_mode {
         PatternMatchMode::StrictCallOrder => {
             // increase call index here, because stubs should not influence it:
             let current_call_index = call_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -258,9 +336,7 @@ pub(crate) enum PatternMatchMode {
 
 pub(crate) struct TypedMockImpl<F: MockFn> {
     pub input_debugger: InputDebugger<F>,
-    pub kind: PatternMatchMode,
     pub patterns: Vec<CallPattern<F>>,
-    pub has_applications: AtomicBool,
 }
 
 impl<F: MockFn> TypedMockImpl<F> {
@@ -268,9 +344,8 @@ impl<F: MockFn> TypedMockImpl<F> {
     pub fn new_standalone(
         input_debugger: InputDebugger<F>,
         input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
-        kind: PatternMatchMode,
     ) -> Self {
-        let mut mock_impl = Self::with_input_debugger(input_debugger, kind);
+        let mut mock_impl = Self::with_input_debugger(input_debugger);
         mock_impl.patterns.push(mock::CallPattern {
             input_matcher,
             call_index_range: Default::default(),
@@ -280,12 +355,10 @@ impl<F: MockFn> TypedMockImpl<F> {
         mock_impl
     }
 
-    pub fn with_input_debugger(input_debugger: InputDebugger<F>, kind: PatternMatchMode) -> Self {
+    pub fn with_input_debugger(input_debugger: InputDebugger<F>) -> Self {
         Self {
             input_debugger,
-            kind,
             patterns: vec![],
-            has_applications: AtomicBool::new(false),
         }
     }
 
@@ -304,28 +377,31 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         self
     }
 
-    fn assemble_into(&mut self, assembler: &mut MockAssembler) -> Result<(), AssembleError> {
-        let stored_dyn = assembler.impls.entry(TypeId::of::<F>()).or_insert_with(|| {
-            DynImpl(Box::new(Self::with_input_debugger(
-                InputDebugger::new_nodebug(),
-                self.kind,
-            )))
-        });
+    fn name(&self) -> &'static str {
+        F::NAME
+    }
+
+    fn assemble_into(
+        &mut self,
+        pattern_match_mode: PatternMatchMode,
+        assembler: &mut MockAssembler,
+    ) -> Result<(), AssembleError> {
+        let stored_dyn = assembler
+            .impls
+            .entry(TypeId::of::<F>())
+            .or_insert_with(|| DynMockImpl {
+                typed_impl: Box::new(Self::with_input_debugger(InputDebugger::new_nodebug())),
+                pattern_match_mode,
+                has_applications: AtomicBool::new(false),
+            });
+
         let stored_typed = stored_dyn
-            .0
+            .typed_impl
             .as_any_mut()
             .downcast_mut::<TypedMockImpl<F>>()
             .unwrap();
 
-        if stored_typed.kind != self.kind {
-            return Err(AssembleError::IncompatibleKind {
-                name: F::NAME,
-                old_kind: stored_typed.kind,
-                new_kind: self.kind,
-            });
-        }
-
-        match self.kind {
+        match pattern_match_mode {
             PatternMatchMode::StrictCallOrder => {
                 if self.patterns.len() != 1 {
                     panic!("Input mock should only have one pattern");
@@ -358,13 +434,6 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
     fn verify(&self, errors: &mut Vec<MockError>) {
         for (pat_index, pattern) in self.patterns.iter().enumerate() {
             pattern.call_counter.verify(F::NAME, pat_index, errors);
-        }
-
-        if !self
-            .has_applications
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
-            errors.push(MockError::MockNeverCalled { name: F::NAME });
         }
     }
 }

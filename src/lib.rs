@@ -400,7 +400,7 @@ pub struct Unimock {
 }
 
 struct SharedState {
-    impls: HashMap<TypeId, mock::DynImpl>,
+    impls: HashMap<TypeId, mock::DynMockImpl>,
     next_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
@@ -441,7 +441,7 @@ impl Unimock {
         }
     }
 
-    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
+    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
     pub fn eval_static_ref<'i, 's: 'i, F: MockFn + 'static>(
         &'s self,
         inputs: F::Inputs<'i>,
@@ -516,7 +516,7 @@ impl Drop for Unimock {
 
         let mut mock_errors = Vec::new();
         for (_, dyn_impl) in self.state.impls.iter() {
-            dyn_impl.0.verify(&mut mock_errors);
+            dyn_impl.verify(&mut mock_errors);
         }
         panic_if_nonempty(&mock_errors);
     }
@@ -597,7 +597,6 @@ pub trait MockFn: Sized + 'static {
             mock::TypedMockImpl::new_standalone(
                 mock::InputDebugger::new_debug(),
                 Box::new(matching),
-                mock::PatternMatchMode::FullCascadeForEveryCall,
             ),
             build::call_order::Lenient,
         )
@@ -614,7 +613,6 @@ pub trait MockFn: Sized + 'static {
             mock::TypedMockImpl::new_standalone(
                 mock::InputDebugger::new_nodebug(),
                 Box::new(matching),
-                mock::PatternMatchMode::FullCascadeForEveryCall,
             ),
             build::call_order::Lenient,
         )
@@ -635,7 +633,6 @@ pub trait MockFn: Sized + 'static {
             mock::TypedMockImpl::new_standalone(
                 mock::InputDebugger::new_debug(),
                 Box::new(matching),
-                mock::PatternMatchMode::StrictCallOrder,
             ),
             build::call_order::Strict,
         )
@@ -761,8 +758,8 @@ fn mock_from_iterator(
         assembler: &mut mock::MockAssembler,
     ) -> Result<(), mock::AssembleError> {
         match clause.0 {
-            build::ClausePrivate::Single(mut dyn_impl) => {
-                dyn_impl.0.assemble_into(assembler)?;
+            build::ClausePrivate::Single(dyn_impl) => {
+                dyn_impl.assemble_into(assembler)?;
             }
             build::ClausePrivate::Multiple(vec) => {
                 for clause in vec.into_iter() {
