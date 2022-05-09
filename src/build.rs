@@ -1,5 +1,6 @@
 use std::panic;
 
+use crate::property::*;
 use crate::*;
 
 impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
@@ -11,28 +12,6 @@ impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
 pub(crate) enum ClausePrivate {
     Single(mock::DynMockImpl),
     Multiple(Vec<Clause>),
-}
-
-pub mod call_order {
-    pub trait LenientKind {}
-
-    pub trait StrictKind {}
-
-    pub struct Lenient;
-
-    pub struct Strict;
-
-    impl StrictKind for Strict {}
-    impl LenientKind for Lenient {}
-}
-
-pub mod quantification {
-    pub trait ExactKind {}
-
-    pub struct Exact;
-    pub struct AtLeast;
-
-    impl ExactKind for Exact {}
 }
 
 /// Builder for defining a series of cascading call patterns
@@ -50,7 +29,7 @@ where
     /// The new call pattern will be matched after any previously defined call patterns on the same [Each] instance.
     ///
     /// The method returns a [DefineOutput], which is used to define how unimock responds to the matched call.
-    pub fn call<'c, M>(&'c mut self, matching: M) -> DefineOutput<'c, F, call_order::Lenient>
+    pub fn call<'c, M>(&'c mut self, matching: M) -> DefineOutput<'c, F, InAnyOrder>
     where
         M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
@@ -64,7 +43,7 @@ where
         DefineOutput {
             pattern: PatternWrapper::Grouped(self.typed_impl.patterns.last_mut().unwrap()),
             response_index: 0,
-            call_order: call_order::Lenient,
+            ordering: InAnyOrder,
         }
     }
 
@@ -99,32 +78,37 @@ impl<'p, F: MockFn> PatternWrapper<'p, F> {
 ///
 /// A standalone call pattern is the only call pattern in a mock impl,
 /// in addition it owns its own mock impl.
-pub(crate) fn new_standalone_define_output<'p, F: MockFn + 'static, C>(
+pub(crate) fn new_standalone_define_output<'p, F, O>(
     mock_impl: mock::TypedMockImpl<F>,
-    call_order: C,
-) -> DefineOutput<'p, F, C> {
+    ordering: O,
+) -> DefineOutput<'p, F, O>
+where
+    F: MockFn + 'static,
+    O: Ordering,
+{
     DefineOutput {
         pattern: PatternWrapper::Standalone(mock_impl),
         response_index: 0,
-        call_order,
+        ordering,
     }
 }
 
 /// A builder for setting up the response for a matched call pattern.
-pub struct DefineOutput<'p, F: MockFn, C> {
+pub struct DefineOutput<'p, F: MockFn, O: Ordering> {
     pattern: PatternWrapper<'p, F>,
     response_index: usize,
-    call_order: C,
+    ordering: O,
 }
 
-impl<'p, F, C> DefineOutput<'p, F, C>
+impl<'p, F, O> DefineOutput<'p, F, O>
 where
     F: MockFn + 'static,
+    O: Ordering,
 {
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement [Clone] and cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
-    pub fn returns(self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F, C>
+    pub fn returns(self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F, O>
     where
         F::Output: Send + Sync + Clone + RefUnwindSafe + 'static,
     {
@@ -133,7 +117,7 @@ where
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
-    pub fn returns_default(self) -> QuantifyResponse<'p, F, C>
+    pub fn returns_default(self) -> QuantifyResponse<'p, F, O>
     where
         F::Output: Default,
     {
@@ -144,7 +128,7 @@ where
     /// This works well when the lifetime of the returned reference is the same as `self`.
     /// Using this for `'static` references will produce a runtime error. For static
     /// references, use [DefineOutput::returns_static].
-    pub fn returns_ref<T>(self, value: T) -> QuantifyResponse<'p, F, C>
+    pub fn returns_ref<T>(self, value: T) -> QuantifyResponse<'p, F, O>
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + RefUnwindSafe + 'static,
     {
@@ -153,7 +137,7 @@ where
 
     /// Specify the output of the call to be a reference to static value.
     /// This must be used when the returned reference in the mocked trait is `'static`.
-    pub fn returns_static(self, value: &'static F::Output) -> QuantifyResponse<'p, F, C>
+    pub fn returns_static(self, value: &'static F::Output) -> QuantifyResponse<'p, F, O>
     where
         F::Output: Send + Sync + RefUnwindSafe + 'static,
     {
@@ -162,7 +146,7 @@ where
 
     /// Specify the output of the call pattern by invoking the given closure that
     /// can then compute it based on input parameters.
-    pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, C>
+    pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<F::Output>,
@@ -180,7 +164,7 @@ where
     ///
     /// This method should only be used when computing a reference based
     /// on input parameters is necessary, which should not be a common use case.
-    pub fn answers_leaked_ref<A, R>(self, func: A) -> QuantifyResponse<'p, F, C>
+    pub fn answers_leaked_ref<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
     where
         A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: std::borrow::Borrow<F::Output> + 'static,
@@ -194,21 +178,21 @@ where
     }
 
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
-    pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, C> {
+    pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, O> {
         let message = message.into();
 
         self.responder(mock::Responder::Panic(message))
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
-    pub fn unmocked(self) -> QuantifyResponse<'p, F, C>
+    pub fn unmocked(self) -> QuantifyResponse<'p, F, O>
     where
         F: Unmock,
     {
         self.responder(mock::Responder::Unmock)
     }
 
-    fn responder(mut self, responder: mock::Responder<F>) -> QuantifyResponse<'p, F, C> {
+    fn responder(mut self, responder: mock::Responder<F>) -> QuantifyResponse<'p, F, O> {
         self.pattern
             .get_mut()
             .responders
@@ -219,24 +203,25 @@ where
         QuantifyResponse {
             pattern: self.pattern,
             response_index: self.response_index,
-            call_order: self.call_order,
+            ordering: self.ordering,
         }
     }
 }
 
 /// Builder for defining how a call pattern gets verified.
-pub struct QuantifyResponse<'p, F: MockFn, C> {
+pub struct QuantifyResponse<'p, F: MockFn, O> {
     pattern: PatternWrapper<'p, F>,
     response_index: usize,
-    call_order: C,
+    ordering: O,
 }
 
-impl<'p, F, C> QuantifyResponse<'p, F, C>
+impl<'p, F, O> QuantifyResponse<'p, F, O>
 where
     F: MockFn + 'static,
+    O: Ordering,
 {
     /// Expect this call pattern to be called exactly once.
-    pub fn once(mut self) -> QuantifiedResponse<'p, F, C, quantification::Exact> {
+    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
         self.pattern
             .get_mut()
             .call_counter
@@ -245,7 +230,7 @@ where
     }
 
     /// Expect this call pattern to be called exactly the specified number of times.
-    pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, C, quantification::Exact> {
+    pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
         self.pattern
             .get_mut()
             .call_counter
@@ -254,10 +239,7 @@ where
     }
 
     /// Expect this call pattern to be called at least the specified number of times.
-    pub fn at_least_times(
-        mut self,
-        times: usize,
-    ) -> QuantifiedResponse<'p, F, C, quantification::AtLeast> {
+    pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast> {
         self.pattern
             .get_mut()
             .call_counter
@@ -265,15 +247,15 @@ where
         QuantifiedResponse {
             pattern: self.pattern,
             response_index: self.response_index + times,
-            call_order: self.call_order,
-            _quantification: quantification::AtLeast,
+            ordering: self.ordering,
+            _repetition: AtLeast,
         }
     }
 
     /// Turn the call pattern into a stubbing clause, without any overall call order verification.
     pub fn in_any_order(self) -> Clause
     where
-        C: call_order::LenientKind,
+        O: Ordering<Kind = InAnyOrder>,
     {
         match self.pattern {
             PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
@@ -283,35 +265,37 @@ where
         }
     }
 
-    fn into_exact(self, times: usize) -> QuantifiedResponse<'p, F, C, quantification::Exact> {
+    fn into_exact(self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
         QuantifiedResponse {
             pattern: self.pattern,
             response_index: self.response_index + times,
-            call_order: self.call_order,
-            _quantification: quantification::Exact,
+            ordering: self.ordering,
+            _repetition: Exact,
         }
     }
 }
 
 /// An exactly quantified response, i.e. the number of times it
 /// is expected to respond is an exact number.
-pub struct QuantifiedResponse<'p, F: MockFn, C, Q> {
+pub struct QuantifiedResponse<'p, F: MockFn, O, R> {
     pattern: PatternWrapper<'p, F>,
     response_index: usize,
-    call_order: C,
-    _quantification: Q,
+    ordering: O,
+    _repetition: R,
 }
 
-impl<'p, F, C, Q> QuantifiedResponse<'p, F, C, Q>
+impl<'p, F, O, R> QuantifiedResponse<'p, F, O, R>
 where
     F: MockFn + 'static,
+    O: Ordering,
+    R: Repetition,
 {
     /// Prepare to set up a new response, which will take effect after the current
     /// response has been yielded.
     /// In order to make an output sequence, the preceding output must be exactly quantified.
-    pub fn then(mut self) -> DefineOutput<'p, F, C>
+    pub fn then(mut self) -> DefineOutput<'p, F, O>
     where
-        Q: quantification::ExactKind,
+        R: Repetition<Kind = Exact>,
     {
         // Opening for a new response, which will be non-exactly quantified unless otherwise specified,
         // set the exactness to AtLeastPlusOne now.
@@ -327,7 +311,7 @@ where
         DefineOutput {
             pattern: self.pattern,
             response_index: self.response_index,
-            call_order: self.call_order,
+            ordering: self.ordering,
         }
     }
 
@@ -348,7 +332,7 @@ where
     /// let m = mock([
     ///     // the first call MUST be method(1) and it will return "a"
     ///     Trait__method::next_call(matching!(1)).returns_static("a").once().in_order(),
-    ///     // the second call MUST be method(1) and it will return "b"
+    ///     // the second call MUST be method(2) and it will return "b"
     ///     Trait__method::next_call(matching!(2)).returns_static("b").once().in_order(),
     ///     // there may be no more calls to this mock, as it has no stubs in it
     /// ]);
@@ -358,8 +342,8 @@ where
     /// ```
     pub fn in_order(self) -> Clause
     where
-        C: call_order::StrictKind,
-        Q: quantification::ExactKind,
+        O: Ordering<Kind = InOrder>,
+        R: Repetition<Kind = Exact>,
     {
         match self.pattern {
             PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
@@ -371,7 +355,7 @@ where
 
     pub fn in_any_order(self) -> Clause
     where
-        C: call_order::LenientKind,
+        O: Ordering<Kind = InAnyOrder>,
     {
         match self.pattern {
             PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(

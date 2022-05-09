@@ -63,7 +63,7 @@ impl DynMockImpl {
     ) -> DynMockImpl {
         DynMockImpl {
             typed_impl,
-            pattern_match_mode: PatternMatchMode::FullCascadeForEveryCall,
+            pattern_match_mode: PatternMatchMode::InAnyOrder,
             has_applications: AtomicBool::new(false),
         }
     }
@@ -74,7 +74,7 @@ impl DynMockImpl {
     ) -> DynMockImpl {
         DynMockImpl {
             typed_impl,
-            pattern_match_mode: PatternMatchMode::StrictCallOrder,
+            pattern_match_mode: PatternMatchMode::InOrder,
             has_applications: AtomicBool::new(false),
         }
     }
@@ -288,7 +288,7 @@ fn match_pattern<'i, 's, F: MockFn>(
     call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'s CallPattern<F>)>, MockError> {
     match pattern_match_mode {
-        PatternMatchMode::StrictCallOrder => {
+        PatternMatchMode::InOrder => {
             // increase call index here, because stubs should not influence it:
             let current_call_index = call_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
@@ -325,7 +325,7 @@ fn match_pattern<'i, 's, F: MockFn>(
 
             Ok(Some((pat_index, pattern_by_call_index)))
         }
-        PatternMatchMode::FullCascadeForEveryCall => Ok(mock_impl
+        PatternMatchMode::InAnyOrder => Ok(mock_impl
             .patterns
             .iter()
             .enumerate()
@@ -353,10 +353,10 @@ fn select_responder_for_call<F: MockFn>(pat: &CallPattern<F>) -> Option<&Respond
 pub(crate) enum PatternMatchMode {
     /// Each new call starts at the first call pattern, tries to
     /// match it and then goes on to the next one until success.
-    FullCascadeForEveryCall,
+    InAnyOrder,
     /// Each new call starts off where the previous one ended.
     /// E.g. match pattern[0] 1 time, match pattern[1] 3 times, etc.
-    StrictCallOrder,
+    InOrder,
 }
 
 pub(crate) struct TypedMockImpl<F: MockFn> {
@@ -416,7 +416,7 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         assembler_call_index: &mut usize,
     ) -> Result<(), AssembleError> {
         match pattern_match_mode {
-            PatternMatchMode::StrictCallOrder => {
+            PatternMatchMode::InOrder => {
                 if self.patterns.len() != 1 {
                     panic!("Input mock should only have one pattern");
                 }

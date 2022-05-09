@@ -256,10 +256,12 @@
 // For the mock-fn feature:
 #![feature(generic_associated_types)]
 
-/// Types for used for building and defining mock behaviour.
+/// Types used for building and defining mock behaviour.
 pub mod build;
 /// APIs used by macros, not intended to be used directly.
 pub mod macro_api;
+/// Traits and types used for describing the properties of various mock types.
+pub mod property;
 
 mod counter;
 mod error;
@@ -588,7 +590,7 @@ pub trait MockFn: Sized + 'static {
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
     /// that needs to be specified on this MockFn.
-    fn each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, build::call_order::Lenient>
+    fn each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, property::InAnyOrder>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
@@ -598,14 +600,12 @@ pub trait MockFn: Sized + 'static {
                 mock::InputDebugger::new_debug(),
                 Box::new(matching),
             ),
-            build::call_order::Lenient,
+            property::InAnyOrder,
         )
     }
 
     /// [MockFn::each_call] variant that doesn't require inputs to implement [Debug] (but results in worse runtime debuggability)
-    fn nodebug_each_call<'c, M>(
-        matching: M,
-    ) -> build::DefineOutput<'c, Self, build::call_order::Lenient>
+    fn nodebug_each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, property::InAnyOrder>
     where
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
@@ -614,7 +614,7 @@ pub trait MockFn: Sized + 'static {
                 mock::InputDebugger::new_nodebug(),
                 Box::new(matching),
             ),
-            build::call_order::Lenient,
+            property::InAnyOrder,
         )
     }
 
@@ -624,7 +624,7 @@ pub trait MockFn: Sized + 'static {
     /// This differens from [Self::stub], in that that a stub defines all call patterns without any
     /// specific required call order. This function takes only single input matcher, that MUST be
     /// matched in the order specified, relative to other next calls.
-    fn next_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, build::call_order::Strict>
+    fn next_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, property::InOrder>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
@@ -634,7 +634,7 @@ pub trait MockFn: Sized + 'static {
                 mock::InputDebugger::new_debug(),
                 Box::new(matching),
             ),
-            build::call_order::Strict,
+            property::InOrder,
         )
     }
 }
