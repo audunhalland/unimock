@@ -220,7 +220,7 @@ impl<'s> Method<'s> {
         }
     }
 
-    fn inputs_destructuring(&self) -> Vec<proc_macro2::TokenStream> {
+    fn inputs_destructuring(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
         self.method
             .sig
             .inputs
@@ -235,10 +235,9 @@ impl<'s> Method<'s> {
                     ),
                 },
             })
-            .collect::<Vec<_>>()
     }
 
-    fn inputs_try_debug_exprs(&self) -> Vec<proc_macro2::TokenStream> {
+    fn inputs_try_debug_exprs(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
         self.method
             .sig
             .inputs
@@ -249,7 +248,7 @@ impl<'s> Method<'s> {
                     syn::Pat::Ident(pat_ident) => {
                         let ident = &pat_ident.ident;
                         Some(quote! {
-                            #ident.try_debug()
+                            #ident.unimock_try_debug()
                         })
                     }
                     _ => Some(
@@ -258,7 +257,6 @@ impl<'s> Method<'s> {
                     ),
                 },
             })
-            .collect::<Vec<_>>()
     }
 }
 
@@ -439,6 +437,7 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     let inputs_destructuring = method.inputs_destructuring();
 
     if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
+        let inputs_destructuring = inputs_destructuring.collect::<Vec<_>>();
         let opt_dot_await = sig.asyncness.map(|_| quote! { .await });
 
         quote! {

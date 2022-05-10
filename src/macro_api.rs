@@ -31,27 +31,27 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
 /// of a value.
 pub trait ProperDebug {
     /// Format a debug representation.
-    fn try_debug(&self) -> String;
+    fn unimock_try_debug(&self) -> String;
 }
 
 /// Fallback trait (using autoref specialization) for returning `"?"`
 /// when the implementing value does not implement [std::fmt::Debug].
 pub trait NoDebug {
     /// Format a debug representation.
-    fn try_debug(&self) -> String;
+    fn unimock_try_debug(&self) -> String;
 }
 
 // Autoref specialization:
 // https://github.com/dtolnay/case-studies/blob/master/autoref-specialization/README.md
 
 impl<T: std::fmt::Debug> ProperDebug for T {
-    fn try_debug(&self) -> String {
+    fn unimock_try_debug(&self) -> String {
         format!("{:?}", self)
     }
 }
 
 impl<T> NoDebug for &T {
-    fn try_debug(&self) -> String {
+    fn unimock_try_debug(&self) -> String {
         "?".to_string()
     }
 }
