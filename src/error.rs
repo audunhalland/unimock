@@ -95,12 +95,12 @@ impl MockError {
                 name,
                 inputs_debug,
                 pat_index,
-            } => format!("{name}({inputs_debug}): Cannot borrow output value statically for call pattern ({pat_index}). Consider using Match::returns_static()."),
+            } => format!("{name}{inputs_debug}: Cannot borrow output value statically for call pattern ({pat_index}). Consider using Match::returns_static()."),
             MockError::CannotBorrowValueProducedByClosure {
                 name,
                 inputs_debug,
                 pat_index,
-            } => format!("{name}({inputs_debug}): Cannot borrow the value returned by the answering closure for pattern ({pat_index}). Consider using Match::returns_ref()."),
+            } => format!("{name}{inputs_debug}: Cannot borrow the value returned by the answering closure for pattern ({pat_index}). Consider using Match::returns_ref()."),
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")

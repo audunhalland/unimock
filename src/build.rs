@@ -113,7 +113,9 @@ where
         F::Output: Send + Sync + Clone + RefUnwindSafe + 'static,
     {
         let value = value.into();
-        self.responder(mock::Responder::Closure(Box::new(move |_| value.clone())))
+        self.responder(mock::Responder::Value(Box::new(mock::StoredValueSlot(
+            value,
+        ))))
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.

@@ -163,6 +163,7 @@ where
 {
     match eval_responder(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((_, responder)) => match responder {
+            Responder::Value(stored) => Ok(Evaluation::Evaluated(*stored.box_clone())),
             Responder::Closure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::StaticRefClosure(_) => panic!(),
             Responder::Borrowable(_) => panic!(),
@@ -181,6 +182,7 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
 ) -> Result<Evaluation<'i, &'s F::Output, F>, MockError> {
     match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((pat_index, responder)) => match responder {
+            Responder::Value(stored) => Ok(Evaluation::Evaluated(stored.borrow_stored())),
             Responder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
@@ -207,6 +209,11 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
 ) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
     match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((pat_index, responder)) => match responder {
+            Responder::Value(_) => Err(MockError::CannotBorrowValueStatically {
+                name: F::NAME,
+                inputs_debug: F::debug_inputs(&inputs),
+                pat_index,
+            }),
             Responder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
@@ -468,11 +475,30 @@ pub(crate) struct CallOrderResponder<F: MockFn> {
 }
 
 pub(crate) enum Responder<F: MockFn> {
+    Value(Box<dyn StoredValue<F::Output>>),
+    Borrowable(Box<dyn Borrow<F::Output> + Send + Sync + RefUnwindSafe>),
     Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync + RefUnwindSafe>),
     StaticRefClosure(
         Box<dyn (for<'i> Fn(F::Inputs<'i>) -> &'static F::Output) + Send + Sync + RefUnwindSafe>,
     ),
-    Borrowable(Box<dyn Borrow<F::Output> + Send + Sync + RefUnwindSafe>),
     Panic(String),
     Unmock,
+}
+
+pub trait StoredValue<T: ?Sized>: Send + Sync + RefUnwindSafe {
+    fn box_clone(&self) -> Box<T>;
+
+    fn borrow_stored(&self) -> &T;
+}
+
+pub(crate) struct StoredValueSlot<T>(pub T);
+
+impl<T: Clone + Send + Sync + RefUnwindSafe> StoredValue<T> for StoredValueSlot<T> {
+    fn box_clone(&self) -> Box<T> {
+        Box::new(self.0.clone())
+    }
+
+    fn borrow_stored(&self) -> &T {
+        &self.0
+    }
 }

@@ -208,6 +208,27 @@ fn should_debug_reference_to_debug_implementing_type() {
 }
 
 #[test]
+fn should_be_able_to_borrow_a_returns_value() {
+    #[derive(Eq, PartialEq, Debug, Clone)]
+    struct Ret(i32);
+
+    #[unimock]
+    trait BorrowsRet {
+        fn borrows_ret(&self) -> &Ret;
+    }
+
+    assert_eq!(
+        &Ret(42),
+        mock(Some(
+            BorrowsRet__borrows_ret::each_call(matching!())
+                .returns(Ret(42))
+                .in_any_order()
+        ))
+        .borrows_ret()
+    );
+}
+
+#[test]
 fn borrowing_with_memory_leak() {
     #[unimock]
     trait Borrowing {
@@ -584,7 +605,7 @@ trait BorrowStatic {
 
 #[test]
 #[should_panic(
-    expected = "BorrowStatic::static_str(_): Cannot borrow output value statically for call pattern (0). Consider using .returns_static()."
+    expected = "BorrowStatic::static_str(33): Cannot borrow output value statically for call pattern (0). Consider using Match::returns_static()."
 )]
 fn borrow_static_should_not_work_with_returns_ref() {
     assert_eq!(
