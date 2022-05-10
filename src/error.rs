@@ -100,7 +100,7 @@ impl MockError {
                 name,
                 inputs_debug,
                 pat_index,
-            } => format!("{name}({inputs_debug}): Cannot borrow the value product by the answers closure for ({pat_index})"),
+            } => format!("{name}({inputs_debug}): Cannot borrow the value returned by the answering closure for ({pat_index})"),
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")
