@@ -47,9 +47,9 @@ where
         }
     }
 
-    pub(crate) fn new_stub(input_debugger: mock::InputDebugger<F>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            typed_impl: mock::TypedMockImpl::with_input_debugger(input_debugger),
+            typed_impl: mock::TypedMockImpl::new(),
         }
     }
 

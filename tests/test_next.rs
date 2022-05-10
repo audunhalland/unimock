@@ -164,7 +164,7 @@ fn primitive_mocking_without_debug() {
         fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
     }
 
-    match mock(Some(VeryPrimitive__primitive::nodebug_stub(|each| {
+    match mock(Some(VeryPrimitive__primitive::stub(|each| {
         each.call(matching!(PrimitiveEnum::Bar, _))
             .answers(|_| PrimitiveEnum::Foo);
     })))
@@ -176,7 +176,7 @@ fn primitive_mocking_without_debug() {
 
     assert_panics!(
         {
-            mock([VeryPrimitive__primitive::nodebug_stub(|each| {
+            mock([VeryPrimitive__primitive::stub(|each| {
                 each.call(matching!(PrimitiveEnum::Bar, _))
                     .answers(|_| PrimitiveEnum::Foo);
             })])
@@ -317,7 +317,7 @@ fn newtype() {
     }
 
     let _ = takes(
-        &mock(Some(NewtypeString__func::nodebug_stub(|each| {
+        &mock(Some(NewtypeString__func::stub(|each| {
             each.call(matching!("input")).returns("output");
         }))),
         "input".into(),

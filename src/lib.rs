@@ -413,6 +413,7 @@ impl Unimock {
     pub fn eval<'i, 's: 'i, F: MockFn + 'static>(
         &'s self,
         inputs: F::Inputs<'i>,
+        inputs_debug: String,
     ) -> macro_api::Evaluation<'i, F::Output, F>
     where
         F::Output: Sized,
@@ -420,6 +421,7 @@ impl Unimock {
         match mock::eval_sized::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
+            inputs_debug,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
@@ -432,10 +434,12 @@ impl Unimock {
     pub fn eval_borrowed<'i, 's: 'i, F: MockFn + 'static>(
         &'s self,
         inputs: F::Inputs<'i>,
+        inputs_debug: String,
     ) -> macro_api::Evaluation<'i, &'s F::Output, F> {
         match mock::eval_unsized_self_borrowed::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
+            inputs_debug,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
@@ -448,10 +452,12 @@ impl Unimock {
     pub fn eval_static_ref<'i, 's: 'i, F: MockFn + 'static>(
         &'s self,
         inputs: F::Inputs<'i>,
+        inputs_debug: String,
     ) -> macro_api::Evaluation<'i, &'static F::Output, F> {
         match mock::eval_unsized_static_ref::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
+            inputs_debug,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
@@ -570,24 +576,10 @@ pub trait MockFn: Sized + 'static {
     /// For exact order verification, reach for [Self::next_call] instead.
     fn stub<F>(each_fn: F) -> Clause
     where
-        for<'i> Self::Inputs<'i>: std::fmt::Debug,
         F: FnOnce(&mut build::Each<Self>),
     {
-        let mut each = build::Each::new_stub(mock::InputDebugger::new_debug());
+        let mut each = build::Each::new();
         each_fn(&mut each);
-        each.to_clause()
-    }
-
-    /// Create a stubbing clause by grouping calls.
-    ///
-    /// Works like [MockFn::stub], except that it does not require method inputs to implement [Debug].
-    /// This will result in poorer debuggability when things fail at test time.
-    fn nodebug_stub<S>(setup: S) -> Clause
-    where
-        S: FnOnce(&mut build::Each<Self>),
-    {
-        let mut each = build::Each::new_stub(mock::InputDebugger::new_nodebug());
-        setup(&mut each);
         each.to_clause()
     }
 
@@ -597,28 +589,10 @@ pub trait MockFn: Sized + 'static {
     /// that needs to be specified on this MockFn.
     fn each_call<M>(matching: M) -> build::Match<'static, Self, property::InAnyOrder>
     where
-        for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
         build::new_standalone_match(
-            mock::TypedMockImpl::new_standalone(
-                mock::InputDebugger::new_debug(),
-                Box::new(matching),
-            ),
-            property::InAnyOrder,
-        )
-    }
-
-    /// [MockFn::each_call] variant that doesn't require inputs to implement [Debug] (but results in worse runtime debuggability)
-    fn nodebug_each_call<M>(matching: M) -> build::Match<'static, Self, property::InAnyOrder>
-    where
-        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
-    {
-        build::new_standalone_match(
-            mock::TypedMockImpl::new_standalone(
-                mock::InputDebugger::new_nodebug(),
-                Box::new(matching),
-            ),
+            mock::TypedMockImpl::new_standalone(Box::new(matching)),
             property::InAnyOrder,
         )
     }
@@ -631,29 +605,10 @@ pub trait MockFn: Sized + 'static {
     /// matched in the order specified, relative to other next calls.
     fn next_call<M>(matching: M) -> build::Match<'static, Self, property::InOrder>
     where
-        for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
         build::new_standalone_match(
-            mock::TypedMockImpl::new_standalone(
-                mock::InputDebugger::new_debug(),
-                Box::new(matching),
-            ),
-            property::InOrder,
-        )
-    }
-
-    /// Initiate a call pattern builder intended to be used as a [Clause]
-    /// with exact order verification. Same as [MockFn::next_call], except it doesn't require function inputs to implement [Debug].
-    fn nodebug_next_call<M>(matching: M) -> build::Match<'static, Self, property::InOrder>
-    where
-        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
-    {
-        build::new_standalone_match(
-            mock::TypedMockImpl::new_standalone(
-                mock::InputDebugger::new_nodebug(),
-                Box::new(matching),
-            ),
+            mock::TypedMockImpl::new_standalone(Box::new(matching)),
             property::InOrder,
         )
     }

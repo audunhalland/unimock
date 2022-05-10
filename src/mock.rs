@@ -155,13 +155,14 @@ enum Eval<C> {
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
     dyn_impl: Option<&'i DynMockImpl>,
     inputs: F::Inputs<'i>,
+    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, F::Output, F>, MockError>
 where
     F::Output: Sized,
 {
-    match eval_responder(dyn_impl, &inputs, call_index, fallback_mode)? {
+    match eval_responder(dyn_impl, &inputs, inputs_debug, call_index, fallback_mode)? {
         Eval::Continue((_, responder)) => match responder {
             Responder::Closure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::StaticRefClosure(_) => panic!(),
@@ -176,10 +177,11 @@ where
 pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
     inputs: F::Inputs<'i>,
+    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'s F::Output, F>, MockError> {
-    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
+    match eval_responder::<F>(dyn_impl, &inputs, inputs_debug, call_index, fallback_mode)? {
         Eval::Continue((_, responder)) => match responder {
             Responder::Closure(_) => panic!(), // FIXME
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
@@ -198,10 +200,11 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
 pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
     inputs: F::Inputs<'i>,
+    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
-    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
+    match eval_responder::<F>(dyn_impl, &inputs, inputs_debug, call_index, fallback_mode)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Closure(_) => panic!(), // FIXME
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
@@ -219,6 +222,7 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
 fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
     inputs: &F::Inputs<'i>,
+    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Eval<(usize, &'s Responder<F>)>, MockError> {
@@ -231,23 +235,29 @@ fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
             if typed_impl.patterns.is_empty() {
                 return Err(MockError::NoRegisteredCallPatterns {
                     name: F::NAME,
-                    inputs_debug: typed_impl.debug_inputs(&inputs),
+                    inputs_debug,
                 });
             }
 
-            match match_pattern(pattern_match_mode, typed_impl, inputs, call_index)? {
+            match match_pattern(
+                pattern_match_mode,
+                typed_impl,
+                inputs,
+                &inputs_debug,
+                call_index,
+            )? {
                 Some((pat_index, pattern)) => match select_responder_for_call(pattern) {
                     Some(responder) => Ok(Eval::Continue((pat_index, responder))),
                     None => Err(MockError::NoOutputAvailableForCallPattern {
                         name: F::NAME,
-                        inputs_debug: typed_impl.debug_inputs(&inputs),
+                        inputs_debug,
                         pat_index,
                     }),
                 },
                 None => match fallback_mode {
                     FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
                         name: F::NAME,
-                        inputs_debug: typed_impl.debug_inputs(&inputs),
+                        inputs_debug,
                     }),
                     FallbackMode::Unmock => Ok(Eval::Unmock),
                 },
@@ -285,6 +295,7 @@ fn match_pattern<'i, 's, F: MockFn>(
     pattern_match_mode: PatternMatchMode,
     mock_impl: &'s TypedMockImpl<F>,
     inputs: &F::Inputs<'i>,
+    inputs_debug: &String,
     call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'s CallPattern<F>)>, MockError> {
     match pattern_match_mode {
@@ -302,7 +313,7 @@ fn match_pattern<'i, 's, F: MockFn>(
                 })
                 .ok_or_else(|| MockError::CallOrderNotMatchedForMockFn {
                     name: F::NAME,
-                    inputs_debug: mock_impl.debug_inputs(inputs),
+                    inputs_debug: inputs_debug.clone(),
                     actual_call_order: error::CallOrder(current_call_index),
                     expected_ranges: mock_impl
                         .patterns
@@ -317,7 +328,7 @@ fn match_pattern<'i, 's, F: MockFn>(
             if !(pattern_by_call_index.input_matcher)(inputs) {
                 return Err(MockError::InputsNotMatchedInCallOrder {
                     name: F::NAME,
-                    inputs_debug: mock_impl.debug_inputs(inputs),
+                    inputs_debug: inputs_debug.clone(),
                     actual_call_order: error::CallOrder(current_call_index),
                     pat_index,
                 });
@@ -360,17 +371,15 @@ pub(crate) enum PatternMatchMode {
 }
 
 pub(crate) struct TypedMockImpl<F: MockFn> {
-    pub input_debugger: InputDebugger<F>,
     pub patterns: Vec<CallPattern<F>>,
 }
 
 impl<F: MockFn> TypedMockImpl<F> {
     /// A standalone mock, used in the building stage.
     pub fn new_standalone(
-        input_debugger: InputDebugger<F>,
         input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
     ) -> Self {
-        let mut mock_impl = Self::with_input_debugger(input_debugger);
+        let mut mock_impl = Self::new();
         mock_impl.patterns.push(mock::CallPattern {
             input_matcher,
             call_index_range: Default::default(),
@@ -380,16 +389,8 @@ impl<F: MockFn> TypedMockImpl<F> {
         mock_impl
     }
 
-    pub fn with_input_debugger(input_debugger: InputDebugger<F>) -> Self {
-        Self {
-            input_debugger,
-            patterns: vec![],
-        }
-    }
-
-    fn debug_inputs<'i>(&self, inputs: &F::Inputs<'i>) -> String {
-        self.input_debugger
-            .debug_input_as_tuple(inputs, F::N_INPUTS)
+    pub fn new() -> Self {
+        Self { patterns: vec![] }
     }
 }
 
@@ -444,10 +445,6 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
                 .unwrap();
 
             existing_impl.patterns.append(&mut self.patterns);
-
-            existing_impl
-                .input_debugger
-                .steal_debug_if_necessary(&mut self.input_debugger);
         }
 
         Ok(())
@@ -480,52 +477,4 @@ pub(crate) enum Responder<F: MockFn> {
     Borrowable(Box<dyn Borrow<F::Output> + Send + Sync + RefUnwindSafe>),
     Panic(String),
     Unmock,
-}
-
-pub(crate) struct InputDebugger<F: MockFn> {
-    pub debug_func:
-        Option<Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> String) + Send + Sync + RefUnwindSafe>>,
-}
-
-impl<F: MockFn> InputDebugger<F> {
-    pub fn new_nodebug() -> Self {
-        Self { debug_func: None }
-    }
-
-    pub fn new_debug() -> Self
-    where
-        for<'i> F::Inputs<'i>: std::fmt::Debug,
-    {
-        Self {
-            debug_func: Some(Box::new(|args| format!("{:?}", args))),
-        }
-    }
-
-    pub fn steal_debug_if_necessary(&mut self, other: &mut InputDebugger<F>) {
-        if self.debug_func.is_none() {
-            self.debug_func = other.debug_func.take()
-        }
-    }
-
-    pub fn debug_input_as_tuple<'i>(&self, inputs: &F::Inputs<'i>, n_args: u8) -> String {
-        if let Some(func) = self.debug_func.as_ref() {
-            let debug = func(inputs);
-            match n_args {
-                1 => format!("({})", debug),
-                _ => debug,
-            }
-        } else {
-            anonymous_inputs_debug(n_args)
-        }
-    }
-}
-
-fn anonymous_inputs_debug(n_args: u8) -> String {
-    let inner = (0..n_args)
-        .into_iter()
-        .map(|_| "_")
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    format!("({})", inner)
 }

@@ -27,6 +27,42 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
     }
 }
 
+// Debugging
+// TODO: Could avoid creating the string upfront?
+
+/// Debugger for MockFn inputs.
+pub trait DebugInputs {
+    /// Create a debug string from function inputs.
+    fn unimock_debug(&self, n_inputs: u8) -> String;
+}
+
+/// Debugger for MockFn inputs which do not implement [std::fmt::Debug].
+pub trait NoDebugInputs {
+    /// Create a debug string from function inputs.
+    fn unimock_debug(&self, n_inputs: u8) -> String;
+}
+
+impl<T: std::fmt::Debug> DebugInputs for T {
+    fn unimock_debug(&self, n_inputs: u8) -> String {
+        match n_inputs {
+            1 => format!("({:?})", self),
+            _ => format!("{:?}", self),
+        }
+    }
+}
+
+impl<T> NoDebugInputs for &T {
+    fn unimock_debug(&self, n_inputs: u8) -> String {
+        let inner = (0..n_inputs)
+            .into_iter()
+            .map(|_| "_")
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        format!("({})", inner)
+    }
+}
+
 /// Convert any type implementing `AsRef<str>` to a `&str`.
 pub fn as_str_ref<T>(input: &T) -> &str
 where

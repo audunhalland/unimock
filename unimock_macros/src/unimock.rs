@@ -204,6 +204,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
 
 struct Method<'s> {
     method: &'s syn::TraitItemMethod,
+    n_inputs: u8,
     mock_fn_ident: syn::Ident,
     mock_fn_name: syn::LitStr,
     output_ownership: OutputOwnership,
@@ -256,8 +257,17 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
                 }
             };
 
+            let mut n_inputs: u8 = 0;
+
+            for arg in method.sig.inputs.iter() {
+                if let syn::FnArg::Typed(_) = arg {
+                    n_inputs += 1;
+                }
+            }
+
             Ok(Method {
                 method,
+                n_inputs,
                 mock_fn_ident,
                 mock_fn_name,
                 output_ownership,
@@ -274,6 +284,7 @@ struct MockFnDef {
 
 fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: &Cfg) -> MockFnDef {
     let mock_fn_ident = &method.mock_fn_ident;
+    let n_inputs = method.n_inputs;
     let mock_fn_path = method.mock_fn_path(cfg);
     let mock_fn_name = &method.mock_fn_name;
 
@@ -286,7 +297,6 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
     };
 
     let input_lifetime = &cfg.input_lifetime;
-    let mut n_inputs: u8 = 0;
 
     let inputs_tuple = method
         .method
@@ -298,7 +308,6 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
             syn::FnArg::Typed(pat_type) => Some(pat_type.ty.as_ref()),
         })
         .map(|ty| {
-            n_inputs += 1;
             let ty = substitute_lifetimes(ty, input_lifetime);
             quote! { #ty }
         });
@@ -382,6 +391,7 @@ fn determine_ownership(ty: &syn::Type) -> (OutputOwnership, &syn::Type) {
 
 fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
+    let n_inputs = method.n_inputs;
     let mock_fn_path = method.mock_fn_path(cfg);
 
     let eval_fn = match method.output_ownership {
@@ -409,7 +419,10 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
 
         quote! {
             #sig {
-                match self.#eval_fn::<#mock_fn_path>((#(#inputs),*)) {
+                let inputs = (#(#inputs),*);
+                use ::unimock::macro_api::{DebugInputs, NoDebugInputs};
+                let inputs_debug = (&inputs).unimock_debug(#n_inputs);
+                match self.#eval_fn::<#mock_fn_path>(inputs, inputs_debug) {
                     ::unimock::macro_api::Evaluation::Evaluated(output) => output,
                     ::unimock::macro_api::Evaluation::Skipped((#(#inputs),*)) => #unmock_path(self, #(#inputs),*) #opt_dot_await
                 }
@@ -418,7 +431,10 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
     } else {
         quote! {
             #sig {
-                self.#eval_fn::<#mock_fn_path>((#(#inputs),*)).unwrap(self)
+                let inputs = (#(#inputs),*);
+                use ::unimock::macro_api::{DebugInputs, NoDebugInputs};
+                let inputs_debug = (&inputs).unimock_debug(#n_inputs);
+                self.#eval_fn::<#mock_fn_path>(inputs, inputs_debug).unwrap(self)
             }
         }
     }
