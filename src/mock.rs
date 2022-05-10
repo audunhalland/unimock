@@ -180,8 +180,12 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'s F::Output, F>, MockError> {
     match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
-        Eval::Continue((_, responder)) => match responder {
-            Responder::Closure(_) => panic!(), // FIXME
+        Eval::Continue((pat_index, responder)) => match responder {
+            Responder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
+                name: F::NAME,
+                inputs_debug: F::debug_inputs(&inputs),
+                pat_index,
+            }),
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::Borrowable(borrowable) => {
                 let borrowable: &dyn Borrow<<F as MockFn>::Output> = borrowable.as_ref();
@@ -203,10 +207,15 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
 ) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
     match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((pat_index, responder)) => match responder {
-            Responder::Closure(_) => panic!(), // FIXME
+            Responder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
+                name: F::NAME,
+                inputs_debug: F::debug_inputs(&inputs),
+                pat_index,
+            }),
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::Borrowable(_) => Err(MockError::CannotBorrowValueStatically {
                 name: F::NAME,
+                inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
             }),
             Responder::Panic(msg) => panic!("{}", msg),

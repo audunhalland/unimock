@@ -36,6 +36,12 @@ pub enum MockError {
     },
     CannotBorrowValueStatically {
         name: &'static str,
+        inputs_debug: String,
+        pat_index: usize,
+    },
+    CannotBorrowValueProducedByClosure {
+        name: &'static str,
+        inputs_debug: String,
         pat_index: usize,
     },
     FailedVerification(String),
@@ -87,8 +93,14 @@ impl MockError {
             }
             MockError::CannotBorrowValueStatically {
                 name,
+                inputs_debug,
                 pat_index,
-            } => format!("{name}(_): Cannot borrow output value statically for call pattern ({pat_index}). Consider using .returns_static()."),
+            } => format!("{name}({inputs_debug}): Cannot borrow output value statically for call pattern ({pat_index}). Consider using .returns_static()."),
+            MockError::CannotBorrowValueProducedByClosure {
+                name,
+                inputs_debug,
+                pat_index,
+            } => format!("{name}({inputs_debug}): Cannot borrow the value product by the answers closure for ({pat_index})"),
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")
