@@ -187,6 +187,27 @@ fn primitive_mocking_without_debug() {
 }
 
 #[test]
+fn should_debug_reference_to_debug_implementing_type() {
+    #[derive(Debug)]
+    enum DebugEnum {}
+
+    #[unimock]
+    trait VeryPrimitiveRefZero {
+        fn primitive_ref(&self, a: DebugEnum) -> DebugEnum;
+    }
+
+    #[unimock]
+    trait VeryPrimitiveRefOnce {
+        fn primitive_ref(&self, a: &DebugEnum) -> DebugEnum;
+    }
+
+    #[unimock]
+    trait VeryPrimitiveRefTwice {
+        fn primitive_ref(&self, a: &&DebugEnum) -> DebugEnum;
+    }
+}
+
+#[test]
 fn borrowing_with_memory_leak() {
     #[unimock]
     trait Borrowing {

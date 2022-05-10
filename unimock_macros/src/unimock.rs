@@ -220,7 +220,7 @@ impl<'s> Method<'s> {
         }
     }
 
-    fn inputs_destructuring(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
+    fn inputs_destructuring(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
         self.method
             .sig
             .inputs
@@ -237,7 +237,7 @@ impl<'s> Method<'s> {
             })
     }
 
-    fn inputs_try_debug_exprs(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
+    fn inputs_try_debug_exprs(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
         self.method
             .sig
             .inputs
@@ -245,12 +245,7 @@ impl<'s> Method<'s> {
             .filter_map(|fn_arg| match fn_arg {
                 syn::FnArg::Receiver(_) => None,
                 syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-                    syn::Pat::Ident(pat_ident) => {
-                        let ident = &pat_ident.ident;
-                        Some(quote! {
-                            #ident.unimock_try_debug()
-                        })
-                    }
+                    syn::Pat::Ident(pat_ident) => Some(try_debug_expr(pat_ident, &pat_type.ty)),
                     _ => Some(
                         syn::Error::new(pat_type.span(), "Unprocessable argument")
                             .to_compile_error(),
@@ -304,6 +299,31 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
             })
         })
         .collect()
+}
+
+fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::TokenStream {
+    fn count_references(ty: &syn::Type) -> usize {
+        match ty {
+            syn::Type::Reference(type_reference) => 1 + count_references(&type_reference.elem),
+            _ => 0,
+        }
+    }
+
+    let ref_count = count_references(ty);
+    let ident = &pat_ident.ident;
+
+    if ref_count > 0 {
+        // insert as many * as there are references
+        let derefs = (0..ref_count).map(|_| quote! { * });
+
+        quote! {
+            (#(#derefs)* #ident).unimock_try_debug()
+        }
+    } else {
+        quote! {
+            #ident.unimock_try_debug()
+        }
+    }
 }
 
 struct MockFnDef {
