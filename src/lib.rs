@@ -88,7 +88,7 @@
 //!
 //! ### Specifying outputs
 //! Specifying outputs can be done in several ways. The simplest one is `returns(something)`. Different ways of specifying outputs are
-//! found in [build::DefineOutput].
+//! found in [build::Match].
 //!
 //! # Combining clauses
 //! [mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more that one kind of behaviour!
@@ -568,13 +568,13 @@ pub trait MockFn: Sized + 'static {
     /// A stub sets up call patterns on a single function, that can be matched in any order.
     ///
     /// For exact order verification, reach for [Self::next_call] instead.
-    fn stub<'c, S>(setup: S) -> Clause
+    fn stub<F>(each_fn: F) -> Clause
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
-        S: FnOnce(&mut build::Each<Self>) + 'c,
+        F: FnOnce(&mut build::Each<Self>),
     {
         let mut each = build::Each::new_stub(mock::InputDebugger::new_debug());
-        setup(&mut each);
+        each_fn(&mut each);
         each.to_clause()
     }
 
@@ -582,9 +582,9 @@ pub trait MockFn: Sized + 'static {
     ///
     /// Works like [MockFn::stub], except that it does not require method inputs to implement [Debug].
     /// This will result in poorer debuggability when things fail at test time.
-    fn nodebug_stub<'c, S>(setup: S) -> Clause
+    fn nodebug_stub<S>(setup: S) -> Clause
     where
-        S: FnOnce(&mut build::Each<Self>) + 'c,
+        S: FnOnce(&mut build::Each<Self>),
     {
         let mut each = build::Each::new_stub(mock::InputDebugger::new_nodebug());
         setup(&mut each);
@@ -595,12 +595,12 @@ pub trait MockFn: Sized + 'static {
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
     /// that needs to be specified on this MockFn.
-    fn each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, property::InAnyOrder>
+    fn each_call<M>(matching: M) -> build::Match<'static, Self, property::InAnyOrder>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
-        build::new_standalone_define_output(
+        build::new_standalone_match(
             mock::TypedMockImpl::new_standalone(
                 mock::InputDebugger::new_debug(),
                 Box::new(matching),
@@ -610,11 +610,11 @@ pub trait MockFn: Sized + 'static {
     }
 
     /// [MockFn::each_call] variant that doesn't require inputs to implement [Debug] (but results in worse runtime debuggability)
-    fn nodebug_each_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, property::InAnyOrder>
+    fn nodebug_each_call<M>(matching: M) -> build::Match<'static, Self, property::InAnyOrder>
     where
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
-        build::new_standalone_define_output(
+        build::new_standalone_match(
             mock::TypedMockImpl::new_standalone(
                 mock::InputDebugger::new_nodebug(),
                 Box::new(matching),
@@ -629,14 +629,29 @@ pub trait MockFn: Sized + 'static {
     /// This differens from [Self::stub], in that that a stub defines all call patterns without any
     /// specific required call order. This function takes only single input matcher, that MUST be
     /// matched in the order specified, relative to other next calls.
-    fn next_call<'c, M>(matching: M) -> build::DefineOutput<'c, Self, property::InOrder>
+    fn next_call<M>(matching: M) -> build::Match<'static, Self, property::InOrder>
     where
         for<'i> Self::Inputs<'i>: std::fmt::Debug,
         M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
-        build::new_standalone_define_output(
+        build::new_standalone_match(
             mock::TypedMockImpl::new_standalone(
                 mock::InputDebugger::new_debug(),
+                Box::new(matching),
+            ),
+            property::InOrder,
+        )
+    }
+
+    /// Initiate a call pattern builder intended to be used as a [Clause]
+    /// with exact order verification. Same as [MockFn::next_call], except it doesn't require function inputs to implement [Debug].
+    fn nodebug_next_call<M>(matching: M) -> build::Match<'static, Self, property::InOrder>
+    where
+        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
+    {
+        build::new_standalone_match(
+            mock::TypedMockImpl::new_standalone(
+                mock::InputDebugger::new_nodebug(),
                 Box::new(matching),
             ),
             property::InOrder,

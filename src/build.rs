@@ -28,8 +28,8 @@ where
     ///
     /// The new call pattern will be matched after any previously defined call patterns on the same [Each] instance.
     ///
-    /// The method returns a [DefineOutput], which is used to define how unimock responds to the matched call.
-    pub fn call<'c, M>(&'c mut self, matching: M) -> DefineOutput<'c, F, InAnyOrder>
+    /// The method returns a [Match], which is used to define how unimock responds to the matched call.
+    pub fn call<'e, M>(&'e mut self, matching: M) -> Match<'e, F, InAnyOrder>
     where
         M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
     {
@@ -40,7 +40,7 @@ where
             responders: vec![],
         });
 
-        DefineOutput {
+        Match {
             pattern: PatternWrapper::Grouped(self.typed_impl.patterns.last_mut().unwrap()),
             response_index: 0,
             ordering: InAnyOrder,
@@ -74,33 +74,33 @@ impl<'p, F: MockFn> PatternWrapper<'p, F> {
     }
 }
 
-/// Create a new standalone call pattern.
+/// Create a new standalone call pattern match.
 ///
 /// A standalone call pattern is the only call pattern in a mock impl,
 /// in addition it owns its own mock impl.
-pub(crate) fn new_standalone_define_output<'p, F, O>(
+pub(crate) fn new_standalone_match<F, O>(
     mock_impl: mock::TypedMockImpl<F>,
     ordering: O,
-) -> DefineOutput<'p, F, O>
+) -> Match<'static, F, O>
 where
     F: MockFn + 'static,
     O: Ordering,
 {
-    DefineOutput {
+    Match {
         pattern: PatternWrapper::Standalone(mock_impl),
         response_index: 0,
         ordering,
     }
 }
 
-/// A builder for setting up the response for a matched call pattern.
-pub struct DefineOutput<'p, F: MockFn, O: Ordering> {
+/// A matched call pattern, ready for setting up a response.
+pub struct Match<'p, F: MockFn, O: Ordering> {
     pattern: PatternWrapper<'p, F>,
     response_index: usize,
     ordering: O,
 }
 
-impl<'p, F, O> DefineOutput<'p, F, O>
+impl<'p, F, O> Match<'p, F, O>
 where
     F: MockFn + 'static,
     O: Ordering,
@@ -127,7 +127,7 @@ where
     /// Specify the output of the call to be a borrow of the provided value.
     /// This works well when the lifetime of the returned reference is the same as `self`.
     /// Using this for `'static` references will produce a runtime error. For static
-    /// references, use [DefineOutput::returns_static].
+    /// references, use [Match::returns_static].
     pub fn returns_ref<T>(self, value: T) -> QuantifyResponse<'p, F, O>
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + RefUnwindSafe + 'static,
@@ -293,7 +293,7 @@ where
     /// Prepare to set up a new response, which will take effect after the current
     /// response has been yielded.
     /// In order to make an output sequence, the preceding output must be exactly quantified.
-    pub fn then(mut self) -> DefineOutput<'p, F, O>
+    pub fn then(mut self) -> Match<'p, F, O>
     where
         R: Repetition<Kind = Exact>,
     {
@@ -308,7 +308,7 @@ where
             .call_counter
             .add_to_minimum(0, counter::Exactness::AtLeastPlusOne);
 
-        DefineOutput {
+        Match {
             pattern: self.pattern,
             response_index: self.response_index,
             ordering: self.ordering,
