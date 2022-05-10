@@ -182,7 +182,7 @@ fn primitive_mocking_without_debug() {
             })])
             .primitive(PrimitiveEnum::Foo, "");
         },
-        includes("VeryPrimitive::primitive(_, _): No matching call patterns.")
+        includes("VeryPrimitive::primitive(?, \"\"): No matching call patterns.")
     );
 }
 

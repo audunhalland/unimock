@@ -204,7 +204,6 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
 
 struct Method<'s> {
     method: &'s syn::TraitItemMethod,
-    n_inputs: u8,
     mock_fn_ident: syn::Ident,
     mock_fn_name: syn::LitStr,
     output_ownership: OutputOwnership,
@@ -219,6 +218,47 @@ impl<'s> Method<'s> {
         } else {
             quote! { #mock_fn_ident }
         }
+    }
+
+    fn inputs_destructuring(&self) -> Vec<proc_macro2::TokenStream> {
+        self.method
+            .sig
+            .inputs
+            .iter()
+            .filter_map(|fn_arg| match fn_arg {
+                syn::FnArg::Receiver(_) => None,
+                syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
+                    syn::Pat::Ident(pat_ident) => Some(quote! { #pat_ident }),
+                    _ => Some(
+                        syn::Error::new(pat_type.span(), "Unprocessable argument")
+                            .to_compile_error(),
+                    ),
+                },
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn inputs_try_debug_exprs(&self) -> Vec<proc_macro2::TokenStream> {
+        self.method
+            .sig
+            .inputs
+            .iter()
+            .filter_map(|fn_arg| match fn_arg {
+                syn::FnArg::Receiver(_) => None,
+                syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
+                    syn::Pat::Ident(pat_ident) => {
+                        let ident = &pat_ident.ident;
+                        Some(quote! {
+                            #ident.try_debug()
+                        })
+                    }
+                    _ => Some(
+                        syn::Error::new(pat_type.span(), "Unprocessable argument")
+                            .to_compile_error(),
+                    ),
+                },
+            })
+            .collect::<Vec<_>>()
     }
 }
 
@@ -257,17 +297,8 @@ fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result
                 }
             };
 
-            let mut n_inputs: u8 = 0;
-
-            for arg in method.sig.inputs.iter() {
-                if let syn::FnArg::Typed(_) = arg {
-                    n_inputs += 1;
-                }
-            }
-
             Ok(Method {
                 method,
-                n_inputs,
                 mock_fn_ident,
                 mock_fn_name,
                 output_ownership,
@@ -284,7 +315,6 @@ struct MockFnDef {
 
 fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: &Cfg) -> MockFnDef {
     let mock_fn_ident = &method.mock_fn_ident;
-    let n_inputs = method.n_inputs;
     let mock_fn_path = method.mock_fn_path(cfg);
     let mock_fn_name = &method.mock_fn_name;
 
@@ -323,6 +353,9 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
         }
     });
 
+    let inputs_destructuring = method.inputs_destructuring();
+    let inputs_try_debug_exprs = method.inputs_try_debug_exprs();
+
     MockFnDef {
         struct_def: quote! {
             #[allow(non_camel_case_types)]
@@ -332,8 +365,12 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
             impl ::unimock::MockFn for #mock_fn_path {
                 type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
                 type Output = #output;
-                const N_INPUTS: u8 = #n_inputs;
                 const NAME: &'static str = #mock_fn_name;
+
+                fn debug_inputs<'i>((#(#inputs_destructuring),*): &Self::Inputs<'i>) -> String {
+                    use ::unimock::macro_api::{ProperDebug, NoDebug};
+                    ::unimock::macro_api::format_inputs(&[#(#inputs_try_debug_exprs),*])
+                }
             }
 
             #unmock_impl
@@ -391,7 +428,6 @@ fn determine_ownership(ty: &syn::Type) -> (OutputOwnership, &syn::Type) {
 
 fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
-    let n_inputs = method.n_inputs;
     let mock_fn_path = method.mock_fn_path(cfg);
 
     let eval_fn = match method.output_ownership {
@@ -400,41 +436,23 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
         OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
     };
 
-    let inputs = sig
-        .inputs
-        .iter()
-        .filter_map(|fn_arg| match fn_arg {
-            syn::FnArg::Receiver(_) => None,
-            syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-                syn::Pat::Ident(pat_ident) => Some(quote! { #pat_ident }),
-                _ => Some(
-                    syn::Error::new(pat_type.span(), "Unprocessable argument").to_compile_error(),
-                ),
-            },
-        })
-        .collect::<Vec<_>>();
+    let inputs_destructuring = method.inputs_destructuring();
 
     if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
         let opt_dot_await = sig.asyncness.map(|_| quote! { .await });
 
         quote! {
             #sig {
-                let inputs = (#(#inputs),*);
-                use ::unimock::macro_api::{DebugInputs, NoDebugInputs};
-                let inputs_debug = (&inputs).unimock_debug(#n_inputs);
-                match self.#eval_fn::<#mock_fn_path>(inputs, inputs_debug) {
+                match self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)) {
                     ::unimock::macro_api::Evaluation::Evaluated(output) => output,
-                    ::unimock::macro_api::Evaluation::Skipped((#(#inputs),*)) => #unmock_path(self, #(#inputs),*) #opt_dot_await
+                    ::unimock::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_path(self, #(#inputs_destructuring),*) #opt_dot_await
                 }
             }
         }
     } else {
         quote! {
             #sig {
-                let inputs = (#(#inputs),*);
-                use ::unimock::macro_api::{DebugInputs, NoDebugInputs};
-                let inputs_debug = (&inputs).unimock_debug(#n_inputs);
-                self.#eval_fn::<#mock_fn_path>(inputs, inputs_debug).unwrap(self)
+                self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)).unwrap(self)
             }
         }
     }

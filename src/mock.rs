@@ -155,14 +155,13 @@ enum Eval<C> {
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
     dyn_impl: Option<&'i DynMockImpl>,
     inputs: F::Inputs<'i>,
-    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, F::Output, F>, MockError>
 where
     F::Output: Sized,
 {
-    match eval_responder(dyn_impl, &inputs, inputs_debug, call_index, fallback_mode)? {
+    match eval_responder(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((_, responder)) => match responder {
             Responder::Closure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
             Responder::StaticRefClosure(_) => panic!(),
@@ -177,11 +176,10 @@ where
 pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
     inputs: F::Inputs<'i>,
-    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'s F::Output, F>, MockError> {
-    match eval_responder::<F>(dyn_impl, &inputs, inputs_debug, call_index, fallback_mode)? {
+    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((_, responder)) => match responder {
             Responder::Closure(_) => panic!(), // FIXME
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
@@ -200,11 +198,10 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
 pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
     inputs: F::Inputs<'i>,
-    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
-    match eval_responder::<F>(dyn_impl, &inputs, inputs_debug, call_index, fallback_mode)? {
+    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Closure(_) => panic!(), // FIXME
             Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
@@ -222,7 +219,6 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
 fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
     inputs: &F::Inputs<'i>,
-    inputs_debug: String,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Eval<(usize, &'s Responder<F>)>, MockError> {
@@ -235,29 +231,23 @@ fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
             if typed_impl.patterns.is_empty() {
                 return Err(MockError::NoRegisteredCallPatterns {
                     name: F::NAME,
-                    inputs_debug,
+                    inputs_debug: F::debug_inputs(inputs),
                 });
             }
 
-            match match_pattern(
-                pattern_match_mode,
-                typed_impl,
-                inputs,
-                &inputs_debug,
-                call_index,
-            )? {
+            match match_pattern(pattern_match_mode, typed_impl, inputs, call_index)? {
                 Some((pat_index, pattern)) => match select_responder_for_call(pattern) {
                     Some(responder) => Ok(Eval::Continue((pat_index, responder))),
                     None => Err(MockError::NoOutputAvailableForCallPattern {
                         name: F::NAME,
-                        inputs_debug,
+                        inputs_debug: F::debug_inputs(inputs),
                         pat_index,
                     }),
                 },
                 None => match fallback_mode {
                     FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
                         name: F::NAME,
-                        inputs_debug,
+                        inputs_debug: F::debug_inputs(inputs),
                     }),
                     FallbackMode::Unmock => Ok(Eval::Unmock),
                 },
@@ -295,7 +285,6 @@ fn match_pattern<'i, 's, F: MockFn>(
     pattern_match_mode: PatternMatchMode,
     mock_impl: &'s TypedMockImpl<F>,
     inputs: &F::Inputs<'i>,
-    inputs_debug: &String,
     call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'s CallPattern<F>)>, MockError> {
     match pattern_match_mode {
@@ -313,7 +302,7 @@ fn match_pattern<'i, 's, F: MockFn>(
                 })
                 .ok_or_else(|| MockError::CallOrderNotMatchedForMockFn {
                     name: F::NAME,
-                    inputs_debug: inputs_debug.clone(),
+                    inputs_debug: F::debug_inputs(inputs),
                     actual_call_order: error::CallOrder(current_call_index),
                     expected_ranges: mock_impl
                         .patterns
@@ -328,7 +317,7 @@ fn match_pattern<'i, 's, F: MockFn>(
             if !(pattern_by_call_index.input_matcher)(inputs) {
                 return Err(MockError::InputsNotMatchedInCallOrder {
                     name: F::NAME,
-                    inputs_debug: inputs_debug.clone(),
+                    inputs_debug: F::debug_inputs(inputs),
                     actual_call_order: error::CallOrder(current_call_index),
                     pat_index,
                 });

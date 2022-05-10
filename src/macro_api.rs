@@ -27,40 +27,39 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
     }
 }
 
-// Debugging
-// TODO: Could avoid creating the string upfront?
-
-/// Debugger for MockFn inputs.
-pub trait DebugInputs {
-    /// Create a debug string from function inputs.
-    fn unimock_debug(&self, n_inputs: u8) -> String;
+/// Trait for computing the proper [std::fmt::Debug] representation
+/// of a value.
+pub trait ProperDebug {
+    /// Format a debug representation.
+    fn try_debug(&self) -> String;
 }
 
-/// Debugger for MockFn inputs which do not implement [std::fmt::Debug].
-pub trait NoDebugInputs {
-    /// Create a debug string from function inputs.
-    fn unimock_debug(&self, n_inputs: u8) -> String;
+/// Fallback trait (using autoref specialization) for returning `"?"`
+/// when the implementing value does not implement [std::fmt::Debug].
+pub trait NoDebug {
+    /// Format a debug representation.
+    fn try_debug(&self) -> String;
 }
 
-impl<T: std::fmt::Debug> DebugInputs for T {
-    fn unimock_debug(&self, n_inputs: u8) -> String {
-        match n_inputs {
-            1 => format!("({:?})", self),
-            _ => format!("{:?}", self),
-        }
+// Autoref specialization:
+// https://github.com/dtolnay/case-studies/blob/master/autoref-specialization/README.md
+
+impl<T: std::fmt::Debug> ProperDebug for T {
+    fn try_debug(&self) -> String {
+        format!("{:?}", self)
     }
 }
 
-impl<T> NoDebugInputs for &T {
-    fn unimock_debug(&self, n_inputs: u8) -> String {
-        let inner = (0..n_inputs)
-            .into_iter()
-            .map(|_| "_")
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        format!("({})", inner)
+impl<T> NoDebug for &T {
+    fn try_debug(&self) -> String {
+        "?".to_string()
     }
+}
+
+/// Take a vector of strings, comma separate and put within parentheses.
+pub fn format_inputs(inputs: &[String]) -> String {
+    let joined = inputs.join(", ");
+    format!("({})", joined)
 }
 
 /// Convert any type implementing `AsRef<str>` to a `&str`.

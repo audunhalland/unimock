@@ -410,18 +410,17 @@ struct SharedState {
 
 impl Unimock {
     /// Evaluate a [MockFn] given some inputs, to produce its output.
-    pub fn eval<'i, 's: 'i, F: MockFn + 'static>(
+    pub fn eval<'i, 's: 'i, F>(
         &'s self,
         inputs: F::Inputs<'i>,
-        inputs_debug: String,
     ) -> macro_api::Evaluation<'i, F::Output, F>
     where
+        F: MockFn + 'static,
         F::Output: Sized,
     {
         match mock::eval_sized::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
-            inputs_debug,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
@@ -431,15 +430,16 @@ impl Unimock {
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
-    pub fn eval_borrowed<'i, 's: 'i, F: MockFn + 'static>(
+    pub fn eval_borrowed<'i, 's: 'i, F>(
         &'s self,
         inputs: F::Inputs<'i>,
-        inputs_debug: String,
-    ) -> macro_api::Evaluation<'i, &'s F::Output, F> {
+    ) -> macro_api::Evaluation<'i, &'s F::Output, F>
+    where
+        F: MockFn + 'static,
+    {
         match mock::eval_unsized_self_borrowed::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
-            inputs_debug,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
@@ -449,15 +449,16 @@ impl Unimock {
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
-    pub fn eval_static_ref<'i, 's: 'i, F: MockFn + 'static>(
+    pub fn eval_static_ref<'i, 's: 'i, F>(
         &'s self,
         inputs: F::Inputs<'i>,
-        inputs_debug: String,
-    ) -> macro_api::Evaluation<'i, &'static F::Output, F> {
+    ) -> macro_api::Evaluation<'i, &'static F::Output, F>
+    where
+        F: MockFn + 'static,
+    {
         match mock::eval_unsized_static_ref::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
-            inputs_debug,
             &self.state.next_call_index,
             self.fallback_mode,
         ) {
@@ -563,11 +564,11 @@ pub trait MockFn: Sized + 'static {
     /// The output of the function.
     type Output: ?Sized;
 
-    /// The number of inputs.
-    const N_INPUTS: u8;
-
     /// The name to use for runtime errors.
     const NAME: &'static str;
+
+    /// Compute some debug representation of the inputs.
+    fn debug_inputs<'i>(inputs: &Self::Inputs<'i>) -> String;
 
     /// Create a stubbing clause by grouping calls.
     ///
