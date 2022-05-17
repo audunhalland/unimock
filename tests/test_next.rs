@@ -3,7 +3,6 @@
 use unimock::*;
 
 use async_trait::async_trait;
-use cool_asserts::*;
 use std::any::Any;
 
 #[test]
@@ -69,54 +68,58 @@ fn owned_works() {
     );
 }
 
-#[unimock]
-trait Referenced {
-    fn foo(&self, a: &str) -> &str;
-    fn bar(&self, a: &str, b: &str) -> &str;
-}
+mod referenced {
+    use super::*;
 
-fn takes_referenced<'s>(r: &'s impl Referenced, a: &str) -> &'s str {
-    r.foo(a)
-}
+    #[unimock]
+    trait Referenced {
+        fn foo(&self, a: &str) -> &str;
+        fn bar(&self, a: &str, b: &str) -> &str;
+    }
 
-#[test]
-fn referenced_with_static_return_value_works() {
-    assert_eq!(
-        "answer",
-        takes_referenced(
-            &mock(vec![Referenced__foo::stub(|each| {
-                each.call(matching!("a")).returns_ref(format!("answer"));
-            })]),
-            "a",
-        )
-    );
-}
+    fn takes_referenced<'s>(r: &'s impl Referenced, a: &str) -> &'s str {
+        r.foo(a)
+    }
 
-#[test]
-fn referenced_with_default_return_value_works() {
-    assert_eq!(
-        "",
-        takes_referenced(
-            &mock([Referenced__foo::stub(|each| {
-                each.call(matching!("Æ")).panics("Should not be called");
-                each.call(matching!("a")).returns_ref(format!(""));
-            }),]),
-            "a",
-        )
-    );
-}
+    #[test]
+    fn referenced_with_static_return_value_works() {
+        assert_eq!(
+            "answer",
+            takes_referenced(
+                &mock(vec![Referenced__foo::stub(|each| {
+                    each.call(matching!("a")).returns_ref(format!("answer"));
+                })]),
+                "a",
+            )
+        );
+    }
 
-#[test]
-fn referenced_with_static_ref_works() {
-    assert_eq!(
-        "foobar",
-        takes_referenced(
-            &mock([Referenced__foo::stub(|each| {
-                each.call(matching!("a")).returns_static("foobar");
-            }),]),
-            "a",
-        )
-    );
+    #[test]
+    fn referenced_with_default_return_value_works() {
+        assert_eq!(
+            "",
+            takes_referenced(
+                &mock([Referenced__foo::stub(|each| {
+                    each.call(matching!("Æ")).panics("Should not be called");
+                    each.call(matching!("a")).returns_ref(format!(""));
+                }),]),
+                "a",
+            )
+        );
+    }
+
+    #[test]
+    fn referenced_with_static_ref_works() {
+        assert_eq!(
+            "foobar",
+            takes_referenced(
+                &mock([Referenced__foo::stub(|each| {
+                    each.call(matching!("a")).returns_static("foobar");
+                }),]),
+                "a",
+            )
+        );
+    }
 }
 
 #[unimock]
@@ -152,8 +155,9 @@ fn test_multiple() {
     );
 }
 
-#[test]
-fn primitive_mocking_without_debug() {
+mod no_debug {
+    use super::*;
+
     enum PrimitiveEnum {
         Foo,
         Bar,
@@ -164,26 +168,28 @@ fn primitive_mocking_without_debug() {
         fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
     }
 
-    match mock(Some(VeryPrimitive__primitive::stub(|each| {
-        each.call(matching!(PrimitiveEnum::Bar, _))
-            .answers(|_| PrimitiveEnum::Foo);
-    })))
-    .primitive(PrimitiveEnum::Bar, "")
-    {
-        PrimitiveEnum::Foo => {}
-        PrimitiveEnum::Bar => panic!(),
+    #[test]
+    fn can_match_a_non_debug_argument() {
+        match mock(Some(VeryPrimitive__primitive::stub(|each| {
+            each.call(matching!(PrimitiveEnum::Bar, _))
+                .answers(|_| PrimitiveEnum::Foo);
+        })))
+        .primitive(PrimitiveEnum::Bar, "")
+        {
+            PrimitiveEnum::Foo => {}
+            PrimitiveEnum::Bar => panic!(),
+        }
     }
 
-    assert_panics!(
-        {
-            mock([VeryPrimitive__primitive::stub(|each| {
-                each.call(matching!(PrimitiveEnum::Bar, _))
-                    .answers(|_| PrimitiveEnum::Foo);
-            })])
-            .primitive(PrimitiveEnum::Foo, "");
-        },
-        includes("VeryPrimitive::primitive(?, \"\"): No matching call patterns.")
-    );
+    #[test]
+    #[should_panic(expected = "VeryPrimitive::primitive(?, \"\"): No matching call patterns.")]
+    fn should_format_non_debug_input_with_a_question_mark() {
+        mock([VeryPrimitive__primitive::stub(|each| {
+            each.call(matching!(PrimitiveEnum::Bar, _))
+                .answers(|_| PrimitiveEnum::Foo);
+        })])
+        .primitive(PrimitiveEnum::Foo, "");
+    }
 }
 
 #[test]
@@ -366,8 +372,9 @@ fn newtype() {
     );
 }
 
-#[test]
-fn unmock_simple() {
+mod unmock_simple {
+    use super::*;
+
     #[unimock(unmocked=[repeat, concat])]
     trait Spyable {
         fn repeat(&self, arg: String) -> String;
@@ -381,62 +388,58 @@ fn unmock_simple() {
         format!("{a}{b}")
     }
 
-    #[unimock]
-    trait Dummy {
-        fn dummy(&self);
+    #[test]
+    fn works_with_empty_spy() {
+        assert_eq!("ab", spy(None).concat("a".to_string(), "b".to_string()));
     }
 
-    assert_eq!(
-        "ab",
-        spy(None).concat("a".to_string(), "b".to_string()),
-        "unmock works with empty spy"
-    );
+    #[test]
+    fn works_with_a_spy_having_a_stub_with_non_matching_pattern() {
+        assert_eq!(
+            "ab",
+            spy(Some(Spyable__concat::stub(|each| {
+                each.call(matching!("something", "else"))
+                    .panics("not matched");
+            })))
+            .concat("a".to_string(), "b".to_string())
+        );
+    }
 
-    assert_eq!(
-        "ab",
-        spy(Some(Spyable__concat::stub(|each| {
-            each.call(matching!("something", "else"))
-                .panics("not matched");
-        })))
-        .concat("a".to_string(), "b".to_string()),
-        "unmock works with a spy having a stub with non-matching pattern"
-    );
+    #[test]
+    fn returns_the_matched_pattern_if_overridden() {
+        assert_eq!(
+            "42",
+            spy(Some(Spyable__concat::stub(|each| {
+                each.call(matching!("a", "b")).returns("42");
+            })))
+            .concat("a".to_string(), "b".to_string())
+        );
+    }
 
-    assert_eq!(
-        "42",
-        spy(Some(Spyable__concat::stub(|each| {
-            each.call(matching!("a", "b")).returns("42");
-        })))
-        .concat("a".to_string(), "b".to_string()),
-        "spy returns the matched pattern if overridden"
-    );
+    #[test]
+    fn works_on_a_mock_instance_with_explicit_unmock_setup() {
+        assert_eq!(
+            "ab",
+            mock([Spyable__concat::stub(|each| {
+                each.call(matching!("a", "b")).unmocked().once();
+            })])
+            .concat("a".to_string(), "b".to_string())
+        );
+    }
 
-    assert_eq!(
-        "ab",
+    #[test]
+    #[should_panic(
+        expected = "Spyable::concat: Expected call pattern #0 to match at least 1 call, but it actually matched no calls."
+    )]
+    fn unmatched_pattern_still_panics() {
         mock([Spyable__concat::stub(|each| {
-            each.call(matching!("a", "b")).unmocked().once();
+            each.call(matching!("", ""))
+                .returns("foobar")
+                .at_least_times(1);
+            each.call(matching!(_, _)).unmocked();
         })])
-        .concat("a".to_string(), "b".to_string()),
-        "unmock works on a mock instance with explicit unmock setup"
-    );
-
-    assert_eq!("ab", spy([]).concat("a".to_string(), "b".to_string()));
-
-    assert_panics!(
-        {
-            assert_eq!(
-                "ab",
-                mock([
-                    Spyable__concat::stub(|each| {
-                        each.call(matching!("", "")).returns("foobar").at_least_times(1);
-                        each.call(matching!(_, _)).unmocked();
-                    }),
-                ])
-                .concat("a".to_string(), "b".to_string())
-            );
-        },
-        includes("Spyable::concat: Expected call pattern #0 to match at least 1 call, but it actually matched no calls.")
-    );
+        .concat("a".to_string(), "b".to_string());
+    }
 }
 
 #[test]
@@ -550,8 +553,9 @@ fn clause_helpers() {
     assert_eq!(6, unimock.m1() + unimock.m2() + unimock.m3());
 }
 
-#[test]
-fn responders_in_series() {
+mod responders_in_series {
+    use super::*;
+
     #[unimock]
     trait Series {
         fn series(&self) -> i32;
@@ -569,7 +573,8 @@ fn responders_in_series() {
             .in_any_order()
     }
 
-    {
+    #[test]
+    fn responder_series_should_work() {
         let a = mock(Some(clause()));
 
         assert_eq!(1, a.series());
@@ -582,19 +587,17 @@ fn responders_in_series() {
         assert_eq!(3, a.series());
     }
 
-    {
+    #[test]
+    #[should_panic(
+        expected = "Series::series: Expected call pattern #0 to match at least 4 calls, but it actually matched 2 calls."
+    )]
+    fn series_not_fully_generated_should_panic() {
         let b = mock(Some(clause()));
 
         assert_eq!(1, b.series());
         assert_eq!(2, b.series());
 
         // Exact repetition was defined to be 4 (the last responder is not exactly quantified), but it contained a `.then` call so minimum 1.
-        assert_panics!(
-            {
-                drop(b);
-            },
-            includes("Series::series: Expected call pattern #0 to match at least 4 calls, but it actually matched 2 calls.")
-        );
     }
 }
 

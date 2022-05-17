@@ -162,12 +162,22 @@ where
     F::Output: Sized,
 {
     match eval_responder(dyn_impl, &inputs, call_index, fallback_mode)? {
-        Eval::Continue((_, responder)) => match responder {
+        Eval::Continue((pat_index, responder)) => match responder {
             Responder::Value(stored) => Ok(Evaluation::Evaluated(*stored.box_clone())),
             Responder::Closure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
-            Responder::StaticRefClosure(_) => panic!(),
-            Responder::Borrowable(_) => panic!(),
-            Responder::Panic(msg) => panic!("{}", msg),
+            Responder::StaticRefClosure(_) | Responder::Borrowable(_) => {
+                Err(MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
+                    name: F::NAME,
+                    inputs_debug: F::debug_inputs(&inputs),
+                    pat_index,
+                })
+            }
+            Responder::Panic(msg) => Err(MockError::ExplicitPanic {
+                name: F::NAME,
+                inputs_debug: F::debug_inputs(&inputs),
+                pat_index,
+                msg: msg.clone(),
+            }),
             Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
         Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
@@ -194,7 +204,12 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
                 let borrow = borrowable.borrow();
                 Ok(Evaluation::Evaluated(borrow))
             }
-            Responder::Panic(msg) => panic!("{}", msg),
+            Responder::Panic(msg) => Err(MockError::ExplicitPanic {
+                name: F::NAME,
+                inputs_debug: F::debug_inputs(&inputs),
+                pat_index,
+                msg: msg.clone(),
+            }),
             Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
         Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
@@ -225,7 +240,12 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
             }),
-            Responder::Panic(msg) => panic!("{}", msg),
+            Responder::Panic(msg) => Err(MockError::ExplicitPanic {
+                name: F::NAME,
+                inputs_debug: F::debug_inputs(&inputs),
+                pat_index,
+                msg: msg.clone(),
+            }),
             Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
         Eval::Unmock => Ok(Evaluation::Skipped(inputs)),

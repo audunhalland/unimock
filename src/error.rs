@@ -34,6 +34,11 @@ pub enum MockError {
         actual_call_order: CallOrder,
         pat_index: usize,
     },
+    TypeMismatchExpectedOwnedInsteadOfBorrowed {
+        name: &'static str,
+        inputs_debug: String,
+        pat_index: usize,
+    },
     CannotBorrowValueStatically {
         name: &'static str,
         inputs_debug: String,
@@ -47,6 +52,12 @@ pub enum MockError {
     FailedVerification(String),
     CannotUnmock {
         name: &'static str,
+    },
+    ExplicitPanic {
+        name: &'static str,
+        inputs_debug: String,
+        pat_index: usize,
+        msg: String,
     },
 }
 
@@ -81,7 +92,8 @@ impl MockError {
                 actual_call_order,
                 expected_ranges,
             } => {
-                format!("{name}{inputs_debug}: Matched in wrong order. It supported the call order ranges {expected_ranges:?}, but actual call order was {actual_call_order}.")
+                let ranges_dbg = expected_ranges.iter().map(format_call_range).collect::<Vec<_>>().join(", ");
+                format!("{name}{inputs_debug}: Matched in wrong order. It supported the call order ranges [{ranges_dbg}], but actual call order was {actual_call_order}.")
             }
             MockError::InputsNotMatchedInCallOrder {
                 name,
@@ -91,6 +103,11 @@ impl MockError {
             } => {
                 format!("{name}{inputs_debug}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern #{pat_index}.")
             }
+            MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
+                name,
+                inputs_debug,
+                pat_index,
+            } => format!("{name}{inputs_debug}: Type mismatch: Expected an owned return value, but found a borrow for call pattern #{pat_index}. Try using Match::returns() or Match::answers()."),
             MockError::CannotBorrowValueStatically {
                 name,
                 inputs_debug,
@@ -104,7 +121,8 @@ impl MockError {
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")
-            }
+            },
+            MockError::ExplicitPanic { name, inputs_debug, pat_index, msg } => format!("{name}{inputs_debug}: Explicit panic for call pattern ({pat_index}): {msg}")
         }
     }
 }
@@ -115,5 +133,13 @@ pub struct CallOrder(pub usize);
 impl std::fmt::Display for CallOrder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0 + 1)
+    }
+}
+
+fn format_call_range(range: &std::ops::Range<usize>) -> String {
+    if range.end == range.start + 1 {
+        format!("{}", range.start)
+    } else {
+        format!("{:?}", range)
     }
 }
