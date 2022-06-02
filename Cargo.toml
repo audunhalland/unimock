@@ -1,6 +1,6 @@
 [package]
 name = "unimock"
-version = "0.2.0-beta.0"
+version = "0.2.0"
 authors = ["Audun Halland <audun.halldand@pm.me>"]
 edition = "2021"
 license = "MIT"
@@ -11,7 +11,7 @@ keywords = ["mock", "procedural-macro", "macros"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-unimock_macros = { path = "unimock_macros", version = "0.2.0-beta.0" }
+unimock_macros = { path = "unimock_macros", version = "0.2.0" }
 
 [dev-dependencies]
 mockall = "0.11"
