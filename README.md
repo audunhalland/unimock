@@ -21,9 +21,9 @@ fn takes_foo(foo: impl Foo) {}
 takes_foo(mock(None));
 ```
 
-1. `trait Foo` is declared with a `#[unimock]` annotation which makes its behaviour mockable.
+1. `trait Foo` is declared with a [`#[unimock]`](unimock) annotation which makes its behaviour mockable.
 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-3. A mock instantiation by calling `mock(None)`, which returns a [Unimock] value which is passed into `takes_foo`.
+3. A mock instantiation by calling [`mock(None)`](mock()), which returns a [Unimock] value which is passed into `takes_foo`.
 
 The [mock()] function takes an argument, in this case the value `None`. The argument is _what behaviour are we mocking_, in this case [None] at all!
 `Foo` contains no methods, so there is no behaviour to mock.
@@ -85,7 +85,7 @@ Inputs being matched is a condition that needs to be fulfilled in order for the 
 
 #### Specifying outputs
 Specifying outputs can be done in several ways. The simplest one is `returns(something)`. Different ways of specifying outputs are
-found in [build::DefineOutput].
+found in [build::Match].
 
 ## Combining clauses
 [mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more that one kind of behaviour!
