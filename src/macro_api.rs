@@ -10,7 +10,7 @@ pub enum Evaluation<'i, O, F: MockFn> {
     /// Function evaluated to its output.
     Evaluated(O),
     /// Function not yet evaluated.
-    Skipped(F::Inputs<'i>),
+    Skipped(<F as MockInputs<'i>>::Inputs),
 }
 
 impl<'i, O, F: MockFn> Evaluation<'i, O, F> {

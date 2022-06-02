@@ -154,7 +154,7 @@ enum Eval<C> {
 
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
     dyn_impl: Option<&'i DynMockImpl>,
-    inputs: F::Inputs<'i>,
+    inputs: <F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, F::Output, F>, MockError>
@@ -186,7 +186,7 @@ where
 
 pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
-    inputs: F::Inputs<'i>,
+    inputs: <F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'s F::Output, F>, MockError> {
@@ -218,7 +218,7 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
 
 pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
-    inputs: F::Inputs<'i>,
+    inputs: <F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
@@ -254,7 +254,7 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
 
 fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
     dyn_impl: Option<&'s DynMockImpl>,
-    inputs: &F::Inputs<'i>,
+    inputs: &<F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
 ) -> Result<Eval<(usize, &'s Responder<F>)>, MockError> {
@@ -320,7 +320,7 @@ fn eval_type_erased_mock_impl<'s>(
 fn match_pattern<'i, 's, F: MockFn>(
     pattern_match_mode: PatternMatchMode,
     mock_impl: &'s TypedMockImpl<F>,
-    inputs: &F::Inputs<'i>,
+    inputs: &<F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'s CallPattern<F>)>, MockError> {
     match pattern_match_mode {
@@ -402,7 +402,9 @@ pub(crate) struct TypedMockImpl<F: MockFn> {
 impl<F: MockFn> TypedMockImpl<F> {
     /// A standalone mock, used in the building stage.
     pub fn new_standalone(
-        input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
+        input_matcher: Box<
+            dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + RefUnwindSafe,
+        >,
     ) -> Self {
         let mut mock_impl = Self::new();
         mock_impl.patterns.push(mock::CallPattern {
@@ -483,7 +485,8 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
 }
 
 pub(crate) struct CallPattern<F: MockFn> {
-    pub input_matcher: Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe>,
+    pub input_matcher:
+        Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + RefUnwindSafe>,
     pub call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
     pub responders: Vec<CallOrderResponder<F>>,
@@ -497,9 +500,21 @@ pub(crate) struct CallOrderResponder<F: MockFn> {
 pub(crate) enum Responder<F: MockFn> {
     Value(Box<dyn StoredValue<F::Output>>),
     Borrowable(Box<dyn Borrow<F::Output> + Send + Sync + RefUnwindSafe>),
-    Closure(Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync + RefUnwindSafe>),
+    Closure(
+        Box<
+            dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> F::Output)
+                + Send
+                + Sync
+                + RefUnwindSafe,
+        >,
+    ),
     StaticRefClosure(
-        Box<dyn (for<'i> Fn(F::Inputs<'i>) -> &'static F::Output) + Send + Sync + RefUnwindSafe>,
+        Box<
+            dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> &'static F::Output)
+                + Send
+                + Sync
+                + RefUnwindSafe,
+        >,
     ),
     Panic(String),
     Unmock,

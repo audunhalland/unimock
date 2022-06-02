@@ -31,7 +31,11 @@ where
     /// The method returns a [Match], which is used to define how unimock responds to the matched call.
     pub fn call<'e, M>(&'e mut self, matching: M) -> Match<'e, F, InAnyOrder>
     where
-        M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
+        M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool)
+            + Send
+            + Sync
+            + RefUnwindSafe
+            + 'static,
     {
         self.typed_impl.patterns.push(mock::CallPattern {
             input_matcher: Box::new(matching),
@@ -150,7 +154,7 @@ where
     /// can then compute it based on input parameters.
     pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
     where
-        A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
+        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: Into<F::Output>,
         F::Output: Sized,
     {
@@ -168,7 +172,7 @@ where
     /// on input parameters is necessary, which should not be a common use case.
     pub fn answers_leaked_ref<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
     where
-        A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + RefUnwindSafe + 'static,
+        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + RefUnwindSafe + 'static,
         R: std::borrow::Borrow<F::Output> + 'static,
         F::Output: Sized,
     {
@@ -323,7 +327,6 @@ where
     ///
     /// # Example
     /// ```rust
-    /// # #![feature(generic_associated_types)]
     /// use unimock::*;
     ///
     /// #[unimock]

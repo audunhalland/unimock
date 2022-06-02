@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Changed
+- Change MockFn to not require generic associated types, by introducing new trait MockInputs
 - Improvements to panic messages and related tests
 
 ## [0.2.0-beta.0]

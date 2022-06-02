@@ -9,7 +9,6 @@
 //! The first code example is the smallest possible use of unimock:
 //!
 //! ```rust
-//! # #![feature(generic_associated_types)]
 //! use unimock::*;
 //!
 //! #[unimock]
@@ -37,7 +36,6 @@
 //! Given some trait,
 //!
 //! ```rust
-//! # #![feature(generic_associated_types)]
 //! # use unimock::*;
 //! #[unimock]
 //! trait Foo {
@@ -54,7 +52,6 @@
 //! This type will implement [MockFn], which is the entrypoint for creating clauses:
 //!
 //! ```rust
-//! # #![feature(generic_associated_types)]
 //! # use unimock::*;
 //! #[unimock]
 //! trait Foo {
@@ -103,7 +100,6 @@
 //! Now that terminology is in place for unimock, let's look at various ways to combine clauses.
 //!
 //! ```rust
-//! # #![feature(generic_associated_types)]
 //! # use unimock::*;
 //! #[unimock]
 //! trait Foo {
@@ -254,8 +250,6 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-// For the mock-fn feature:
-#![feature(generic_associated_types)]
 
 /// Types used for building and defining mock behaviour.
 pub mod build;
@@ -281,7 +275,6 @@ use std::sync::{Arc, Mutex};
 ///
 /// # Example
 /// ```rust
-/// #![feature(generic_associated_types)]
 /// use unimock::*;
 ///
 /// #[unimock]
@@ -412,7 +405,7 @@ impl Unimock {
     /// Evaluate a [MockFn] given some inputs, to produce its output.
     pub fn eval<'i, 's: 'i, F>(
         &'s self,
-        inputs: F::Inputs<'i>,
+        inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, F::Output, F>
     where
         F: MockFn + 'static,
@@ -432,7 +425,7 @@ impl Unimock {
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
     pub fn eval_borrowed<'i, 's: 'i, F>(
         &'s self,
-        inputs: F::Inputs<'i>,
+        inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, &'s F::Output, F>
     where
         F: MockFn + 'static,
@@ -451,7 +444,7 @@ impl Unimock {
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
     pub fn eval_static_ref<'i, 's: 'i, F>(
         &'s self,
-        inputs: F::Inputs<'i>,
+        inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, &'static F::Output, F>
     where
         F: MockFn + 'static,
@@ -532,6 +525,18 @@ impl Drop for Unimock {
     }
 }
 
+/// Trait specifying inputs to a mocked function. Base trait of [MockFn].
+///
+/// The lifetime parameter allows inputs that are non-static references.
+pub trait MockInputs<'i> {
+    /// The inputs to a mockable function.
+    ///
+    /// * For a function with no parameters, the type should be the empty tuple `()`.
+    /// * For a function with 1 parameter `T`, the type should be `T`.
+    /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
+    type Inputs;
+}
+
 ///
 /// The main trait used for unimock configuration.
 ///
@@ -557,10 +562,7 @@ impl Drop for Unimock {
 /// /* impl MockFn for Mockable_method ... */
 /// ```
 ///
-pub trait MockFn: Sized + 'static {
-    /// The inputs to the function.
-    type Inputs<'i>;
-
+pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// The output of the function.
     type Output: ?Sized;
 
@@ -568,7 +570,7 @@ pub trait MockFn: Sized + 'static {
     const NAME: &'static str;
 
     /// Compute some debug representation of the inputs.
-    fn debug_inputs<'i>(inputs: &Self::Inputs<'i>) -> String;
+    fn debug_inputs<'i>(inputs: &<Self as MockInputs<'i>>::Inputs) -> String;
 
     /// Create a stubbing clause by grouping calls.
     ///
@@ -590,7 +592,11 @@ pub trait MockFn: Sized + 'static {
     /// that needs to be specified on this MockFn.
     fn each_call<M>(matching: M) -> build::Match<'static, Self, property::InAnyOrder>
     where
-        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
+        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool)
+            + Send
+            + Sync
+            + RefUnwindSafe
+            + 'static,
     {
         build::new_standalone_match(
             mock::TypedMockImpl::new_standalone(Box::new(matching)),
@@ -606,7 +612,11 @@ pub trait MockFn: Sized + 'static {
     /// matched in the order specified, relative to other next calls.
     fn next_call<M>(matching: M) -> build::Match<'static, Self, property::InOrder>
     where
-        M: (for<'i> Fn(&Self::Inputs<'i>) -> bool) + Send + Sync + RefUnwindSafe + 'static,
+        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool)
+            + Send
+            + Sync
+            + RefUnwindSafe
+            + 'static,
     {
         build::new_standalone_match(
             mock::TypedMockImpl::new_standalone(Box::new(matching)),
@@ -619,10 +629,9 @@ pub trait MockFn: Sized + 'static {
 ///
 /// A true implementation must be a standalone function, not part of a trait,
 /// where the first parameter is generic (a `self`-replacement), and the rest of the parameters are
-/// identical to [MockFn::Inputs]:
+/// identical to [MockInputs::Inputs]:
 ///
 /// ```rust
-/// # #![feature(generic_associated_types)]
 /// # use unimock::*;
 /// #[unimock(unmocked=[my_original])]
 /// trait DoubleNumber {
@@ -647,7 +656,6 @@ pub trait MockFn: Sized + 'static {
 /// through unimock, resulting in a great level of control. Consider:
 ///
 /// ```rust
-/// # #![feature(generic_associated_types)]
 /// # use unimock::*;
 /// #[unimock(unmocked=[my_factorial])]
 /// trait Factorial {
@@ -692,7 +700,6 @@ where
 ///
 /// # Example
 /// ```rust
-/// # #![feature(generic_associated_types)]
 /// # use unimock::*;
 ///
 /// #[unimock(unmocked=[real_foo])]
@@ -776,7 +783,6 @@ fn mock_from_iterator(
 /// and reused several times:
 ///
 /// ```rust
-/// #![feature(generic_associated_types)]
 /// use unimock::*;
 /// #[unimock]
 /// trait Foo {

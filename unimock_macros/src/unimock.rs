@@ -380,12 +380,15 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
             #mock_visibility struct #mock_fn_ident;
         },
         impls: quote! {
+            impl<#input_lifetime> ::unimock::MockInputs<#input_lifetime> for #mock_fn_path {
+                type Inputs = (#(#inputs_tuple),*);
+            }
+
             impl ::unimock::MockFn for #mock_fn_path {
-                type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
                 type Output = #output;
                 const NAME: &'static str = #mock_fn_name;
 
-                fn debug_inputs<'i>((#(#inputs_destructuring),*): &Self::Inputs<'i>) -> String {
+                fn debug_inputs<'i>((#(#inputs_destructuring),*): &<Self as ::unimock::MockInputs<'i>>::Inputs) -> String {
                     use ::unimock::macro_api::{ProperDebug, NoDebug};
                     ::unimock::macro_api::format_inputs(&[#(#inputs_try_debug_exprs),*])
                 }
