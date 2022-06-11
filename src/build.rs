@@ -31,11 +31,7 @@ where
     /// The method returns a [Match], which is used to define how unimock responds to the matched call.
     pub fn call<'e, M>(&'e mut self, matching: M) -> Match<'e, F, InAnyOrder>
     where
-        M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool)
-            + Send
-            + Sync
-            + RefUnwindSafe
-            + 'static,
+        M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         self.typed_impl.patterns.push(mock::CallPattern {
             input_matcher: Box::new(matching),
@@ -114,7 +110,7 @@ where
     /// It must also be [Send] and [Sync] because unimock needs to store it.
     pub fn returns(self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F, O>
     where
-        F::Output: Send + Sync + Clone + RefUnwindSafe + 'static,
+        F::Output: Send + Sync + Clone + 'static,
     {
         let value = value.into();
         self.responder(mock::Responder::Value(Box::new(mock::StoredValueSlot(
@@ -136,7 +132,7 @@ where
     /// references, use [Match::returns_static].
     pub fn returns_ref<T>(self, value: T) -> QuantifyResponse<'p, F, O>
     where
-        T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + RefUnwindSafe + 'static,
+        T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
     {
         self.responder(mock::Responder::Borrowable(Box::new(value)))
     }
@@ -145,7 +141,7 @@ where
     /// This must be used when the returned reference in the mocked trait is `'static`.
     pub fn returns_static(self, value: &'static F::Output) -> QuantifyResponse<'p, F, O>
     where
-        F::Output: Send + Sync + RefUnwindSafe + 'static,
+        F::Output: Send + Sync + 'static,
     {
         self.responder(mock::Responder::StaticRefClosure(Box::new(move |_| value)))
     }
@@ -154,7 +150,7 @@ where
     /// can then compute it based on input parameters.
     pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
     where
-        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + RefUnwindSafe + 'static,
+        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
         R: Into<F::Output>,
         F::Output: Sized,
     {
@@ -172,7 +168,7 @@ where
     /// on input parameters is necessary, which should not be a common use case.
     pub fn answers_leaked_ref<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
     where
-        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + RefUnwindSafe + 'static,
+        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
         R: std::borrow::Borrow<F::Output> + 'static,
         F::Output: Sized,
     {

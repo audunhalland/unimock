@@ -69,7 +69,7 @@
 //!
 //! [Clause] construction is a type-state machine that in this example goes through 3 steps:
 //!
-//! 1. `Foo__foo::each_call(matching!())`: Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is paremeter-less)
+//! 1. `Foo__foo::each_call(matching!())`: Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
 //! 2. `.returs(1337)`: Each matching call will return the value `1337`
 //! 3. `.in_any_order()`: this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it. In this example there is only one clause.
 //!
@@ -88,7 +88,7 @@
 //! found in [build::Match].
 //!
 //! # Combining clauses
-//! [mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more that one kind of behaviour!
+//! [mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
 //! An iterator has a specific order of items, and sometimes the order of clauses matters too. It will depend on the type of clause.
 //!
 //! Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
@@ -264,7 +264,6 @@ mod mock;
 
 use std::any::TypeId;
 use std::collections::HashMap;
-use std::panic::RefUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
@@ -592,11 +591,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// that needs to be specified on this MockFn.
     fn each_call<M>(matching: M) -> build::Match<'static, Self, property::InAnyOrder>
     where
-        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool)
-            + Send
-            + Sync
-            + RefUnwindSafe
-            + 'static,
+        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::new_standalone_match(
             mock::TypedMockImpl::new_standalone(Box::new(matching)),
@@ -612,11 +607,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// matched in the order specified, relative to other next calls.
     fn next_call<M>(matching: M) -> build::Match<'static, Self, property::InOrder>
     where
-        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool)
-            + Send
-            + Sync
-            + RefUnwindSafe
-            + 'static,
+        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::new_standalone_match(
             mock::TypedMockImpl::new_standalone(Box::new(matching)),

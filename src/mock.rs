@@ -6,7 +6,6 @@ use std::any::{Any, TypeId};
 use std::borrow::Borrow;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::panic::RefUnwindSafe;
 
 pub(crate) struct MockAssembler {
     pub impls: HashMap<TypeId, DynMockImpl>,
@@ -51,7 +50,7 @@ impl MockAssembler {
 }
 
 pub(crate) struct DynMockImpl {
-    typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>,
+    typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + 'static>,
     pattern_match_mode: PatternMatchMode,
     has_applications: AtomicBool,
 }
@@ -59,7 +58,7 @@ pub(crate) struct DynMockImpl {
 impl DynMockImpl {
     #[inline(never)]
     pub fn new_full_cascade(
-        typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>,
+        typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + 'static>,
     ) -> DynMockImpl {
         DynMockImpl {
             typed_impl,
@@ -70,7 +69,7 @@ impl DynMockImpl {
 
     #[inline(never)]
     pub fn new_strict_order(
-        typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + RefUnwindSafe + 'static>,
+        typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + 'static>,
     ) -> DynMockImpl {
         DynMockImpl {
             typed_impl,
@@ -402,9 +401,7 @@ pub(crate) struct TypedMockImpl<F: MockFn> {
 impl<F: MockFn> TypedMockImpl<F> {
     /// A standalone mock, used in the building stage.
     pub fn new_standalone(
-        input_matcher: Box<
-            dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + RefUnwindSafe,
-        >,
+        input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
     ) -> Self {
         let mut mock_impl = Self::new();
         mock_impl.patterns.push(mock::CallPattern {
@@ -485,8 +482,7 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
 }
 
 pub(crate) struct CallPattern<F: MockFn> {
-    pub input_matcher:
-        Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + RefUnwindSafe>,
+    pub input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
     pub call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
     pub responders: Vec<CallOrderResponder<F>>,
@@ -499,28 +495,16 @@ pub(crate) struct CallOrderResponder<F: MockFn> {
 
 pub(crate) enum Responder<F: MockFn> {
     Value(Box<dyn StoredValue<F::Output>>),
-    Borrowable(Box<dyn Borrow<F::Output> + Send + Sync + RefUnwindSafe>),
-    Closure(
-        Box<
-            dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> F::Output)
-                + Send
-                + Sync
-                + RefUnwindSafe,
-        >,
-    ),
+    Borrowable(Box<dyn Borrow<F::Output> + Send + Sync>),
+    Closure(Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> F::Output) + Send + Sync>),
     StaticRefClosure(
-        Box<
-            dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> &'static F::Output)
-                + Send
-                + Sync
-                + RefUnwindSafe,
-        >,
+        Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> &'static F::Output) + Send + Sync>,
     ),
     Panic(String),
     Unmock,
 }
 
-pub trait StoredValue<T: ?Sized>: Send + Sync + RefUnwindSafe {
+pub trait StoredValue<T: ?Sized>: Send + Sync {
     fn box_clone(&self) -> Box<T>;
 
     fn borrow_stored(&self) -> &T;
@@ -528,7 +512,7 @@ pub trait StoredValue<T: ?Sized>: Send + Sync + RefUnwindSafe {
 
 pub(crate) struct StoredValueSlot<T>(pub T);
 
-impl<T: Clone + Send + Sync + RefUnwindSafe> StoredValue<T> for StoredValueSlot<T> {
+impl<T: Clone + Send + Sync> StoredValue<T> for StoredValueSlot<T> {
     fn box_clone(&self) -> Box<T> {
         Box::new(self.0.clone())
     }
