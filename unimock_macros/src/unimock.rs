@@ -253,6 +253,48 @@ impl<'s> Method<'s> {
                 },
             })
     }
+
+    fn mockfn_doc_attrs(
+        &self,
+        trait_ident: &syn::Ident,
+        unmock_impl: &Option<proc_macro2::TokenStream>,
+    ) -> Vec<proc_macro2::TokenStream> {
+        let method_ident = &self.method.sig.ident;
+        let arg_types = self
+            .method
+            .sig
+            .inputs
+            .iter()
+            .filter_map(|fn_arg| match fn_arg {
+                syn::FnArg::Receiver(_) => None,
+                syn::FnArg::Typed(syn::PatType {
+                    attrs: _,
+                    pat,
+                    colon_token: _,
+                    ty,
+                }) => Some(format!("{}: {}", quote! { #pat }, quote! { #ty })),
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let return_type = match &self.method.sig.output {
+            syn::ReturnType::Default => "".to_string(),
+            syn::ReturnType::Type(_, ty) => format!(" -> {}", quote! { #ty }),
+        };
+
+        let mut doc_string =
+            format!("MockFn for `{trait_ident}::{method_ident}({arg_types}){return_type}`.");
+
+        if unmock_impl.is_some() {
+            doc_string.push_str(" Implements `Unmock`.");
+        }
+
+        let doc_lit = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
+
+        vec![quote! {
+            #[doc = #doc_lit]
+        }]
+    }
 }
 
 fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result<Vec<Method<'s>>> {
@@ -360,16 +402,18 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
             quote! { #ty }
         });
 
-    let output = match method.output_ty {
-        Some(ty) => quote! { #ty },
-        None => quote! { () },
-    };
-
     let unmock_impl = cfg.get_unmock_fn_path(index).map(|_| {
         quote! {
             impl ::unimock::Unmock for #mock_fn_path {}
         }
     });
+
+    let doc_attrs = method.mockfn_doc_attrs(&item_trait.ident, &unmock_impl);
+
+    let output = match method.output_ty {
+        Some(ty) => quote! { #ty },
+        None => quote! { () },
+    };
 
     let inputs_destructuring = method.inputs_destructuring();
     let inputs_try_debug_exprs = method.inputs_try_debug_exprs();
@@ -377,6 +421,7 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
     MockFnDef {
         struct_def: quote! {
             #[allow(non_camel_case_types)]
+            #(#doc_attrs)*
             #mock_visibility struct #mock_fn_ident;
         },
         impls: quote! {
