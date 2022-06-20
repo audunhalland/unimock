@@ -16,7 +16,7 @@ fn should_panic_for_nonexisting_mock() {
     expected = "Mock for SingleArg::method1 was never called. Dead mocks should be removed."
 )]
 fn should_panic_for_unused_stub() {
-    mock(Some(SingleArg__method1::stub(|each| {
+    mock(Some(SingleArg__method1.stub(|each| {
         each.call(matching!(_));
     })));
 }
@@ -24,7 +24,7 @@ fn should_panic_for_unused_stub() {
 #[test]
 #[should_panic(expected = "SingleArg::method1(\"b\"): No registered call patterns")]
 fn should_panic_for_call_with_no_accepted_patterns() {
-    mock([SingleArg__method1::stub(|_| {})]).method1("b");
+    mock([SingleArg__method1.stub(|_| {})]).method1("b");
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn should_panic_for_call_with_no_accepted_patterns() {
     expected = "SingleArg::method1(\"whatever\"): No output available for matching call pattern #0"
 )]
 fn call_pattern_without_output_factory_should_crash() {
-    mock([SingleArg__method1::stub(|each| {
+    mock([SingleArg__method1.stub(|each| {
         each.call(matching!(_));
     })])
     .method1("whatever");
@@ -41,7 +41,7 @@ fn call_pattern_without_output_factory_should_crash() {
 #[test]
 #[should_panic(expected = "SingleArg::method1(\"anything\"): No matching call patterns.")]
 fn should_panic_if_no_call_patterns_in_stub_are_matched() {
-    mock([SingleArg__method1::stub(|each| {
+    mock([SingleArg__method1.stub(|each| {
         each.call(matching!("something"));
     })])
     .method1("anything");
@@ -52,7 +52,7 @@ fn should_panic_if_no_call_patterns_in_stub_are_matched() {
     expected = "SingleArg::method1: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls."
 )]
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
-    mock([SingleArg__method1::stub(|each| {
+    mock([SingleArg__method1.stub(|each| {
         each.call(matching!("a")).returns_ref(format!("")).once();
         each.call(matching!(_)).returns_ref(format!(""));
     })])
@@ -64,7 +64,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     expected = "SingleArg::method1(\"b\"): Explicit panic for call pattern (0): foobar!"
 )]
 fn should_panic_with_explicit_message() {
-    mock([SingleArg__method1::stub(|each| {
+    mock([SingleArg__method1.stub(|each| {
         each.call(matching!(_)).panics("foobar!");
     })])
     .method1("b");

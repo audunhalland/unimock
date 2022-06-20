@@ -17,13 +17,14 @@ trait T2 {
 )]
 fn two_fns_in_incorrect_order_should_fail_and_presence_of_a_stub_should_not_influence_order() {
     let m = mock([
-        T1__a::next_call(matching!(0)).returns(0).once().in_order(),
-        T1__b::stub(|each| {
+        T1__a.next_call(matching!(0)).returns(0).once().in_order(),
+        T1__b.stub(|each| {
             each.call(matching!(_)).returns(0);
         }),
-        T2__c::next_call(matching!(0)).returns(0).once().in_order(),
-        T1__a::next_call(matching!(0)).returns(0).once().in_order(),
-        T2__c::next_call(matching!(0))
+        T2__c.next_call(matching!(0)).returns(0).once().in_order(),
+        T1__a.next_call(matching!(0)).returns(0).once().in_order(),
+        T2__c
+            .next_call(matching!(0))
             .returns(0)
             .n_times(2)
             .in_order(),
@@ -42,11 +43,12 @@ fn two_fns_in_incorrect_order_should_fail_and_presence_of_a_stub_should_not_infl
 )]
 fn calling_expired_pattern_should_fail() {
     let m = mock([
-        T1__a::next_call(matching!(0))
+        T1__a
+            .next_call(matching!(0))
             .returns(0)
             .n_times(2)
             .in_order(),
-        T1__a::next_call(matching!(1)).returns(1).once().in_order(),
+        T1__a.next_call(matching!(1)).returns(1).once().in_order(),
     ]);
 
     assert_eq!(0, m.a(0));

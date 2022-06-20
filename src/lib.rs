@@ -62,14 +62,14 @@
 //!     foo.foo()
 //! }
 //!
-//! let clause = Foo__foo::each_call(matching!()).returns(1337).in_any_order();
+//! let clause = Foo__foo.each_call(matching!()).returns(1337).in_any_order();
 //!
 //! assert_eq!(1337, test_me(mock(Some(clause))));
 //! ```
 //!
 //! [Clause] construction is a type-state machine that in this example goes through 3 steps:
 //!
-//! 1. `Foo__foo::each_call(matching!())`: Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
+//! 1. `Foo__foo.each_call(matching!())`: Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
 //! 2. `.returs(1337)`: Each matching call will return the value `1337`
 //! 3. `.in_any_order()`: this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it. In this example there is only one clause.
 //!
@@ -119,10 +119,12 @@
 //!     42,
 //!     test_me(
 //!         &mock([
-//!             Foo__foo::each_call(matching!(_))
+//!             Foo__foo
+//!                 .each_call(matching!(_))
 //!                 .answers(|arg| arg * 3)
 //!                 .in_any_order(),
-//!             Bar__bar::each_call(matching!((arg) if *arg > 20))
+//!             Bar__bar
+//!                 .each_call(matching!((arg) if *arg > 20))
 //!                 .answers(|arg| arg * 2)
 //!                 .in_any_order(),
 //!         ]),
@@ -136,11 +138,11 @@
 //!     42,
 //!     test_me(
 //!         &mock([
-//!             Foo__foo::stub(|each| {
+//!             Foo__foo.stub(|each| {
 //!                 each.call(matching!(1337)).returns(1024);
 //!                 each.call(matching!(_)).answers(|arg| arg * 3);
 //!             }),
-//!             Bar__bar::stub(|each| {
+//!             Bar__bar.stub(|each| {
 //!                 each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
 //!             }),
 //!         ]),
@@ -183,12 +185,12 @@
 //!
 //! ```no_compile
 //! mock([
-//!     Foo_foo::next_call(matching!(3)).returns(5).once().in_order(),
-//!     Bar_bar::next_call(matching!(8)).returns(7).n_times(2).in_order(),
+//!     Foo_foo.next_call(matching!(3)).returns(5).once().in_order(),
+//!     Bar_bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
 //! ]);
 //! ```
 //!
-//! Order-sensitive clauses and order-insensitive clauses (like `::stub`) do not interfere with each other.
+//! Order-sensitive clauses and order-insensitive clauses (like `stub`) do not interfere with each other.
 //! However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 //!
 //! # Application architecture
@@ -296,7 +298,7 @@ use std::sync::{Arc, Mutex};
 ///     sum(mock(None)); // note: panics at runtime!
 ///
 ///     // Mock a single method (still panics, because all 3 must be mocked:):
-///     sum(mock(Some(Trait1__a::next_call(|_| true).returns(0).once().in_order())));
+///     sum(mock(Some(Trait1__a.next_call(|_| true).returns(0).once().in_order())));
 /// }
 /// ```
 ///
@@ -575,10 +577,10 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     ///
     /// A stub sets up call patterns on a single function, that can be matched in any order.
     ///
-    /// For exact order verification, reach for [Self::next_call] instead.
-    fn stub<F>(each_fn: F) -> Clause
+    /// For exact order verification, reach for [MockFn::next_call] instead.
+    fn stub<E>(self, each_fn: E) -> Clause
     where
-        F: FnOnce(&mut build::Each<Self>),
+        E: FnOnce(&mut build::Each<Self>),
     {
         let mut each = build::Each::new();
         each_fn(&mut each);
@@ -589,7 +591,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
     /// that needs to be specified on this MockFn.
-    fn each_call<M>(matching: M) -> build::Match<'static, Self, property::InAnyOrder>
+    fn each_call<M>(self, matching: M) -> build::Match<'static, Self, property::InAnyOrder>
     where
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
@@ -602,10 +604,10 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// Initiate a call pattern builder intended to be used as a [Clause]
     /// with exact order verification. The build sequence should end with [build::QuantifiedResponse::in_order].
     ///
-    /// This differens from [Self::stub], in that that a stub defines all call patterns without any
+    /// This differens from [MockFn::stub], in that that a stub defines all call patterns without any
     /// specific required call order. This function takes only single input matcher, that MUST be
     /// matched in the order specified, relative to other next calls.
-    fn next_call<M>(matching: M) -> build::Match<'static, Self, property::InOrder>
+    fn next_call<M>(self, matching: M) -> build::Match<'static, Self, property::InOrder>
     where
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
@@ -662,7 +664,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 ///     120,
 ///     // well, not in the test, at least!
 ///     mock([
-///         Factorial__factorial::stub(|each| {
+///         Factorial__factorial.stub(|each| {
 ///             each.call(matching!((input) if *input <= 1)).returns(1_u32); // unimock controls the API call
 ///             each.call(matching!(_)).unmocked();
 ///         })
@@ -707,7 +709,7 @@ where
 /// spy([]).foo();
 /// // prints "real thing" x 2
 ///
-/// spy(Some(Trait__foo::next_call(matching!()).returns(()).once().in_order())).foo();
+/// spy(Some(Trait__foo.next_call(matching!()).returns(()).once().in_order())).foo();
 /// // does not print
 ///
 /// // spy object that prevents the real
@@ -793,15 +795,15 @@ fn mock_from_iterator(
 /// // reusable function
 /// fn foo_bar_setup_clause() -> Clause {
 ///     [
-///         Foo__foo::each_call(matching!(_)).returns(1).in_any_order(),
-///         Bar__bar::each_call(matching!(_)).returns(2).in_any_order(),
+///         Foo__foo.each_call(matching!(_)).returns(1).in_any_order(),
+///         Bar__bar.each_call(matching!(_)).returns(2).in_any_order(),
 ///     ]
 ///     .into()
 /// }
 ///
 /// let unimock = mock([
 ///     foo_bar_setup_clause(),
-///     Baz__baz::each_call(matching!(_)).returns(3).in_any_order()
+///     Baz__baz.each_call(matching!(_)).returns(3).in_any_order()
 /// ]);
 /// assert_eq!(6, unimock.foo(0) + unimock.bar(0) + unimock.baz(0));
 /// ```

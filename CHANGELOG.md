@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- self receiver in MockFn call pattern constructors. This works much better with rustfmt,
+  which tends to move a dot-method call to the next line, indented. This means that each
+  new mock will start naturally in the clause array, and all subsequent setup methods will be
+  indented, so it's much easier to see where each mock starts and ends.
+### Removed
+- Breaking: Ability to make call patterns with `T::method`, as these methods now take a self parameter.
+  This design was previously necessary (I think) because of GATS and https://github.com/rust-lang/rust/issues/96230.
 
 ## [0.2.1] - 2022-06-12
 ### Removed
