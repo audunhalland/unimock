@@ -18,7 +18,7 @@ impl Ordering for InOrder {
     type Kind = Self;
 }
 
-/// Trait for describing the repetition class of output sequences
+/// Trait for describing the repetition class of output sequences.
 pub trait Repetition {
     /// The kind of repetition.
     type Kind;

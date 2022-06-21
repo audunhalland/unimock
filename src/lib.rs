@@ -23,13 +23,14 @@
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
 //! 3. A mock instantiation by calling [`mock(None)`](mock()), which returns a [Unimock] value which is passed into `takes_foo`.
 //!
-//! The [mock()] function takes an argument, in this case the value `None`. The argument is _what behaviour are we mocking_, in this case [None] at all!
+//! The [mock()] function takes an argument, in this case the value `None`.
+//! The argument is _what behaviour are we mocking_, in this case [None] at all!
 //! `Foo` contains no methods, so there is no behaviour to mock.
 //!
 //! # Methods and behaviour mocking
 //!
-//! In order to be somewhat useful, the traits we abstract over should contain some methods. In a unit test for some function, we'd like
-//! to mock the behaviour of that function's dependencies (expressed as trait bounds).
+//! In order to be somewhat useful, the traits we abstract over should contain some methods.
+//! In a unit test for some function, we'd like to mock the behaviour of that function's dependencies (expressed as trait bounds).
 //!
 //! [mock()] accepts a collection of [Clause]s. Clauses carry the full recipe on how Unimock will behave once instantiated.
 //!
@@ -43,7 +44,8 @@
 //! }
 //! ```
 //!
-//! we would like to tell unimock what `Foo::foo`'s behaviour will be, i.e. what it will return. In order to do that, we first need to refer to the method.
+//! we would like to tell unimock what `Foo::foo`'s behaviour will be, i.e. what it will return.
+//! In order to do that, we first need to refer to the method.
 //! In Rust, trait methods aren't reified entities, they are not types nor values, so they cannot be referred to in code.
 //! Therefore, the unimock macro creates a surrogate type to represent it. By default, this type will be called
 //!
@@ -160,15 +162,15 @@
 //!
 //! _Every [MockFn] that is introduced in some clause, *must* be called at least once._
 //!
-//! If this requirement is not met, Unimock will panic inside its Drop implementation. The reason
-//! is to help avoiding "bit rot" accumulating over time inside test code. When refactoring release
-//! code, tests should always follow along and not be overly generic.
+//! If this requirement is not met, Unimock will panic inside its Drop implementation.
+//! The reason is to help avoiding "bit rot" accumulating over time inside test code.
+//! When refactoring release code, tests should always follow along and not be overly generic.
 //!
 //! Every unimock verification happens automatically in [Unimock::drop].
 //!
 //! ### Optional call count expectations in call patterns
-//! To make a call count expectation for a specific call pattern, look at [build::QuantifyResponse], which
-//! has methods like `once()`, `n_times(n)` and `at_least_times(n)`.
+//! To make a call count expectation for a specific call pattern,
+//!    look at [build::QuantifyResponse], which has methods like `once()`, `n_times(n)` and `at_least_times(n)`.
 //!
 //! With exact quantification in place, we can produce output sequences by chaining output definitions:
 //!
@@ -176,12 +178,13 @@
 //! each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
 //! ```
 //!
-//! The output sequence will be `[1, 1, 2, 2, 2, ..]`. A call pattern like this is _expected_ to be called at least 3 times.
+//! The output sequence will be `[1, 1, 2, 2, 2, ..]`.
+//! A call pattern like this is _expected_ to be called at least 3 times.
 //! 2 times because of the first exact output sequence, then at least one time because of the `.then()` combinator.
 //!
 //! ### Verifying exact sequence of calls
-//! Exact call sequences may be expressed using _strictly ordered clauses_. Use [MockFn::next_call] to define a call pattern, and
-//! [build::QuantifiedResponse::in_order] to make it into a clause.
+//! Exact call sequences may be expressed using _strictly ordered clauses_.
+//! Use [MockFn::next_call] to define a call pattern, and [build::QuantifiedResponse::in_order] to make it into a clause.
 //!
 //! ```no_compile
 //! mock([
@@ -195,10 +198,11 @@
 //!
 //! # Application architecture
 //!
-//! Writing larger, testable applications with unimock requires some degree of architectural discipline. We already know
-//! how to specify dependencies using trait bounds. But would this scale in practice when several layers are involved?
-//! One of the main features of unimock is that all traits are implemented by [Unimock]. This means that trait bounds
-//! can be composed, and we can use _one value_ that implements all our dependencies:
+//! Writing larger, testable applications with unimock requires some degree of architectural discipline.
+//! We already know how to specify dependencies using trait bounds.
+//! But would this scale in practice when several layers are involved?
+//! One of the main features of unimock is that all traits are implemented by [Unimock].
+//! This means that trait bounds can be composed, and we can use _one value_ that implements all our dependencies:
 //!
 //! ```rust
 //! # trait A {}
@@ -209,8 +213,9 @@
 //! }
 //! ```
 //!
-//! In a way, this function resembles a `self`-receiving function. The `deps` argument is how the function
-//! abstracts over its dependencies. Let's keep this call convention and let it scale a bit by introducing two layers:
+//! In a way, this function resembles a `self`-receiving function.
+//! The `deps` argument is how the function abstracts over its dependencies.
+//! Let's keep this call convention and let it scale a bit by introducing two layers:
 //!
 //! ```rust
 //! use std::any::Any;
@@ -232,10 +237,9 @@
 //! }
 //! ```
 //!
-//! The dependency from `fn a` to `fn b` is completely abstracted away, and in test mode
-//! the `deps: &impl X` gets substituted with `deps: &Unimock`. Unimock is only concerned with the
-//! testing side of the picture. To wire all of this together to a full-fledged runtime solution
-//! without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
+//! The dependency from `fn a` to `fn b` is completely abstracted away, and in test mode the `deps: &impl X` gets substituted with `deps: &Unimock`.
+//! Unimock is only concerned with the testing side of the picture.
+//! To wire all of this together to a full-fledged runtime solution without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
 //!
 //! ### Combining release code and mocks: Spying
 //! Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
@@ -243,12 +247,10 @@
 //!
 //! See the documentation of [Unmock] and [spy] to see how this works.
 //!
-//! Although this can be implemented with unimock directly, it works best with a higher-level
-//! macro like [entrait](https://docs.rs/entrait).
+//! Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 //!
 //! # Misc
-//! Unimock works best with high-level abstractions over function calls. It does not work that well
-//! with generic traits or traits with associated types.
+//! Unimock works best with high-level abstractions over function calls. It does not work that well with generic traits or traits with associated types.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -307,20 +309,20 @@ use std::sync::{Arc, Mutex};
 ///
 /// * `#[unimock(mod=ident)]`: Puts the [MockFn] types in a new module named `ident`.
 /// * `#[unimock(as=[a, b, c])]`: Given there are e.g. 3 methods in the annotated trait, assigns the names `a`, `b` and `c` for the [MockFn] types respectively, in the same order as the trait methods.
-/// * `#[unimock(unmock=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations. The functions are assigned to the methods
-///   in the same order as the methods are listed in the trait. A value of `_` means _no unmock support_ for that method. See [Unmock](crate::Unmock) for more information.
+/// * `#[unimock(unmock=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
+///   The functions are assigned to the methods in the same order as the methods are listed in the trait.
+///   A value of `_` means _no unmock support_ for that method.
+///   See [Unmock](crate::Unmock) for more information.
 pub use unimock_macros::unimock;
 
 ///
 /// Macro to ease argument pattern matching.
 /// This macro produces a closure expression suitable for passing to [build::Each::call].
 ///
-/// Takes inspiration from [std::matches] and works similarly, except that the value to match
-/// can be removed as a macro argument, since it is instead received as the closure argument.
+/// Takes inspiration from [std::matches] and works similarly, except that the value to match can be removed as a macro argument, since it is instead received as the closure argument.
 ///
 /// Unimock uses tuples to represent multiple arguments. A single argument is not a tuple.
-/// To avoid the extra set of parentheses for simple multi-argument matchers, there is
-/// a special syntax that accepts several top-level patterns:
+/// To avoid the extra set of parentheses for simple multi-argument matchers, there is a special syntax that accepts several top-level patterns:
 /// `matching!("a", "b")` will expand to `matching!(("a", "b"))`.
 ///
 /// # Example
@@ -343,8 +345,8 @@ pub use unimock_macros::unimock;
 ///
 /// # Auto-"coercions"
 ///
-/// Since the input expression being matched is generated by the macro, you would
-/// normally suffer from the following problem when matching some non-`&str` function input:
+/// Since the input expression being matched is generated by the macro,
+///   you would normally suffer from the following problem when matching some non-`&str` function input:
 ///
 /// ```compile_fail
 /// # fn test() -> bool {
@@ -356,8 +358,8 @@ pub use unimock_macros::unimock;
 /// }
 /// ```
 ///
-/// To help ergonomics, the `matching` macro recognizes certain literals used in the
-/// patterns, and performs appropriate type conversion at the correct places:
+/// To help ergonomics, the `matching` macro recognizes certain literals used in the patterns,
+///   and performs appropriate type conversion at the correct places:
 ///
 /// ```rust
 /// # use unimock::*;
@@ -544,8 +546,7 @@ pub trait MockInputs<'i> {
 /// `MockFn` describes functional APIs that may be called via dispatch, a.k.a. _Inversion of Control_.
 /// Virtuality should be regarded as as test-time virtuality: A virtual function is either the real deal (see [Unmock]) OR it is mocked.
 ///
-/// In Rust, the most convenient way to perform a virtualized/dispatched function call is to
-/// call a trait method.
+/// In Rust, the most convenient way to perform a virtualized/dispatched function call is to call a trait method.
 ///
 /// `MockFn` only provides metadata about an API, it is not directly callable.
 ///
@@ -637,16 +638,14 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 /// }
 /// ```
 ///
-/// The unmock feature makes sense when the reason to define a mockable trait
-/// is _solely_ for the purpose of inversion-of-control at test-time: Release code
-/// need only one way to double a number.
+/// The unmock feature makes sense when the reason to define a mockable trait is _solely_ for the purpose of inversion-of-control at test-time:
+///   Release code need only one way to double a number.
 ///
-/// Standalone functions enables arbitrarily deep integration testing
-/// in unimock-based application architectures. When unimock calls the true implementation,
-/// it inserts itself as the generic first parameter. When this parameter is
-/// bounded by traits, the original `fn` is given capabilities to call other APIs,
-/// though only indirectly. Each method invocation happening during a test will invisibly pass
-/// through unimock, resulting in a great level of control. Consider:
+/// Standalone functions enables arbitrarily deep integration testing in unimock-based application architectures.
+/// When unimock calls the true implementation, it inserts itself as the generic first parameter.
+/// When this parameter is bounded by traits, the original `fn` is given capabilities to call other APIs, though only indirectly.
+/// Each method invocation happening during a test will invisibly pass through unimock, resulting in a great level of control.
+/// Consider:
 ///
 /// ```rust
 /// # use unimock::*;
@@ -677,8 +676,7 @@ pub trait Unmock: MockFn {}
 
 /// Construct a unimock instance that works like a mock or a stub, from a set of [Clause]es.
 ///
-/// Every call hitting the instance must be declared in advance as an input clause,
-/// or else panic will ensue.
+/// Every call hitting the instance must be declared in advance as an input clause, or else panic will ensue.
 #[inline]
 pub fn mock<I>(clauses: I) -> Unimock
 where
@@ -687,9 +685,8 @@ where
     mock_from_iterator(&mut clauses.into_iter(), FallbackMode::Error)
 }
 
-/// Construct a unimock instance that works like a spy, where every clause
-/// acts as an override over the default behaviour, which is to hit
-/// "real world" code using the [Unmock] feature.
+/// Construct a unimock instance that works like a _spy_.
+/// In a spy, every clause acts as an override over the default behaviour, which is to hit "real world" code using the [Unmock] feature.
 ///
 /// # Example
 /// ```rust
@@ -766,14 +763,11 @@ fn mock_from_iterator(
 
 /// A clause from which unimock instances are created.
 ///
-/// There can be more than one clause for each [MockFn] instance,
-/// these will be combined together at construction time.
+/// There can be more than one clause for each [MockFn] instance, these will be combined together at construction time.
 ///
 /// Clause is non-generic and uses dynamic dispatch internally.
-/// It also implements `From<I> where I: IntoIterator<Item = Clause>`,
-/// so one clause can contain several other clauses in a hierarchical manner.
-/// This means that clauses can be returned from helper functions
-/// and reused several times:
+/// It also implements `From<I> where I: IntoIterator<Item = Clause>`, so one clause can contain several other clauses in a hierarchical manner.
+/// This means that clauses can be returned from helper functions and reused several times:
 ///
 /// ```rust
 /// use unimock::*;

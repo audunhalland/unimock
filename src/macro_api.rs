@@ -2,8 +2,7 @@ use crate::*;
 
 /// The evaluation of a [MockFn].
 ///
-/// Used to tell trait implementations whether to do perform their own
-/// evaluation of a call.
+/// Used to tell trait implementations whether to do perform their own evaluation of a call.
 ///
 /// The output is generic, because both owned and referenced output are supported.
 pub enum Evaluation<'i, O, F: MockFn> {
@@ -27,15 +26,13 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
     }
 }
 
-/// Trait for computing the proper [std::fmt::Debug] representation
-/// of a value.
+/// Trait for computing the proper [std::fmt::Debug] representation of a value.
 pub trait ProperDebug {
     /// Format a debug representation.
     fn unimock_try_debug(&self) -> String;
 }
 
-/// Fallback trait (using autoref specialization) for returning `"?"`
-/// when the implementing value does not implement [std::fmt::Debug].
+/// Fallback trait (using autoref specialization) for returning `"?"` when the implementing value does not implement [std::fmt::Debug].
 pub trait NoDebug {
     /// Format a debug representation.
     fn unimock_try_debug(&self) -> String;

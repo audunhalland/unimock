@@ -14,8 +14,7 @@ pub(crate) enum ClausePrivate {
     Multiple(Vec<Clause>),
 }
 
-/// Builder for defining a series of cascading call patterns
-/// on a specific [MockFn].
+/// Builder for defining a series of cascading call patterns on a specific [MockFn].
 pub struct Each<F: MockFn> {
     typed_impl: mock::TypedMockImpl<F>,
 }
@@ -76,8 +75,7 @@ impl<'p, F: MockFn> PatternWrapper<'p, F> {
 
 /// Create a new standalone call pattern match.
 ///
-/// A standalone call pattern is the only call pattern in a mock impl,
-/// in addition it owns its own mock impl.
+/// A standalone call pattern is the only call pattern in a mock impl, in addition it owns its own mock impl.
 pub(crate) fn new_standalone_match<F, O>(
     mock_impl: mock::TypedMockImpl<F>,
     ordering: O,
@@ -128,8 +126,7 @@ where
 
     /// Specify the output of the call to be a borrow of the provided value.
     /// This works well when the lifetime of the returned reference is the same as `self`.
-    /// Using this for `'static` references will produce a runtime error. For static
-    /// references, use [Match::returns_static].
+    /// Using this for `'static` references will produce a runtime error. For static references, use [Match::returns_static].
     pub fn returns_ref<T>(self, value: T) -> QuantifyResponse<'p, F, O>
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
@@ -146,8 +143,7 @@ where
         self.responder(mock::Responder::StaticRefClosure(Box::new(move |_| value)))
     }
 
-    /// Specify the output of the call pattern by invoking the given closure that
-    /// can then compute it based on input parameters.
+    /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
     pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
     where
         A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
@@ -159,10 +155,11 @@ where
         })))
     }
 
-    /// Specify the output of the call pattern by invoking the given closure that
-    /// can then compute it based on input parameters, then create a static reference
-    /// to it by leaking its memory. Note that this version will produce a new memory leak for
-    /// _every invocation_ of the answer function.
+    /// Specify the output of the call pattern to be a static reference to leaked memory.
+    ///
+    /// The value may be based on the value of input parameters.
+    ///
+    /// This version will produce a new memory leak for _every invocation_ of the answer function.
     ///
     /// This method should only be used when computing a reference based
     /// on input parameters is necessary, which should not be a common use case.
@@ -277,8 +274,7 @@ where
     }
 }
 
-/// An exactly quantified response, i.e. the number of times it
-/// is expected to respond is an exact number.
+/// An exactly quantified response, i.e. the number of times it is expected to respond is an exact number.
 pub struct QuantifiedResponse<'p, F: MockFn, O, R> {
     pattern: PatternWrapper<'p, F>,
     response_index: usize,
@@ -292,19 +288,16 @@ where
     O: Ordering,
     R: Repetition,
 {
-    /// Prepare to set up a new response, which will take effect after the current
-    /// response has been yielded.
+    /// Prepare to set up a new response, which will take effect after the current response has been yielded.
     /// In order to make an output sequence, the preceding output must be exactly quantified.
     pub fn then(mut self) -> Match<'p, F, O>
     where
         R: Repetition<Kind = Exact>,
     {
-        // Opening for a new response, which will be non-exactly quantified unless otherwise specified,
-        // set the exactness to AtLeastPlusOne now.
+        // Opening for a new response, which will be non-exactly quantified unless otherwise specified, set the exactness to AtLeastPlusOne now.
         // The reason it is AtLeastPlusOne is the additive nature.
-        // We do not want to add anything to the number now, because it could be added to
-        // later in QuantifyResponse. We just want to express that when using `then`, it
-        // should be called at least one time, if not `then` would be unnecessary.
+        // We do not want to add anything to the number now, because it could be added to later in QuantifyResponse.
+        // We just want to express that when using `then`, it should be called at least one time, if not `then` would be unnecessary.
         self.pattern
             .get_mut()
             .call_counter
@@ -317,9 +310,8 @@ where
         }
     }
 
-    /// Turn this _exactly quantified_ definition into a [Clause] expectation, that can be included
-    /// in a sequence of ordered clauses that specify calls to different functions
-    /// that must be called in the exact order specified.
+    /// Turn this _exactly quantified_ definition into a [Clause] expectation.
+    /// The clause can be included in a sequence of ordered clauses that specify calls to different functions that must be called in the exact order specified.
     ///
     /// # Example
     /// ```rust
