@@ -1,5 +1,8 @@
 # unimock
 
+[<img alt="crates.io" src="https://img.shields.io/crates/v/unimock.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/unimock)
+[<img alt="docs.rs" src="https://img.shields.io/docsrs/unimock?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/syn)
+
 <!-- cargo-rdme start -->
 
 
@@ -31,7 +34,7 @@ The [mock()] function takes an argument, in this case the value `None`.
 The argument is _what behaviour are we mocking_, in this case [None] at all!
 `Foo` contains no methods, so there is no behaviour to mock.
 
-# Methods and behaviour mocking
+## Methods and behaviour mocking
 
 In order to be somewhat useful, the traits we abstract over should contain some methods.
 In a unit test for some function, we'd like to mock the behaviour of that function's dependencies (expressed as trait bounds).
@@ -91,7 +94,7 @@ Inputs being matched is a condition that needs to be fulfilled in order for the 
 Specifying outputs can be done in several ways. The simplest one is `returns(something)`. Different ways of specifying outputs are
 found in [build::Match].
 
-# Combining clauses
+## Combining clauses
 [mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
 An iterator has a specific order of items, and sometimes the order of clauses matters too. It will depend on the type of clause.
 
@@ -157,7 +160,7 @@ assert_eq!(
 In both these examples, the order in which the clauses are specified do not matter, _except for input matching_.
 In order for unimock to find the correct response, call patterns will be matched in the sequence they were defined.
 
-# Interaction verifications
+## Interaction verifications
 
 Unimock has one built-in verification that is always enabled:
 
@@ -197,7 +200,7 @@ mock([
 Order-sensitive clauses and order-insensitive clauses (like `stub`) do not interfere with each other.
 However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 
-# Application architecture
+## Application architecture
 
 Writing larger, testable applications with unimock requires some degree of architectural discipline.
 We already know how to specify dependencies using trait bounds.
@@ -247,7 +250,7 @@ See the documentation of [Unmock] and [spy] to see how this works.
 
 Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 
-# Misc
+## Misc
 Unimock works best with high-level abstractions over function calls. It does not work that well with generic traits or traits with associated types.
 
 <!-- cargo-rdme end -->
