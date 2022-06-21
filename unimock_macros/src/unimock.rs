@@ -178,8 +178,12 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
     let mock_fn_impls = mock_fn_defs.iter().map(|def| &def.impls);
 
     let mock_fn_structs = if let Some(module) = &cfg.module {
+        let doc_string = format!("Unimock module for `{}`", item_trait.ident);
+        let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
+
         let vis = &item_trait.vis;
         quote! {
+            #[doc = #doc_lit_str]
             #vis mod #module {
                 #(#struct_defs)*
             }
@@ -260,6 +264,16 @@ impl<'s> Method<'s> {
         unmock_impl: &Option<proc_macro2::TokenStream>,
     ) -> Vec<proc_macro2::TokenStream> {
         let method_ident = &self.method.sig.ident;
+
+        let generics = &self.method.sig.generics;
+        let generics_string = match (&generics.lt_token, &generics.gt_token) {
+            (Some(_), Some(_)) => {
+                let params = &generics.params;
+                format!("<{}>", quote! { #params })
+            }
+            _ => String::new(),
+        };
+
         let arg_types = self
             .method
             .sig
@@ -283,7 +297,7 @@ impl<'s> Method<'s> {
         };
 
         let mut doc_string =
-            format!("MockFn for `{trait_ident}::{method_ident}({arg_types}){return_type}`.");
+            format!("MockFn for `{trait_ident}::{method_ident}{generics_string}({arg_types}){return_type}`.");
 
         if unmock_impl.is_some() {
             doc_string.push_str(" Implements `Unmock`.");
