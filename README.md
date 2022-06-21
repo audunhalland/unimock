@@ -62,14 +62,14 @@ fn test_me(foo: impl Foo) -> i32 {
     foo.foo()
 }
 
-let clause = Foo__foo::each_call(matching!()).returns(1337).in_any_order();
+let clause = Foo__foo.each_call(matching!()).returns(1337).in_any_order();
 
 assert_eq!(1337, test_me(mock(Some(clause))));
 ```
 
 [Clause] construction is a type-state machine that in this example goes through 3 steps:
 
-1. `Foo__foo::each_call(matching!())`: Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is paremeter-less)
+1. `Foo__foo.each_call(matching!())`: Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
 2. `.returs(1337)`: Each matching call will return the value `1337`
 3. `.in_any_order()`: this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it. In this example there is only one clause.
 
@@ -88,7 +88,7 @@ Specifying outputs can be done in several ways. The simplest one is `returns(som
 found in [build::Match].
 
 ## Combining clauses
-[mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more that one kind of behaviour!
+[mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
 An iterator has a specific order of items, and sometimes the order of clauses matters too. It will depend on the type of clause.
 
 Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
@@ -118,10 +118,12 @@ assert_eq!(
     42,
     test_me(
         &mock([
-            Foo__foo::each_call(matching!(_))
+            Foo__foo
+                .each_call(matching!(_))
                 .answers(|arg| arg * 3)
                 .in_any_order(),
-            Bar__bar::each_call(matching!((arg) if *arg > 20))
+            Bar__bar
+                .each_call(matching!((arg) if *arg > 20))
                 .answers(|arg| arg * 2)
                 .in_any_order(),
         ]),
@@ -135,11 +137,11 @@ assert_eq!(
     42,
     test_me(
         &mock([
-            Foo__foo::stub(|each| {
+            Foo__foo.stub(|each| {
                 each.call(matching!(1337)).returns(1024);
                 each.call(matching!(_)).answers(|arg| arg * 3);
             }),
-            Bar__bar::stub(|each| {
+            Bar__bar.stub(|each| {
                 each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
             }),
         ]),
@@ -182,12 +184,12 @@ Exact call sequences may be expressed using _strictly ordered clauses_. Use [Moc
 
 ```no_compile
 mock([
-    Foo_foo::next_call(matching!(3)).returns(5).once().in_order(),
-    Bar_bar::next_call(matching!(8)).returns(7).n_times(2).in_order(),
+    Foo_foo.next_call(matching!(3)).returns(5).once().in_order(),
+    Bar_bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
 ]);
 ```
 
-Order-sensitive clauses and order-insensitive clauses (like `::stub`) do not interfere with each other.
+Order-sensitive clauses and order-insensitive clauses (like `stub`) do not interfere with each other.
 However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 
 ## Application architecture
