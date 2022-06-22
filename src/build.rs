@@ -10,13 +10,13 @@ impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
 }
 
 pub(crate) enum ClausePrivate {
-    Single(mock::DynMockImpl),
+    Single(mock_impl::DynMockImpl),
     Multiple(Vec<Clause>),
 }
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
 pub struct Each<F: MockFn> {
-    typed_impl: mock::TypedMockImpl<F>,
+    typed_impl: mock_impl::TypedMockImpl<F>,
 }
 
 impl<F> Each<F>
@@ -32,7 +32,7 @@ where
     where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        self.typed_impl.patterns.push(mock::CallPattern {
+        self.typed_impl.patterns.push(mock_impl::CallPattern {
             input_matcher: Box::new(matching),
             call_index_range: Default::default(),
             call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
@@ -48,24 +48,24 @@ where
 
     pub(crate) fn new() -> Self {
         Self {
-            typed_impl: mock::TypedMockImpl::new(),
+            typed_impl: mock_impl::TypedMockImpl::new(),
         }
     }
 
     pub(crate) fn to_clause(self) -> Clause {
-        Clause(ClausePrivate::Single(mock::DynMockImpl::new_full_cascade(
-            Box::new(self.typed_impl),
-        )))
+        Clause(ClausePrivate::Single(
+            mock_impl::DynMockImpl::new_full_cascade(Box::new(self.typed_impl)),
+        ))
     }
 }
 
 pub(crate) enum PatternWrapper<'p, F: MockFn> {
-    Grouped(&'p mut mock::CallPattern<F>),
-    Standalone(mock::TypedMockImpl<F>),
+    Grouped(&'p mut mock_impl::CallPattern<F>),
+    Standalone(mock_impl::TypedMockImpl<F>),
 }
 
 impl<'p, F: MockFn> PatternWrapper<'p, F> {
-    fn get_mut(&mut self) -> &mut mock::CallPattern<F> {
+    fn get_mut(&mut self) -> &mut mock_impl::CallPattern<F> {
         match self {
             PatternWrapper::Grouped(p) => *p,
             PatternWrapper::Standalone(mock_impl) => mock_impl.patterns.last_mut().unwrap(),
@@ -77,7 +77,7 @@ impl<'p, F: MockFn> PatternWrapper<'p, F> {
 ///
 /// A standalone call pattern is the only call pattern in a mock impl, in addition it owns its own mock impl.
 pub(crate) fn new_standalone_match<F, O>(
-    mock_impl: mock::TypedMockImpl<F>,
+    mock_impl: mock_impl::TypedMockImpl<F>,
     ordering: O,
 ) -> Match<'static, F, O>
 where
@@ -111,9 +111,9 @@ where
         F::Output: Send + Sync + Clone + 'static,
     {
         let value = value.into();
-        self.responder(mock::Responder::Value(Box::new(mock::StoredValueSlot(
-            value,
-        ))))
+        self.responder(mock_impl::Responder::Value(Box::new(
+            mock_impl::StoredValueSlot(value),
+        )))
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
@@ -121,7 +121,9 @@ where
     where
         F::Output: Default,
     {
-        self.responder(mock::Responder::Closure(Box::new(|_| Default::default())))
+        self.responder(mock_impl::Responder::Closure(Box::new(|_| {
+            Default::default()
+        })))
     }
 
     /// Specify the output of the call to be a borrow of the provided value.
@@ -131,7 +133,7 @@ where
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
     {
-        self.responder(mock::Responder::Borrowable(Box::new(value)))
+        self.responder(mock_impl::Responder::Borrowable(Box::new(value)))
     }
 
     /// Specify the output of the call to be a reference to static value.
@@ -140,7 +142,9 @@ where
     where
         F::Output: Send + Sync + 'static,
     {
-        self.responder(mock::Responder::StaticRefClosure(Box::new(move |_| value)))
+        self.responder(mock_impl::Responder::StaticRefClosure(Box::new(
+            move |_| value,
+        )))
     }
 
     /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
@@ -150,7 +154,7 @@ where
         R: Into<F::Output>,
         F::Output: Sized,
     {
-        self.responder(mock::Responder::Closure(Box::new(move |inputs| {
+        self.responder(mock_impl::Responder::Closure(Box::new(move |inputs| {
             func(inputs).into()
         })))
     }
@@ -169,18 +173,20 @@ where
         R: std::borrow::Borrow<F::Output> + 'static,
         F::Output: Sized,
     {
-        self.responder(mock::Responder::StaticRefClosure(Box::new(move |inputs| {
-            let value = func(inputs);
-            let leaked_ref = Box::leak(Box::new(value));
-            <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
-        })))
+        self.responder(mock_impl::Responder::StaticRefClosure(Box::new(
+            move |inputs| {
+                let value = func(inputs);
+                let leaked_ref = Box::leak(Box::new(value));
+                <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
+            },
+        )))
     }
 
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
     pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, O> {
         let message = message.into();
 
-        self.responder(mock::Responder::Panic(message))
+        self.responder(mock_impl::Responder::Panic(message))
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
@@ -188,14 +194,14 @@ where
     where
         F: Unmock,
     {
-        self.responder(mock::Responder::Unmock)
+        self.responder(mock_impl::Responder::Unmock)
     }
 
-    fn responder(mut self, responder: mock::Responder<F>) -> QuantifyResponse<'p, F, O> {
+    fn responder(mut self, responder: mock_impl::Responder<F>) -> QuantifyResponse<'p, F, O> {
         self.pattern
             .get_mut()
             .responders
-            .push(mock::CallOrderResponder {
+            .push(mock_impl::CallOrderResponder {
                 response_index: self.response_index,
                 responder,
             });
@@ -258,7 +264,7 @@ where
     {
         match self.pattern {
             PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
-                mock::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
+                mock_impl::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
             )),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
@@ -340,7 +346,7 @@ where
     {
         match self.pattern {
             PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
-                mock::DynMockImpl::new_strict_order(Box::new(typed_impl)),
+                mock_impl::DynMockImpl::new_strict_order(Box::new(typed_impl)),
             )),
             _ => panic!(),
         }
@@ -353,7 +359,7 @@ where
     {
         match self.pattern {
             PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
-                mock::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
+                mock_impl::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
             )),
             _ => panic!(),
         }

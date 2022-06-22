@@ -404,7 +404,7 @@ impl<F: MockFn> TypedMockImpl<F> {
         input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
     ) -> Self {
         let mut mock_impl = Self::new();
-        mock_impl.patterns.push(mock::CallPattern {
+        mock_impl.patterns.push(mock_impl::CallPattern {
             input_matcher,
             call_index_range: Default::default(),
             call_counter: counter::CallCounter::default(),

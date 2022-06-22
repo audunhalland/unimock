@@ -264,7 +264,7 @@ pub mod property;
 
 mod counter;
 mod error;
-mod mock;
+mod mock_impl;
 
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -399,7 +399,7 @@ pub struct Unimock {
 }
 
 struct SharedState {
-    impls: HashMap<TypeId, mock::DynMockImpl>,
+    impls: HashMap<TypeId, mock_impl::DynMockImpl>,
     next_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
@@ -414,7 +414,7 @@ impl Unimock {
         F: MockFn + 'static,
         F::Output: Sized,
     {
-        match mock::eval_sized::<F>(
+        match mock_impl::eval_sized::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
@@ -433,7 +433,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match mock::eval_unsized_self_borrowed::<F>(
+        match mock_impl::eval_unsized_self_borrowed::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
@@ -452,7 +452,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match mock::eval_unsized_static_ref::<F>(
+        match mock_impl::eval_unsized_static_ref::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
@@ -597,7 +597,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::new_standalone_match(
-            mock::TypedMockImpl::new_standalone(Box::new(matching)),
+            mock_impl::TypedMockImpl::new_standalone(Box::new(matching)),
             property::InAnyOrder,
         )
     }
@@ -613,7 +613,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::new_standalone_match(
-            mock::TypedMockImpl::new_standalone(Box::new(matching)),
+            mock_impl::TypedMockImpl::new_standalone(Box::new(matching)),
             property::InOrder,
         )
     }
@@ -724,12 +724,12 @@ fn mock_from_iterator(
     clause_iterator: &mut dyn Iterator<Item = Clause>,
     fallback_mode: FallbackMode,
 ) -> Unimock {
-    let mut assembler = mock::MockAssembler::new();
+    let mut assembler = mock_impl::MockAssembler::new();
 
     fn assemble(
         clause: Clause,
-        assembler: &mut mock::MockAssembler,
-    ) -> Result<(), mock::AssembleError> {
+        assembler: &mut mock_impl::MockAssembler,
+    ) -> Result<(), mock_impl::AssembleError> {
         match clause.0 {
             build::ClausePrivate::Single(dyn_impl) => {
                 dyn_impl.assemble_into(assembler)?;
