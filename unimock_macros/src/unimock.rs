@@ -11,7 +11,7 @@ pub struct Cfg {
 struct WithSpan<T>(T, proc_macro2::Span);
 
 impl Cfg {
-    fn get_unmock_fn_path(&self, index: usize) -> Option<&syn::Path> {
+    fn get_unmock_fn(&self, index: usize) -> Option<&UnmockFn> {
         self.unmocks.as_ref().and_then(|unmocked| {
             unmocked
                 .0
@@ -106,7 +106,12 @@ impl syn::parse::Parse for Cfg {
     }
 }
 
-struct Unmock(Option<syn::Path>);
+struct Unmock(Option<UnmockFn>);
+
+struct UnmockFn {
+    path: syn::Path,
+    params: Option<UnmockFnParams>,
+}
 
 impl syn::parse::Parse for Unmock {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -116,8 +121,35 @@ impl syn::parse::Parse for Unmock {
         }
 
         let path: syn::Path = input.parse()?;
-        Ok(Self(Some(path)))
+        let mut opt_params = None;
+
+        if input.peek(syn::token::Paren) {
+            let content;
+            let _ = syn::parenthesized!(content in input);
+
+            let mut params = syn::punctuated::Punctuated::new();
+
+            loop {
+                params.push(content.parse()?);
+                if content.peek(syn::token::Comma) {
+                    content.parse::<syn::token::Comma>()?;
+                } else {
+                    break;
+                }
+            }
+
+            opt_params = Some(UnmockFnParams { params });
+        }
+
+        Ok(Self(Some(UnmockFn {
+            path,
+            params: opt_params,
+        })))
     }
+}
+
+struct UnmockFnParams {
+    params: syn::punctuated::Punctuated<syn::Ident, syn::token::Comma>,
 }
 
 enum UnimockInnerAttr {
@@ -416,7 +448,7 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
             quote! { #ty }
         });
 
-    let unmock_impl = cfg.get_unmock_fn_path(index).map(|_| {
+    let unmock_impl = cfg.get_unmock_fn(index).map(|_| {
         quote! {
             impl ::unimock::Unmock for #mock_fn_path {}
         }
@@ -518,15 +550,28 @@ fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::Tok
 
     let inputs_destructuring = method.inputs_destructuring();
 
-    if let Some(unmock_path) = cfg.get_unmock_fn_path(index) {
+    if let Some(UnmockFn {
+        path: unmock_path,
+        params: unmock_params,
+    }) = cfg.get_unmock_fn(index)
+    {
         let inputs_destructuring = inputs_destructuring.collect::<Vec<_>>();
         let opt_dot_await = sig.asyncness.map(|_| quote! { .await });
+
+        let unmock_expr = match unmock_params {
+            None => quote! {
+                #unmock_path(self, #(#inputs_destructuring),*) #opt_dot_await
+            },
+            Some(UnmockFnParams { params }) => quote! {
+                #unmock_path(#params) #opt_dot_await
+            },
+        };
 
         quote! {
             #sig {
                 match self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)) {
                     ::unimock::macro_api::Evaluation::Evaluated(output) => output,
-                    ::unimock::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_path(self, #(#inputs_destructuring),*) #opt_dot_await
+                    ::unimock::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
                 }
             }
         }
