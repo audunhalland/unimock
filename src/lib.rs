@@ -3,7 +3,7 @@
 //!
 //! Mocking, in a broad sense, is a way to control API behaviour during test execution.
 //!
-//! The _uni_ in unimock indicates one-ness: All mockable traits are implemented by a single type, [Unimock].
+//! The _uni_ in unimock indicates one-ness: All mockable traits are implemented by a single type, [Unimock](crate::Unimock).
 //! This design allows for a great flexibility in coding style, as will be demonstrated further down.
 //!
 //! The first code example is the smallest possible use of unimock:
@@ -19,7 +19,7 @@
 //! takes_foo(mock(None));
 //! ```
 //!
-//! 1. `trait Foo` is declared with a [\#[unimock]](https://docs.rs/unimock/latest/unimock/attr.unimock.html) annotation which makes its behaviour mockable.
+//! 1. `trait Foo` is declared with the [`#[unimock]`](crate::unimock) attribute which makes its behaviour mockable.
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
 //! 3. A mock instantiation by calling [`mock(None)`](crate::mock), which returns a [Unimock] value which is passed into `takes_foo`.
 //!
@@ -51,7 +51,7 @@
 //!
 //! `Foo__foo`.
 //!
-//! This type will implement [MockFn], which is the entrypoint for creating clauses:
+//! This type will implement [MockFn](crate::MockFn), which is the entrypoint for creating clauses:
 //!
 //! ```rust
 //! # use unimock::*;
@@ -69,28 +69,28 @@
 //! assert_eq!(1337, test_me(mock(Some(clause))));
 //! ```
 //!
-//! [Clause] construction is a type-state machine that in this example goes through 3 steps:
+//! `Clause` construction is a type-state machine that in this example goes through 3 steps:
 //!
 //! 1. [`Foo__foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
 //! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`
-//! 3. `.in_any_order()`: this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it. In this example there is only one clause.
+//! 3. [`.in_any_order()`](crate::build::QuantifyResponse::in_any_order): this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it. In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
 //!
 //! It is common to want to control how a function will respond in relation to what input is given to it!
 //! Inputs are matched by a function that receives the inputs as a tuple, and returns whether it matched as a `bool`.
-//! A specific [MockFn] together with an input matcher is referred to as a _call pattern_ from now on.
+//! A specific `MockFn` together with an input matcher is referred to as a _call pattern_ from now on.
 //!
-//! The [matching] macro provides syntax sugar for argument matching. It has a syntax inspired by the [std::matches] macro.
+//! The [matching!](crate::matching) macro provides syntax sugar for argument matching. It has a syntax inspired by the [std::matches] macro.
 //!
 //! Inputs being matched is a condition that needs to be fulfilled in order for the rest of the call pattern to be evaluated.
 //!
 //! ### Specifying outputs
-//! Specifying outputs can be done in several ways. The simplest one is `returns(something)`. Different ways of specifying outputs are
-//! found in [build::Match].
+//! Specifying outputs can be done in several ways. The simplest one is [`returns(something)`](crate::build::Match::returns). Different ways of specifying outputs are
+//! found in [build::Match](crate::build::Match).
 //!
 //! ## Combining clauses
-//! [mock()] accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
+//! `mock()` accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
 //! An iterator has a specific order of items, and sometimes the order of clauses matters too. It will depend on the type of clause.
 //!
 //! Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
@@ -160,13 +160,13 @@
 //!
 //! Unimock has one built-in verification that is always enabled:
 //!
-//! _Every [MockFn] that is introduced in some clause, *must* be called at least once._
+//! _Every [MockFn](crate::MockFn) that is introduced in some clause, *must* be called at least once._
 //!
 //! If this requirement is not met, Unimock will panic inside its Drop implementation.
 //! The reason is to help avoiding "bit rot" accumulating over time inside test code.
 //! When refactoring release code, tests should always follow along and not be overly generic.
 //!
-//! Every unimock verification happens automatically in [Unimock::drop].
+//! Every unimock verification happens automatically in [drop](crate::Unimock::drop).
 //!
 //! ### Optional call count expectations in call patterns
 //! To make a call count expectation for a specific call pattern,
@@ -201,7 +201,7 @@
 //! Writing larger, testable applications with unimock requires some degree of architectural discipline.
 //! We already know how to specify dependencies using trait bounds.
 //! But would this scale in practice when several layers are involved?
-//! One of the main features of unimock is that all traits are implemented by [Unimock].
+//! One of the main features of unimock is that all traits are implemented by [Unimock](crate::Unimock).
 //! This means that trait bounds can be composed, and we can use _one value_ that implements all our dependencies:
 //!
 //! ```rust
@@ -245,7 +245,7 @@
 //! Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 //! For that to work, unimock needs to know how to call the "real" implementation of traits.
 //!
-//! See the documentation of [Unmock] and [spy] to see how this works.
+//! See the documentation of [Unmock](crate::Unmock) and [spy](crate::spy) to see how this works.
 //!
 //! Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 //!
@@ -316,7 +316,7 @@ use std::sync::{Arc, Mutex};
 pub use unimock_macros::unimock;
 
 ///
-/// Macro to ease argument pattern matching.
+/// Macro to ease _call pattern_ matching for function arguments.
 /// This macro produces a closure expression suitable for passing to [build::Each::call].
 ///
 /// Takes inspiration from [std::matches] and works similarly, except that the value to match can be removed as a macro argument, since it is instead received as the closure argument.
