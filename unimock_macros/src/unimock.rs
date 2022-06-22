@@ -129,12 +129,14 @@ impl syn::parse::Parse for Unmock {
 
             let mut params = syn::punctuated::Punctuated::new();
 
-            loop {
-                params.push(content.parse()?);
-                if content.peek(syn::token::Comma) {
-                    content.parse::<syn::token::Comma>()?;
-                } else {
-                    break;
+            if !content.is_empty() {
+                loop {
+                    params.push(content.parse()?);
+                    if content.peek(syn::token::Comma) {
+                        content.parse::<syn::token::Comma>()?;
+                    } else {
+                        break;
+                    }
                 }
             }
 
