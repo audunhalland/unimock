@@ -57,7 +57,7 @@ Therefore, the unimock macro creates a surrogate type to represent it. By defaul
 
 `Foo__foo`.
 
-This type will implement MockFn, which is the entrypoint for creating clauses:
+This type will implement `MockFn`, which is the entrypoint for creating clauses:
 
 ```rust
 #[unimock]
@@ -86,7 +86,7 @@ It is common to want to control how a function will respond in relation to what 
 Inputs are matched by a function that receives the inputs as a tuple, and returns whether it matched as a `bool`.
 A specific `MockFn` together with an input matcher is referred to as a _call pattern_ from now on.
 
-The matching! macro provides syntax sugar for argument matching. It has a syntax inspired by the [std::matches] macro.
+The `matching!` macro provides syntax sugar for argument matching. It has a syntax inspired by the [std::matches] macro.
 
 Inputs being matched is a condition that needs to be fulfilled in order for the rest of the call pattern to be evaluated.
 
@@ -170,11 +170,14 @@ If this requirement is not met, Unimock will panic inside its Drop implementatio
 The reason is to help avoiding "bit rot" accumulating over time inside test code.
 When refactoring release code, tests should always follow along and not be overly generic.
 
-Every unimock verification happens automatically in drop.
+Every unimock verification happens automatically in `drop`.
 
 ### Optional call count expectations in call patterns
 To make a call count expectation for a specific call pattern,
-   look at [build::QuantifyResponse], which has methods like `once()`, `n_times(n)` and `at_least_times(n)`.
+   look at [`QuantifyResponse`](build::QuantifyResponse), which has methods like
+   [`once()`](build::QuantifyResponse::once),
+   [`n_times(n)`](build::QuantifyResponse::n_times) and
+   [`at_least_times(n)`](build::QuantifyResponse::at_least_times).
 
 With exact quantification in place, we can produce output sequences by chaining output definitions:
 
@@ -184,11 +187,11 @@ each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
 
 The output sequence will be `[1, 1, 2, 2, 2, ..]`.
 A call pattern like this is _expected_ to be called at least 3 times.
-2 times because of the first exact output sequence, then at least one time because of the `.then()` combinator.
+2 times because of the first exact output sequence, then at least one time because of the [`.then()`](build::QuantifiedResponse::then) combinator.
 
 ### Verifying exact sequence of calls
 Exact call sequences may be expressed using _strictly ordered clauses_.
-Use [MockFn::next_call] to define a call pattern, and [build::QuantifiedResponse::in_order] to make it into a clause.
+Use [`next_call`](MockFn::next_call) to define a call pattern, and [`in_order`](build::QuantifiedResponse::in_order) to make it into a clause.
 
 ```no_compile
 mock([
@@ -197,7 +200,7 @@ mock([
 ]);
 ```
 
-Order-sensitive clauses and order-insensitive clauses (like `stub`) do not interfere with each other.
+Order-sensitive clauses and order-insensitive clauses (like [`stub`](MockFn::stub)) do not interfere with each other.
 However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 
 ## Application architecture
@@ -205,7 +208,7 @@ However, these kinds of clauses cannot be combined _for the same MockFn_ in a si
 Writing larger, testable applications with unimock requires some degree of architectural discipline.
 We already know how to specify dependencies using trait bounds.
 But would this scale in practice when several layers are involved?
-One of the main features of unimock is that all traits are implemented by Unimock.
+One of the main features of unimock is that all traits are implemented by `Unimock`.
 This means that trait bounds can be composed, and we can use _one value_ that implements all our dependencies:
 
 ```rust
