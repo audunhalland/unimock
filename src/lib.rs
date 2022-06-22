@@ -19,12 +19,12 @@
 //! takes_foo(mock(None));
 //! ```
 //!
-//! 1. `trait Foo` is declared with a [`#[unimock]`](unimock) annotation which makes its behaviour mockable.
+//! 1. `trait Foo` is declared with a [\#[unimock]](https://docs.rs/unimock/latest/unimock/attr.unimock.html) annotation which makes its behaviour mockable.
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-//! 3. A mock instantiation by calling [`mock(None)`](mock()), which returns a [Unimock] value which is passed into `takes_foo`.
+//! 3. A mock instantiation by calling [`mock(None)`](crate::mock), which returns a [Unimock] value which is passed into `takes_foo`.
 //!
-//! The [mock()] function takes an argument, in this case the value `None`.
-//! The argument is _what behaviour are we mocking_, in this case [None] at all!
+//! The [mock](crate::mock) function takes an argument, in this case the value `None`.
+//! The argument is _what behaviour are we mocking_, in this case `None` at all!
 //! `Foo` contains no methods, so there is no behaviour to mock.
 //!
 //! ## Methods and behaviour mocking
@@ -32,7 +32,7 @@
 //! In order to be somewhat useful, the traits we abstract over should contain some methods.
 //! In a unit test for some function, we'd like to mock the behaviour of that function's dependencies (expressed as trait bounds).
 //!
-//! [mock()] accepts a collection of [Clause]s. Clauses carry the full recipe on how Unimock will behave once instantiated.
+//! `mock(clauses)` accepts a collection of [Clause](crate::Clause)s. Clauses carry the full recipe on how Unimock will behave once instantiated.
 //!
 //! Given some trait,
 //!
@@ -71,14 +71,14 @@
 //!
 //! [Clause] construction is a type-state machine that in this example goes through 3 steps:
 //!
-//! 1. `Foo__foo.each_call(matching!())`: Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
-//! 2. `.returs(1337)`: Each matching call will return the value `1337`
+//! 1. [`Foo__foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
+//! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`
 //! 3. `.in_any_order()`: this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it. In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
 //!
 //! It is common to want to control how a function will respond in relation to what input is given to it!
-//! Inputs are matched by a function that receives the inputs as a tuple, and returns whether it matched as a [bool].
+//! Inputs are matched by a function that receives the inputs as a tuple, and returns whether it matched as a `bool`.
 //! A specific [MockFn] together with an input matcher is referred to as a _call pattern_ from now on.
 //!
 //! The [matching] macro provides syntax sugar for argument matching. It has a syntax inspired by the [std::matches] macro.
