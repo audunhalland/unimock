@@ -151,7 +151,7 @@ impl syn::parse::Parse for Unmock {
 }
 
 struct UnmockFnParams {
-    params: syn::punctuated::Punctuated<syn::Ident, syn::token::Comma>,
+    params: syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>,
 }
 
 enum UnimockInnerAttr {

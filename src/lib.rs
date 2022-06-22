@@ -627,7 +627,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 ///
 /// ```rust
 /// # use unimock::*;
-/// #[unimock(unmocked=[my_original])]
+/// #[unimock(unmocked=[my_original(self, a)])]
 /// trait DoubleNumber {
 ///     fn double_number(&self, a: i32) -> i32;
 /// }
@@ -649,7 +649,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 ///
 /// ```rust
 /// # use unimock::*;
-/// #[unimock(unmocked=[my_factorial])]
+/// #[unimock(unmocked=[my_factorial(self, input)])]
 /// trait Factorial {
 ///     fn factorial(&self, input: u32) -> u32;
 /// }
