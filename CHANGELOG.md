@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new mock will start naturally in the clause array, and all subsequent setup methods will be
   indented, so it's much easier to see where each mock starts and ends.
 - Documentation attributes for generated MockFns
-- Ability to unmock with a specific argument list: `unmock=[foo(a, b)]`
+- Ability to unmock with a specific argument list: `unmocked=[foo(a, b)]`
 ### Removed
 - Breaking: Ability to make call patterns with `T::method`, as these methods now take a self parameter.
   This design was previously necessary (I think) because of GATS and https://github.com/rust-lang/rust/issues/96230.
