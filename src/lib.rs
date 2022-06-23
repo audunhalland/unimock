@@ -126,7 +126,7 @@
 //!                 .answers(|arg| arg * 3)
 //!                 .in_any_order(),
 //!             Bar__bar
-//!                 .each_call(matching!((arg) if *arg > 20))
+//!                 .each_call(matching! {(arg) if *arg > 20})
 //!                 .answers(|arg| arg * 2)
 //!                 .in_any_order(),
 //!         ]),
@@ -145,7 +145,7 @@
 //!                 each.call(matching!(_)).answers(|arg| arg * 3);
 //!             }),
 //!             Bar__bar.stub(|each| {
-//!                 each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
+//!                 each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
 //!             }),
 //!         ]),
 //!         7
@@ -327,7 +327,7 @@ pub use unimock_macros::unimock;
 ///
 /// Unimock uses tuples to represent multiple arguments. A single argument is not a tuple.
 /// To avoid the extra set of parentheses for simple multi-argument matchers, there is a special syntax that accepts several top-level patterns:
-/// `matching!("a", "b")` will expand to `matching!(("a", "b"))`.
+/// `matching!("a", "b")` will expand to `matching! {("a", "b")}`.
 ///
 /// # Example
 ///
@@ -342,8 +342,8 @@ pub use unimock_macros::unimock;
 /// fn three_strs() {
 ///     fn args(_: impl Fn(&(&str, &str, &str)) -> bool) {}
 ///     args(matching!("a", _, "c"));
-///     args(matching!(("a", "b", "c") | ("d", "e", "f")));
-///     args(matching!(("a", b, "c") if b.contains("foo")));
+///     args(matching! {("a", "b", "c") | ("d", "e", "f")});
+///     args(matching! {("a", b, "c") if b.contains("foo")});
 /// }
 /// ```
 ///
@@ -371,7 +371,7 @@ pub use unimock_macros::unimock;
 ///
 /// fn exotic_strings() {
 ///     fn args(_: impl Fn(&(String, std::borrow::Cow<'static, str>, Newtype, i32)) -> bool) {}
-///     args(matching!(("a", _, "c", _) | (_, "b", _, 42)));
+///     args(matching! {("a", _, "c", _) | (_, "b", _, 42)});
 /// }
 ///
 /// // Newtype works by implementing the following:
@@ -668,7 +668,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 ///     // well, not in the test, at least!
 ///     mock([
 ///         Factorial__factorial.stub(|each| {
-///             each.call(matching!((input) if *input <= 1)).returns(1_u32); // unimock controls the API call
+///             each.call(matching! {(input) if *input <= 1}).returns(1_u32); // unimock controls the API call
 ///             each.call(matching!(_)).unmocked();
 ///         })
 ///     ])
