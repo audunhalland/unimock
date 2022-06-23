@@ -87,7 +87,7 @@ fn unmock_recursion() {
     assert_eq!(
         120,
         mock([Factorial__factorial.stub(|each| {
-            each.call(matching!((input) if *input <= 1)).returns(1u32);
+            each.call(matching! {(input) if *input <= 1}).returns(1u32);
             each.call(matching!(_)).unmocked();
         })])
         .factorial(5)
@@ -122,7 +122,8 @@ async fn unmock_async() {
     assert_eq!(
         120,
         mock(Some(AsyncFactorial__factorial.stub(|each| {
-            each.call(matching!((input) if *input <= 1)).returns(1_u32);
+            each.call(matching! {(input) if *input <= 1 })
+                .returns(1_u32);
             each.call(matching!(_)).unmocked();
         })))
         .factorial(5)

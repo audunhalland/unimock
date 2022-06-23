@@ -334,7 +334,7 @@ fn test_cow() {
         "output",
         takes(
             &mock(Some(CowBased__func.stub(|each| {
-                each.call(matching!(("input") | ("foo"))).returns("output");
+                each.call(matching! {("input") | ("foo")}).returns("output");
             }))),
             "input".into()
         )
