@@ -267,6 +267,7 @@ pub mod property;
 
 mod counter;
 mod error;
+mod eval;
 mod mock_impl;
 
 use std::any::TypeId;
@@ -417,7 +418,7 @@ impl Unimock {
         F: MockFn + 'static,
         F::Output: Sized,
     {
-        match mock_impl::eval_sized::<F>(
+        match eval::eval_sized::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
@@ -436,7 +437,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match mock_impl::eval_unsized_self_borrowed::<F>(
+        match eval::eval_unsized_self_borrowed::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
@@ -455,7 +456,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match mock_impl::eval_unsized_static_ref::<F>(
+        match eval::eval_unsized_static_ref::<F>(
             self.state.impls.get(&TypeId::of::<F>()),
             inputs,
             &self.state.next_call_index,
