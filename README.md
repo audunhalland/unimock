@@ -130,7 +130,7 @@ assert_eq!(
                 .answers(|arg| arg * 3)
                 .in_any_order(),
             Bar__bar
-                .each_call(matching!((arg) if *arg > 20))
+                .each_call(matching! {(arg) if *arg > 20})
                 .answers(|arg| arg * 2)
                 .in_any_order(),
         ]),
@@ -149,7 +149,7 @@ assert_eq!(
                 each.call(matching!(_)).answers(|arg| arg * 3);
             }),
             Bar__bar.stub(|each| {
-                each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
+                each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
             }),
         ]),
         7
