@@ -1,5 +1,6 @@
 use unimock::*;
 
+use async_trait::async_trait;
 use std::any::Any;
 
 mod unmock_simple {
@@ -70,6 +71,64 @@ mod unmock_simple {
         })])
         .concat("a".to_string(), "b".to_string());
     }
+}
+
+#[test]
+fn unmock_recursion() {
+    #[unimock(unmocked=[my_factorial])]
+    trait Factorial {
+        fn factorial(&self, input: u32) -> u32;
+    }
+
+    fn my_factorial(f: &impl Factorial, input: u32) -> u32 {
+        f.factorial(input - 1) * input
+    }
+
+    assert_eq!(
+        120,
+        mock([Factorial__factorial.stub(|each| {
+            each.call(matching!((input) if *input <= 1)).returns(1u32);
+            each.call(matching!(_)).unmocked();
+        })])
+        .factorial(5)
+    );
+}
+
+#[tokio::test]
+async fn unmock_async() {
+    #[unimock(unmocked=[my_factorial])]
+    #[async_trait]
+    trait AsyncFactorial {
+        async fn factorial(&self, input: u32) -> u32;
+    }
+
+    async fn my_factorial(f: &impl AsyncFactorial, input: u32) -> u32 {
+        f.factorial(input - 1).await * input
+    }
+
+    assert_eq!(
+        120,
+        spy(Some(
+            AsyncFactorial__factorial
+                .each_call(matching!(1))
+                .returns(1_u32)
+                .in_any_order()
+        ))
+        .factorial(5)
+        .await,
+        "works using spy"
+    );
+
+    assert_eq!(
+        120,
+        mock(Some(AsyncFactorial__factorial.stub(|each| {
+            each.call(matching!((input) if *input <= 1)).returns(1_u32);
+            each.call(matching!(_)).unmocked();
+        })))
+        .factorial(5)
+        .await,
+        "works using mock"
+    );
 }
 
 mod unmock_with_custom_args {
