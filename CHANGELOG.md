@@ -16,7 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ability to unmock with a specific argument list: `unmocked=[foo(a, b)]`
 ### Removed
 - Breaking: Ability to make call patterns with `T::method`, as these methods now take a self parameter.
-  This design was previously necessary (I think) because of GATS and https://github.com/rust-lang/rust/issues/96230.
 
 ## [0.2.1] - 2022-06-12
 ### Removed
