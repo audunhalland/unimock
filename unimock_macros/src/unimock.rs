@@ -297,41 +297,9 @@ impl<'s> Method<'s> {
         trait_ident: &syn::Ident,
         unmock_impl: &Option<proc_macro2::TokenStream>,
     ) -> Vec<proc_macro2::TokenStream> {
-        let method_ident = &self.method.sig.ident;
-
-        let generics = &self.method.sig.generics;
-        let generics_string = match (&generics.lt_token, &generics.gt_token) {
-            (Some(_), Some(_)) => {
-                let params = &generics.params;
-                format!("<{}>", quote! { #params })
-            }
-            _ => String::new(),
-        };
-
-        let arg_types = self
-            .method
-            .sig
-            .inputs
-            .iter()
-            .filter_map(|fn_arg| match fn_arg {
-                syn::FnArg::Receiver(_) => None,
-                syn::FnArg::Typed(syn::PatType {
-                    attrs: _,
-                    pat,
-                    colon_token: _,
-                    ty,
-                }) => Some(format!("{}: {}", quote! { #pat }, quote! { #ty })),
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        let return_type = match &self.method.sig.output {
-            syn::ReturnType::Default => "".to_string(),
-            syn::ReturnType::Type(_, ty) => format!(" -> {}", quote! { #ty }),
-        };
-
-        let mut doc_string =
-            format!("MockFn for `{trait_ident}::{method_ident}{generics_string}({arg_types}){return_type}`.");
+        let sig_string =
+            crate::doc::signature_documentation(&self.method.sig, crate::doc::SkipReceiver(true));
+        let mut doc_string = format!("MockFn for `{trait_ident}::{sig_string}`.");
 
         if unmock_impl.is_some() {
             doc_string.push_str(" Implements `Unmock`.");
