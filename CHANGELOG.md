@@ -6,7 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [0.3.1]
+## [0.3.2] - 2022-06-26
+### Changed
+- Fix missing README file on crates.io
+
+## [0.3.1] - 2022-06-26
 ### Changed
 - Pretty formatting for fn signatures in generated MockFn documentation.
 
