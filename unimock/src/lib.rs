@@ -21,7 +21,7 @@
 //!
 //! 1. `trait Foo` is declared with the [`#[unimock]`](crate::unimock) attribute which makes its behaviour mockable.
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-//! 3. A mock instantiation by calling [`mock(None)`](crate::mock), which returns a [Unimock] value which is passed into `takes_foo`.
+//! 3. A mock instantiation by calling [`mock(None)`](crate::mock), which returns a [`Unimock`](crate::Unimock) value which is passed into `takes_foo`.
 //!
 //! The [mock](crate::mock) function takes an argument, in this case the value `None`.
 //! The argument is _what behaviour are we mocking_, in this case `None` at all!
@@ -71,9 +71,11 @@
 //!
 //! `Clause` construction is a type-state machine that in this example goes through 3 steps:
 //!
-//! 1. [`Foo__foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_. Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less)
-//! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`
-//! 3. [`.in_any_order()`](crate::build::QuantifyResponse::in_any_order): this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it. In this example there is only one clause.
+//! 1. [`Foo__foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
+//!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
+//! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`.
+//! 3. [`.in_any_order()`](crate::build::QuantifyResponse::in_any_order): this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it.
+//!    In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
 //!
@@ -81,13 +83,14 @@
 //! Inputs are matched by a function that receives the inputs as a tuple, and returns whether it matched as a `bool`.
 //! A specific `MockFn` together with an input matcher is referred to as a _call pattern_ from now on.
 //!
-//! The [`matching!`](crate::matching) macro provides syntax sugar for argument matching. It has a syntax inspired by the [std::matches] macro.
+//! The [`matching!`](crate::matching) macro provides syntax sugar for argument matching.
+//! It has a syntax inspired by the [`std::matches`](https://doc.rust-lang.org/std/macro.matches.html) macro.
 //!
 //! Inputs being matched is a condition that needs to be fulfilled in order for the rest of the call pattern to be evaluated.
 //!
 //! ### Specifying outputs
-//! Specifying outputs can be done in several ways. The simplest one is [`returns(something)`](crate::build::Match::returns). Different ways of specifying outputs are
-//! found in [build::Match](crate::build::Match).
+//! Specifying outputs can be done in several ways. The simplest one is [`returns(something)`](crate::build::Match::returns).
+//! Different ways of specifying outputs are found in [`build::Match`](crate::build::Match).
 //!
 //! ## Combining clauses
 //! `mock()` accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
@@ -241,8 +244,10 @@
 //! ```
 //!
 //! The dependency from `fn a` to `fn b` is completely abstracted away, and in test mode the `deps: &impl X` gets substituted with `deps: &Unimock`.
-//! Unimock is only concerned with the testing side of the picture.
-//! To wire all of this together to a full-fledged runtime solution without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
+//! But Unimock is only concerned with the _testing_ side of the picture.
+//! The previous code snippet is at the extreme end of the loosely-coupled scale: _No coupling at all!_
+//! It shows that unimock is merely a piece in a larger picture.
+//! To wire all of this together into a full-fledged runtime solution, without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
 //!
 //! ### Combining release code and mocks: Spying
 //! Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
