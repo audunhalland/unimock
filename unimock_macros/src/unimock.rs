@@ -204,6 +204,9 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
         .enumerate()
         .map(|(index, method)| def_mock_fn(index, method, &item_trait, &cfg))
         .collect();
+    let associated_futures = methods
+        .iter()
+        .filter_map(|method| def_associated_future(method));
     let method_impls = methods
         .iter()
         .enumerate()
@@ -236,6 +239,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
 
         #(#impl_attributes)*
         impl #trait_ident for ::unimock::Unimock {
+            #(#associated_futures)*
             #(#method_impls)*
         }
     })
@@ -360,7 +364,7 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
 
     let inputs_destructuring = method.inputs_destructuring();
 
-    if let Some(UnmockFn {
+    let inner_body = if let Some(UnmockFn {
         path: unmock_path,
         params: unmock_params,
     }) = cfg.get_unmock_fn(index)
@@ -378,18 +382,41 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
         };
 
         quote! {
-            #sig {
-                match self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)) {
-                    ::unimock::macro_api::Evaluation::Evaluated(output) => output,
-                    ::unimock::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
-                }
+            match self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)) {
+                ::unimock::macro_api::Evaluation::Evaluated(output) => output,
+                ::unimock::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #sig {
-                self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)).unwrap(self)
-            }
+            self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)).unwrap(self)
         }
+    };
+
+    match method.output_structure.wrapping {
+        method::OutputWrapping::ImplTraitFuture(_) => quote! {
+            #sig {
+                async move { #inner_body }
+            }
+        },
+        method::OutputWrapping::None => quote! {
+            #sig {
+                #inner_body
+            }
+        },
+    }
+}
+
+fn def_associated_future(method: &method::Method) -> Option<proc_macro2::TokenStream> {
+    match method.output_structure.wrapping {
+        method::OutputWrapping::ImplTraitFuture(trait_item_type) => {
+            let ident = &trait_item_type.ident;
+            let generics = &trait_item_type.generics;
+            let bounds = &trait_item_type.bounds;
+            Some(quote! {
+                type #ident #generics = impl #bounds;
+            })
+        }
+        _ => None,
     }
 }
