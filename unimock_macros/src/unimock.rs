@@ -353,7 +353,7 @@ fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
 }
 
 fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_macro2::TokenStream {
-    let sig = &method.method.sig;
+    let method_sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(cfg);
 
     let eval_fn = match method.output_structure.ownership {
@@ -364,13 +364,13 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
 
     let inputs_destructuring = method.inputs_destructuring();
 
-    let inner_body = if let Some(UnmockFn {
+    let body = if let Some(UnmockFn {
         path: unmock_path,
         params: unmock_params,
     }) = cfg.get_unmock_fn(index)
     {
         let inputs_destructuring = inputs_destructuring.collect::<Vec<_>>();
-        let opt_dot_await = sig.asyncness.map(|_| quote! { .await });
+        let opt_dot_await = method_sig.asyncness.map(|_| quote! { .await });
 
         let unmock_expr = match unmock_params {
             None => quote! {
@@ -393,17 +393,17 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
         }
     };
 
-    match method.output_structure.wrapping {
+    let body = match method.output_structure.wrapping {
         method::OutputWrapping::ImplTraitFuture(_) => quote! {
-            #sig {
-                async move { #inner_body }
-            }
+            async move { #body }
         },
-        method::OutputWrapping::None => quote! {
-            #sig {
-                #inner_body
-            }
-        },
+        method::OutputWrapping::None => body,
+    };
+
+    quote! {
+        #method_sig {
+            #body
+        }
     }
 }
 

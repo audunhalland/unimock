@@ -156,7 +156,7 @@ fn determine_output_structure<'t>(
                 && is_self_segment(path.path.segments.first())
                 && (path.path.segments.len() == 2) =>
         {
-            determine_associated_future_ownership(&path.path, item_trait).unwrap_or_else(|| {
+            determine_associated_future_structure(&path.path, item_trait).unwrap_or_else(|| {
                 OutputStructure {
                     wrapping: OutputWrapping::None,
                     ownership: OutputOwnership::Owned,
@@ -179,7 +179,7 @@ fn is_self_segment(segment: Option<&syn::PathSegment>) -> bool {
     }
 }
 
-fn determine_associated_future_ownership<'t>(
+fn determine_associated_future_structure<'t>(
     path: &'t syn::Path,
     item_trait: &'t syn::ItemTrait,
 ) -> Option<OutputStructure<'t>> {
