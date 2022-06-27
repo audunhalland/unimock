@@ -364,13 +364,22 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
 
     let inputs_destructuring = method.inputs_destructuring();
 
+    let has_impl_trait_future = match method.output_structure.wrapping {
+        method::OutputWrapping::ImplTraitFuture(_) => true,
+        _ => false,
+    };
+
     let body = if let Some(UnmockFn {
         path: unmock_path,
         params: unmock_params,
     }) = cfg.get_unmock_fn(index)
     {
         let inputs_destructuring = inputs_destructuring.collect::<Vec<_>>();
-        let opt_dot_await = method_sig.asyncness.map(|_| quote! { .await });
+        let opt_dot_await = if method_sig.asyncness.is_some() || has_impl_trait_future {
+            Some(quote! { .await })
+        } else {
+            None
+        };
 
         let unmock_expr = match unmock_params {
             None => quote! {
@@ -393,11 +402,12 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
         }
     };
 
-    let body = match method.output_structure.wrapping {
-        method::OutputWrapping::ImplTraitFuture(_) => quote! {
+    let body = if has_impl_trait_future {
+        quote! {
             async move { #body }
-        },
-        method::OutputWrapping::None => body,
+        }
+    } else {
+        body
     };
 
     quote! {
