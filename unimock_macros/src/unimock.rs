@@ -1,5 +1,6 @@
 use quote::quote;
-use syn::spanned::Spanned;
+
+mod method;
 
 pub struct Cfg {
     module: Option<syn::Ident>,
@@ -21,7 +22,7 @@ impl Cfg {
         })
     }
 
-    fn validate(&self, methods: &[Method]) -> syn::Result<()> {
+    fn validate(&self, methods: &[method::Method]) -> syn::Result<()> {
         match &self.mock_fn_idents {
             Some(idents) if idents.0.len() != methods.len() => {
                 return Err(syn::Error::new(
@@ -176,7 +177,7 @@ impl syn::parse::Parse for UnimockInnerAttr {
 }
 
 pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
-    let methods = extract_methods(&item_trait, &cfg)?;
+    let methods = method::extract_methods(&item_trait, &cfg)?;
     cfg.validate(&methods)?;
 
     let trait_ident = &item_trait.ident;
@@ -240,156 +241,17 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
     })
 }
 
-struct Method<'s> {
-    method: &'s syn::TraitItemMethod,
-    mock_fn_ident: syn::Ident,
-    mock_fn_name: syn::LitStr,
-    output_ownership: OutputOwnership,
-    output_ty: Option<&'s syn::Type>,
-}
-
-impl<'s> Method<'s> {
-    fn mock_fn_path(&self, cfg: &Cfg) -> proc_macro2::TokenStream {
-        let mock_fn_ident = &self.mock_fn_ident;
-        if let Some(module) = &cfg.module {
-            quote! { #module::#mock_fn_ident }
-        } else {
-            quote! { #mock_fn_ident }
-        }
-    }
-
-    fn inputs_destructuring(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
-        self.method
-            .sig
-            .inputs
-            .iter()
-            .filter_map(|fn_arg| match fn_arg {
-                syn::FnArg::Receiver(_) => None,
-                syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-                    syn::Pat::Ident(pat_ident) => Some(quote! { #pat_ident }),
-                    _ => Some(
-                        syn::Error::new(pat_type.span(), "Unprocessable argument")
-                            .to_compile_error(),
-                    ),
-                },
-            })
-    }
-
-    fn inputs_try_debug_exprs(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
-        self.method
-            .sig
-            .inputs
-            .iter()
-            .filter_map(|fn_arg| match fn_arg {
-                syn::FnArg::Receiver(_) => None,
-                syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-                    syn::Pat::Ident(pat_ident) => Some(try_debug_expr(pat_ident, &pat_type.ty)),
-                    _ => Some(
-                        syn::Error::new(pat_type.span(), "Unprocessable argument")
-                            .to_compile_error(),
-                    ),
-                },
-            })
-    }
-
-    fn mockfn_doc_attrs(
-        &self,
-        trait_ident: &syn::Ident,
-        unmock_impl: &Option<proc_macro2::TokenStream>,
-    ) -> Vec<proc_macro2::TokenStream> {
-        let sig_string =
-            crate::doc::signature_documentation(&self.method.sig, crate::doc::SkipReceiver(true));
-        let mut doc_string = format!("MockFn for `{trait_ident}::{sig_string}`.");
-
-        if unmock_impl.is_some() {
-            doc_string.push_str(" Implements `Unmock`.");
-        }
-
-        let doc_lit = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
-
-        vec![quote! {
-            #[doc = #doc_lit]
-        }]
-    }
-}
-
-fn extract_methods<'s>(item_trait: &'s syn::ItemTrait, cfg: &Cfg) -> syn::Result<Vec<Method<'s>>> {
-    item_trait
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            syn::TraitItem::Method(method) => Some(method),
-            _ => None,
-        })
-        .enumerate()
-        .map(|(index, method)| {
-            let mock_fn_name = syn::LitStr::new(
-                &format!("{}::{}", item_trait.ident, method.sig.ident),
-                item_trait.ident.span(),
-            );
-
-            let mock_fn_ident_method_part = cfg
-                .mock_fn_idents
-                .as_ref()
-                .and_then(|idents| idents.0.get(index))
-                .unwrap_or(&method.sig.ident);
-
-            let mock_fn_ident = if cfg.module.is_some() {
-                mock_fn_ident_method_part.clone()
-            } else {
-                quote::format_ident!("{}__{}", item_trait.ident, mock_fn_ident_method_part)
-            };
-
-            let (output_ownership, output_ty) = match &method.sig.output {
-                syn::ReturnType::Default => (OutputOwnership::Owned, None),
-                syn::ReturnType::Type(_, ty) => {
-                    let (ownership, ty) = determine_ownership(ty);
-                    (ownership, Some(ty))
-                }
-            };
-
-            Ok(Method {
-                method,
-                mock_fn_ident,
-                mock_fn_name,
-                output_ownership,
-                output_ty,
-            })
-        })
-        .collect()
-}
-
-fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::TokenStream {
-    fn count_references(ty: &syn::Type) -> usize {
-        match ty {
-            syn::Type::Reference(type_reference) => 1 + count_references(&type_reference.elem),
-            _ => 0,
-        }
-    }
-
-    let ref_count = count_references(ty);
-    let ident = &pat_ident.ident;
-
-    if ref_count > 0 {
-        // insert as many * as there are references
-        let derefs = (0..ref_count).map(|_| quote! { * });
-
-        quote! {
-            (#(#derefs)* #ident).unimock_try_debug()
-        }
-    } else {
-        quote! {
-            #ident.unimock_try_debug()
-        }
-    }
-}
-
 struct MockFnDef {
     struct_def: proc_macro2::TokenStream,
     impls: proc_macro2::TokenStream,
 }
 
-fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: &Cfg) -> MockFnDef {
+fn def_mock_fn(
+    index: usize,
+    method: &method::Method,
+    item_trait: &syn::ItemTrait,
+    cfg: &Cfg,
+) -> MockFnDef {
     let mock_fn_ident = &method.mock_fn_ident;
     let mock_fn_path = method.mock_fn_path(cfg);
     let mock_fn_name = &method.mock_fn_name;
@@ -426,7 +288,7 @@ fn def_mock_fn(index: usize, method: &Method, item_trait: &syn::ItemTrait, cfg: 
 
     let doc_attrs = method.mockfn_doc_attrs(&item_trait.ident, &unmock_impl);
 
-    let output = match method.output_ty {
+    let output = match method.output_structure.ty {
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
@@ -486,36 +348,14 @@ fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
     ty
 }
 
-enum OutputOwnership {
-    Owned,
-    SelfReference,
-    StaticReference,
-}
-
-fn determine_ownership(ty: &syn::Type) -> (OutputOwnership, &syn::Type) {
-    match ty {
-        syn::Type::Reference(type_reference) => {
-            if let Some(lifetime) = type_reference.lifetime.as_ref() {
-                match lifetime.ident.to_string().as_ref() {
-                    "static" => (OutputOwnership::StaticReference, &type_reference.elem),
-                    _ => (OutputOwnership::SelfReference, &type_reference.elem),
-                }
-            } else {
-                (OutputOwnership::SelfReference, &type_reference.elem)
-            }
-        }
-        _ => (OutputOwnership::Owned, ty),
-    }
-}
-
-fn def_method_impl(index: usize, method: &Method, cfg: &Cfg) -> proc_macro2::TokenStream {
+fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_macro2::TokenStream {
     let sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(cfg);
 
-    let eval_fn = match method.output_ownership {
-        OutputOwnership::Owned => quote::format_ident!("eval"),
-        OutputOwnership::SelfReference => quote::format_ident!("eval_borrowed"),
-        OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
+    let eval_fn = match method.output_structure.ownership {
+        method::OutputOwnership::Owned => quote::format_ident!("eval"),
+        method::OutputOwnership::SelfReference => quote::format_ident!("eval_borrowed"),
+        method::OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
     };
 
     let inputs_destructuring = method.inputs_destructuring();
