@@ -14,7 +14,7 @@ enum Eval<C> {
 }
 
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'i DynMockImpl>,
+    dyn_impl: Option<&DynMockImpl>,
     inputs: <F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
@@ -45,12 +45,12 @@ where
     }
 }
 
-pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'s DynMockImpl>,
+pub(crate) fn eval_unsized_self_borrowed<'u, 'i, F: MockFn + 'static>(
+    dyn_impl: Option<&'u DynMockImpl>,
     inputs: <F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
-) -> Result<Evaluation<'i, &'s F::Output, F>, MockError> {
+) -> Result<Evaluation<'i, &'u F::Output, F>, MockError> {
     match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Value(stored) => Ok(Evaluation::Evaluated(stored.borrow_stored())),
@@ -77,8 +77,8 @@ pub(crate) fn eval_unsized_self_borrowed<'i, 's: 'i, F: MockFn + 'static>(
     }
 }
 
-pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'s DynMockImpl>,
+pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
+    dyn_impl: Option<&DynMockImpl>,
     inputs: <F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
@@ -113,12 +113,12 @@ pub(crate) fn eval_unsized_static_ref<'i, 's: 'i, F: MockFn + 'static>(
     }
 }
 
-fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'s DynMockImpl>,
+fn eval_responder<'u, 'i, F: MockFn + 'static>(
+    dyn_impl: Option<&'u DynMockImpl>,
     inputs: &<F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
     fallback_mode: FallbackMode,
-) -> Result<Eval<(usize, &'s Responder<F>)>, MockError> {
+) -> Result<Eval<(usize, &'u Responder<F>)>, MockError> {
     match eval_type_erased_mock_impl(dyn_impl, F::NAME, fallback_mode)? {
         Eval::Continue((any, pattern_match_mode)) => {
             let typed_impl = any
@@ -155,11 +155,11 @@ fn eval_responder<'i, 's: 'i, F: MockFn + 'static>(
 }
 
 #[inline(never)]
-fn eval_type_erased_mock_impl<'s>(
-    dyn_impl: Option<&'s DynMockImpl>,
+fn eval_type_erased_mock_impl<'u>(
+    dyn_impl: Option<&'u DynMockImpl>,
     name: &'static str,
     fallback_mode: FallbackMode,
-) -> Result<Eval<(&'s dyn Any, PatternMatchMode)>, MockError> {
+) -> Result<Eval<(&'u dyn Any, PatternMatchMode)>, MockError> {
     match dyn_impl {
         None => match fallback_mode {
             FallbackMode::Error => Err(MockError::NoMockImplementation { name }),
@@ -178,12 +178,12 @@ fn eval_type_erased_mock_impl<'s>(
     }
 }
 
-fn match_pattern<'i, 's, F: MockFn>(
+fn match_pattern<'u, 'i, F: MockFn>(
     pattern_match_mode: PatternMatchMode,
-    mock_impl: &'s TypedMockImpl<F>,
+    mock_impl: &'u TypedMockImpl<F>,
     inputs: &<F as MockInputs<'i>>::Inputs,
     call_index: &AtomicUsize,
-) -> Result<Option<(usize, &'s CallPattern<F>)>, MockError> {
+) -> Result<Option<(usize, &'u CallPattern<F>)>, MockError> {
     match pattern_match_mode {
         PatternMatchMode::InOrder => {
             // increase call index here, because stubs should not influence it:

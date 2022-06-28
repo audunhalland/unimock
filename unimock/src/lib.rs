@@ -444,8 +444,8 @@ struct SharedState {
 
 impl Unimock {
     /// Evaluate a [MockFn] given some inputs, to produce its output.
-    pub fn eval<'i, 's: 'i, F>(
-        &'s self,
+    pub fn eval<'i, F>(
+        &self,
         inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, F::Output, F>
     where
@@ -464,7 +464,7 @@ impl Unimock {
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
-    pub fn eval_borrowed<'i, 's: 'i, F>(
+    pub fn eval_borrowed<'s, 'i, F>(
         &'s self,
         inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, &'s F::Output, F>
@@ -483,8 +483,8 @@ impl Unimock {
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
-    pub fn eval_static_ref<'i, 's: 'i, F>(
-        &'s self,
+    pub fn eval_static_ref<'i, F>(
+        &self,
         inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, &'static F::Output, F>
     where
