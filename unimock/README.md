@@ -258,7 +258,35 @@ See the documentation of Unmock and spy to see how this works.
 
 Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 
-## Misc
-Unimock works best with high-level abstractions over function calls. It does not work that well with generic traits or traits with associated types.
+### Misc
+Unimock works best with high-level abstractions over function calls. It does not work that well with generic traits nor traits with associated types.
+
+## Project goals
+#### Use only safe Rust
+Unimock respects the memory safety and soundness provided by Rust.
+Sometimes this fact can lead to less than optimal ergonomics.
+
+For example, in order to use `.returns(value)`, the value must be `Clone`, `Send`, `Sync` and `'static`.
+If it's not all of those things, the slightly longer `.answers(|_| value)` can be used instead.
+
+#### Keep the amount of generated code to a minimum
+The unimock API is mainly built around generics and traits, instead of being macro-generated.
+Any mocking library will likely always require _some_ degree of introspective metaprogramming (like macros),
+  but doing too much of that is likely to become more confusing to users, as well as taking longer to compile.
+The `#[unimock]` macro does the minimal things to fill out a few simple trait impls, and that's it. There are no
+complex functions or structs that need to be generated.
+
+There is a downside to this approach, though.
+Rust generics aren't infinitely flexible,
+  so sometimes it's possible to misconfigure a mock in a way that the type system is unable to catch up front,
+  resulting in runtime (or rather, test-time) failures.
+
+All things considered, this tradedoff seems sound, because this is only testing, after all.
+
+#### Use nice, readable APIs
+Unimock's mocking API has been designed to read like natural english sentences.
+
+This was a fun design challenge, but it arguably also has some real value.
+It is assumed that code is quicker (and perhaps more fun) to read and write when it resembles real language.
 
 <!-- cargo-rdme end -->
