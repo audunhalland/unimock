@@ -6,7 +6,8 @@ edition = "2021"
 license = "MIT"
 description = "Unimock type for working with multiple trait bounds"
 repository = "https://github.com/audunhalland/unimock/"
-keywords = ["mock"]
+keywords = ["test", "mock"]
+categories = ["development-tools", "development-tools::testing"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
