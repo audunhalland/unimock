@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Changed
 - Simplify various lifetime signatures, remove unneeded outlives bounds, remove elidable lifetimes.
+### Added
+- More documentation, project goals
 
 ## [0.3.3] - 2022-06-27
 ### Added
