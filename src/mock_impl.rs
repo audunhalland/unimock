@@ -56,23 +56,13 @@ pub(crate) struct DynMockImpl {
 
 impl DynMockImpl {
     #[inline(never)]
-    pub fn new_full_cascade(
+    pub fn new(
         typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + 'static>,
+        mode: PatternMatchMode,
     ) -> DynMockImpl {
         DynMockImpl {
             typed_impl,
-            pattern_match_mode: PatternMatchMode::InAnyOrder,
-            has_applications: AtomicBool::new(false),
-        }
-    }
-
-    #[inline(never)]
-    pub fn new_strict_order(
-        typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + 'static>,
-    ) -> DynMockImpl {
-        DynMockImpl {
-            typed_impl,
-            pattern_match_mode: PatternMatchMode::InOrder,
+            pattern_match_mode: mode,
             has_applications: AtomicBool::new(false),
         }
     }
@@ -156,25 +146,27 @@ pub(crate) enum PatternMatchMode {
 }
 
 pub(crate) struct TypedMockImpl<F: MockFn> {
-    pub patterns: Vec<CallPattern<F>>,
+    // Invariant: Must be non-empty:
+    patterns: Vec<CallPattern<F>>,
 }
 
 impl<F: MockFn> TypedMockImpl<F> {
-    /// A standalone mock, used in the building stage.
-    pub fn new_standalone(
-        input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
-    ) -> Self {
-        let mut mock_impl = Self::new();
-        mock_impl.patterns.push(mock_impl::CallPattern {
-            non_generic: Default::default(),
-            input_matcher,
-            responders: vec![],
-        });
-        mock_impl
+    pub(crate) fn from_stub_patterns(patterns: Vec<CallPattern<F>>) -> Self {
+        if patterns.is_empty() {
+            panic!("Stub contained no call patterns");
+        }
+
+        Self { patterns }
     }
 
-    pub fn new() -> Self {
-        Self { patterns: vec![] }
+    pub(crate) fn from_pattern(pattern: CallPattern<F>) -> Self {
+        Self {
+            patterns: vec![pattern],
+        }
+    }
+
+    pub(crate) fn patterns(&self) -> &[CallPattern<F>] {
+        self.patterns.as_ref()
     }
 }
 
@@ -238,6 +230,18 @@ pub(crate) struct CallPattern<F: MockFn> {
     pub non_generic: CallPatternNonGeneric,
     pub input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
     pub responders: Vec<CallOrderResponder<F>>,
+}
+
+impl<F: MockFn> CallPattern<F> {
+    pub fn from_input_matcher(
+        matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
+    ) -> Self {
+        Self {
+            non_generic: Default::default(),
+            input_matcher: matcher,
+            responders: vec![],
+        }
+    }
 }
 
 /// Part of call pattern that is non-generic

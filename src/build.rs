@@ -1,5 +1,6 @@
 use std::panic;
 
+use crate::mock_impl::TypedMockImpl;
 use crate::property::*;
 use crate::*;
 
@@ -16,7 +17,7 @@ pub(crate) enum ClausePrivate {
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
 pub struct Each<F: MockFn> {
-    typed_impl: mock_impl::TypedMockImpl<F>,
+    patterns: Vec<mock_impl::CallPattern<F>>,
 }
 
 impl<F> Each<F>
@@ -32,7 +33,7 @@ where
     where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        self.typed_impl.patterns.push(mock_impl::CallPattern {
+        self.patterns.push(mock_impl::CallPattern {
             non_generic: mock_impl::CallPatternNonGeneric {
                 call_index_range: Default::default(),
                 call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
@@ -42,54 +43,35 @@ where
         });
 
         Match {
-            pattern: PatternWrapper::Grouped(self.typed_impl.patterns.last_mut().unwrap()),
+            pattern: PatternWrapper::Borrowed(self.patterns.last_mut().unwrap()),
             response_index: 0,
             ordering: InAnyOrder,
         }
     }
 
     pub(crate) fn new() -> Self {
-        Self {
-            typed_impl: mock_impl::TypedMockImpl::new(),
-        }
+        Self { patterns: vec![] }
     }
 
     pub(crate) fn to_clause(self) -> Clause {
-        Clause(ClausePrivate::Single(
-            mock_impl::DynMockImpl::new_full_cascade(Box::new(self.typed_impl)),
-        ))
+        Clause(ClausePrivate::Single(mock_impl::DynMockImpl::new(
+            Box::new(mock_impl::TypedMockImpl::from_stub_patterns(self.patterns)),
+            mock_impl::PatternMatchMode::InOrder,
+        )))
     }
 }
 
 pub(crate) enum PatternWrapper<'p, F: MockFn> {
-    Grouped(&'p mut mock_impl::CallPattern<F>),
-    Standalone(mock_impl::TypedMockImpl<F>),
+    Borrowed(&'p mut mock_impl::CallPattern<F>),
+    Owned(mock_impl::CallPattern<F>),
 }
 
 impl<'p, F: MockFn> PatternWrapper<'p, F> {
     fn get_mut(&mut self) -> &mut mock_impl::CallPattern<F> {
         match self {
-            PatternWrapper::Grouped(p) => *p,
-            PatternWrapper::Standalone(mock_impl) => mock_impl.patterns.last_mut().unwrap(),
+            PatternWrapper::Borrowed(pattern) => *pattern,
+            PatternWrapper::Owned(pattern) => pattern,
         }
-    }
-}
-
-/// Create a new standalone call pattern match.
-///
-/// A standalone call pattern is the only call pattern in a mock impl, in addition it owns its own mock impl.
-pub(crate) fn new_standalone_match<F, O>(
-    mock_impl: mock_impl::TypedMockImpl<F>,
-    ordering: O,
-) -> Match<'static, F, O>
-where
-    F: MockFn + 'static,
-    O: Ordering,
-{
-    Match {
-        pattern: PatternWrapper::Standalone(mock_impl),
-        response_index: 0,
-        ordering,
     }
 }
 
@@ -105,6 +87,15 @@ where
     F: MockFn + 'static,
     O: Ordering,
 {
+    /// Create a new owned call pattern match.
+    pub(crate) fn new_owned(pattern: mock_impl::CallPattern<F>, ordering: O) -> Self {
+        Match {
+            pattern: PatternWrapper::Owned(pattern),
+            response_index: 0,
+            ordering,
+        }
+    }
+
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement [Clone] and cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
@@ -259,9 +250,12 @@ where
         O: Ordering<Kind = InAnyOrder>,
     {
         match self.pattern {
-            PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
-                mock_impl::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
-            )),
+            PatternWrapper::Owned(pattern) => {
+                Clause(ClausePrivate::Single(mock_impl::DynMockImpl::new(
+                    Box::new(TypedMockImpl::from_pattern(pattern)),
+                    mock_impl::PatternMatchMode::InAnyOrder,
+                )))
+            }
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }
@@ -346,9 +340,12 @@ where
         R: Repetition<Kind = Exact>,
     {
         match self.pattern {
-            PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
-                mock_impl::DynMockImpl::new_strict_order(Box::new(typed_impl)),
-            )),
+            PatternWrapper::Owned(pattern) => {
+                Clause(ClausePrivate::Single(mock_impl::DynMockImpl::new(
+                    Box::new(TypedMockImpl::from_pattern(pattern)),
+                    mock_impl::PatternMatchMode::InOrder,
+                )))
+            }
             _ => panic!(),
         }
     }
@@ -359,9 +356,12 @@ where
         O: Ordering<Kind = InAnyOrder>,
     {
         match self.pattern {
-            PatternWrapper::Standalone(typed_impl) => Clause(ClausePrivate::Single(
-                mock_impl::DynMockImpl::new_full_cascade(Box::new(typed_impl)),
-            )),
+            PatternWrapper::Owned(pattern) => {
+                Clause(ClausePrivate::Single(mock_impl::DynMockImpl::new(
+                    Box::new(TypedMockImpl::from_pattern(pattern)),
+                    mock_impl::PatternMatchMode::InAnyOrder,
+                )))
+            }
             _ => panic!(),
         }
     }

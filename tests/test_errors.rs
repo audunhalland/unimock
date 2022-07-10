@@ -22,9 +22,9 @@ fn should_panic_for_unused_stub() {
 }
 
 #[test]
-#[should_panic(expected = "SingleArg::method1(\"b\"): No registered call patterns")]
-fn should_panic_for_call_with_no_accepted_patterns() {
-    mock([SingleArg__method1.stub(|_| {})]).method1("b");
+#[should_panic(expected = "No call patterns found in stub")]
+fn should_panic_for_empty_stub_closure() {
+    let _ = SingleArg__method1.stub(|_| {});
 }
 
 #[test]

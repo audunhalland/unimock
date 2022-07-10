@@ -6,10 +6,6 @@ pub enum MockError {
     NoMockImplementation {
         name: &'static str,
     },
-    NoRegisteredCallPatterns {
-        name: &'static str,
-        inputs_debug: String,
-    },
     NoMatchingCallPatterns {
         name: &'static str,
         inputs_debug: String,
@@ -69,9 +65,6 @@ impl MockError {
             }
             MockError::NoMockImplementation { name } => {
                 format!("No mock implementation found for {name}.")
-            }
-            MockError::NoRegisteredCallPatterns { name, inputs_debug } => {
-                format!("{name}{inputs_debug}: No registered call patterns.",)
             }
             MockError::NoMatchingCallPatterns { name, inputs_debug } => {
                 format!("{name}{inputs_debug}: No matching call patterns.")

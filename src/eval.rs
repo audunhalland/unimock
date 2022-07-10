@@ -125,13 +125,6 @@ fn eval_responder<'u, 'i, F: MockFn + 'static>(
                 .downcast_ref::<TypedMockImpl<F>>()
                 .ok_or_else(|| MockError::Downcast { name: F::NAME })?;
 
-            if typed_impl.patterns.is_empty() {
-                return Err(MockError::NoRegisteredCallPatterns {
-                    name: F::NAME,
-                    inputs_debug: F::debug_inputs(inputs),
-                });
-            }
-
             match match_pattern(pattern_match_mode, typed_impl, inputs, call_index)? {
                 Some((pat_index, pattern)) => match select_responder_for_call(pattern) {
                     Some(responder) => Ok(Eval::Continue((pat_index, responder))),
@@ -190,7 +183,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
             let current_call_index = call_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
             let (pat_index, pattern_by_call_index) = mock_impl
-                .patterns
+                .patterns()
                 .iter()
                 .enumerate()
                 .find(|(_, pattern)| {
@@ -202,7 +195,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
                     inputs_debug: F::debug_inputs(inputs),
                     actual_call_order: error::CallOrder(current_call_index),
                     expected_ranges: mock_impl
-                        .patterns
+                        .patterns()
                         .iter()
                         .map(|pattern| std::ops::Range {
                             start: pattern.non_generic.call_index_range.start + 1,
@@ -223,7 +216,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
             Ok(Some((pat_index, pattern_by_call_index)))
         }
         PatternMatchMode::InAnyOrder => Ok(mock_impl
-            .patterns
+            .patterns()
             .iter()
             .enumerate()
             .find(|(_, pattern)| (*pattern.input_matcher)(inputs))),
