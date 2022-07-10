@@ -1,7 +1,9 @@
+use crate::call_pattern::CallPattern;
+use crate::call_pattern::Responder;
 use crate::error;
 use crate::error::MockError;
 use crate::macro_api::Evaluation;
-use crate::mock_impl::{CallPattern, DynMockImpl, PatternMatchMode, Responder, TypedMockImpl};
+use crate::mock_impl::{DynMockImpl, PatternMatchMode, TypedMockImpl};
 use crate::{FallbackMode, MockFn, MockInputs};
 
 use std::any::Any;

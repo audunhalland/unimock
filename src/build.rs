@@ -1,5 +1,6 @@
 use std::panic;
 
+use crate::call_pattern;
 use crate::mock_impl::TypedMockImpl;
 use crate::property::*;
 use crate::*;
@@ -17,7 +18,7 @@ pub(crate) enum ClausePrivate {
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
 pub struct Each<F: MockFn> {
-    patterns: Vec<mock_impl::CallPattern<F>>,
+    patterns: Vec<call_pattern::CallPattern<F>>,
 }
 
 impl<F> Each<F>
@@ -33,8 +34,8 @@ where
     where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        self.patterns.push(mock_impl::CallPattern {
-            non_generic: mock_impl::CallPatternNonGeneric {
+        self.patterns.push(call_pattern::CallPattern {
+            non_generic: call_pattern::CallPatternNonGeneric {
                 call_index_range: Default::default(),
                 call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
             },
@@ -62,12 +63,12 @@ where
 }
 
 pub(crate) enum PatternWrapper<'p, F: MockFn> {
-    Borrowed(&'p mut mock_impl::CallPattern<F>),
-    Owned(mock_impl::CallPattern<F>),
+    Borrowed(&'p mut call_pattern::CallPattern<F>),
+    Owned(call_pattern::CallPattern<F>),
 }
 
 impl<'p, F: MockFn> PatternWrapper<'p, F> {
-    fn get_mut(&mut self) -> &mut mock_impl::CallPattern<F> {
+    fn get_mut(&mut self) -> &mut call_pattern::CallPattern<F> {
         match self {
             PatternWrapper::Borrowed(pattern) => *pattern,
             PatternWrapper::Owned(pattern) => pattern,
@@ -88,7 +89,7 @@ where
     O: Ordering,
 {
     /// Create a new owned call pattern match.
-    pub(crate) fn new_owned(pattern: mock_impl::CallPattern<F>, ordering: O) -> Self {
+    pub(crate) fn new_owned(pattern: call_pattern::CallPattern<F>, ordering: O) -> Self {
         Match {
             pattern: PatternWrapper::Owned(pattern),
             response_index: 0,
@@ -104,8 +105,8 @@ where
         F::Output: Send + Sync + Clone + 'static,
     {
         let value = value.into();
-        self.responder(mock_impl::Responder::Value(Box::new(
-            mock_impl::StoredValueSlot(value),
+        self.responder(call_pattern::Responder::Value(Box::new(
+            call_pattern::StoredValueSlot(value),
         )))
     }
 
@@ -114,7 +115,7 @@ where
     where
         F::Output: Default,
     {
-        self.responder(mock_impl::Responder::Closure(Box::new(|_| {
+        self.responder(call_pattern::Responder::Closure(Box::new(|_| {
             Default::default()
         })))
     }
@@ -126,7 +127,7 @@ where
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
     {
-        self.responder(mock_impl::Responder::Borrowable(Box::new(value)))
+        self.responder(call_pattern::Responder::Borrowable(Box::new(value)))
     }
 
     /// Specify the output of the call to be a reference to static value.
@@ -135,7 +136,7 @@ where
     where
         F::Output: Send + Sync + 'static,
     {
-        self.responder(mock_impl::Responder::StaticRefClosure(Box::new(
+        self.responder(call_pattern::Responder::StaticRefClosure(Box::new(
             move |_| value,
         )))
     }
@@ -147,7 +148,7 @@ where
         R: Into<F::Output>,
         F::Output: Sized,
     {
-        self.responder(mock_impl::Responder::Closure(Box::new(move |inputs| {
+        self.responder(call_pattern::Responder::Closure(Box::new(move |inputs| {
             func(inputs).into()
         })))
     }
@@ -166,7 +167,7 @@ where
         R: std::borrow::Borrow<F::Output> + 'static,
         F::Output: Sized,
     {
-        self.responder(mock_impl::Responder::StaticRefClosure(Box::new(
+        self.responder(call_pattern::Responder::StaticRefClosure(Box::new(
             move |inputs| {
                 let value = func(inputs);
                 let leaked_ref = Box::leak(Box::new(value));
@@ -179,7 +180,7 @@ where
     pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, O> {
         let message = message.into();
 
-        self.responder(mock_impl::Responder::Panic(message))
+        self.responder(call_pattern::Responder::Panic(message))
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
@@ -187,14 +188,14 @@ where
     where
         F: Unmock,
     {
-        self.responder(mock_impl::Responder::Unmock)
+        self.responder(call_pattern::Responder::Unmock)
     }
 
-    fn responder(mut self, responder: mock_impl::Responder<F>) -> QuantifyResponse<'p, F, O> {
+    fn responder(mut self, responder: call_pattern::Responder<F>) -> QuantifyResponse<'p, F, O> {
         self.pattern
             .get_mut()
             .responders
-            .push(mock_impl::CallOrderResponder {
+            .push(call_pattern::CallOrderResponder {
                 response_index: self.response_index,
                 responder,
             });

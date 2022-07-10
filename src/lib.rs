@@ -299,6 +299,8 @@ pub mod macro_api;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
 
+mod assemble;
+mod call_pattern;
 mod counter;
 mod error;
 mod eval;
@@ -635,7 +637,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::Match::new_owned(
-            mock_impl::CallPattern::from_input_matcher(Box::new(matching)),
+            call_pattern::CallPattern::from_input_matcher(Box::new(matching)),
             property::InAnyOrder,
         )
     }
@@ -651,7 +653,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::Match::new_owned(
-            mock_impl::CallPattern::from_input_matcher(Box::new(matching)),
+            call_pattern::CallPattern::from_input_matcher(Box::new(matching)),
             property::InOrder,
         )
     }
@@ -762,12 +764,12 @@ fn mock_from_iterator(
     clause_iterator: &mut dyn Iterator<Item = Clause>,
     fallback_mode: FallbackMode,
 ) -> Unimock {
-    let mut assembler = mock_impl::MockAssembler::new();
+    let mut assembler = assemble::MockAssembler::new();
 
     fn assemble(
         clause: Clause,
-        assembler: &mut mock_impl::MockAssembler,
-    ) -> Result<(), mock_impl::AssembleError> {
+        assembler: &mut assemble::MockAssembler,
+    ) -> Result<(), assemble::AssembleError> {
         match clause.0 {
             build::ClausePrivate::Single(dyn_impl) => {
                 dyn_impl.assemble_into(assembler)?;
