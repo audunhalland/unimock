@@ -51,7 +51,6 @@ impl MockAssembler {
 pub(crate) struct DynMockImpl {
     pub typed_impl: Box<dyn TypeErasedMockImpl + Send + Sync + 'static>,
     pub pattern_match_mode: PatternMatchMode,
-    pub has_applications: AtomicBool,
 }
 
 impl DynMockImpl {
@@ -63,7 +62,6 @@ impl DynMockImpl {
         DynMockImpl {
             typed_impl,
             pattern_match_mode: mode,
-            has_applications: AtomicBool::new(false),
         }
     }
 
@@ -101,16 +99,13 @@ impl DynMockImpl {
     }
 
     pub fn verify(&self, errors: &mut Vec<MockError>) {
-        if !self
-            .has_applications
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
+        let n_calls = self.typed_impl.verify(errors);
+
+        if n_calls.0 == 0 {
             errors.push(error::MockError::MockNeverCalled {
                 name: self.typed_impl.describe().name,
             });
         }
-
-        self.typed_impl.verify(errors);
     }
 }
 
@@ -127,7 +122,7 @@ pub(crate) trait TypeErasedMockImpl: Any {
         assembler_call_index: &mut usize,
     ) -> Result<(), AssembleError>;
 
-    fn verify(&self, errors: &mut Vec<MockError>);
+    fn verify(&self, errors: &mut Vec<MockError>) -> counter::NCalls;
 }
 
 pub(crate) struct Description {
@@ -216,13 +211,18 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
         Ok(())
     }
 
-    fn verify(&self, errors: &mut Vec<MockError>) {
+    fn verify(&self, errors: &mut Vec<MockError>) -> counter::NCalls {
+        let mut total_calls = 0;
+
         for (pat_index, pattern) in self.patterns.iter().enumerate() {
-            pattern
+            total_calls += pattern
                 .non_generic
                 .call_counter
-                .verify(F::NAME, pat_index, errors);
+                .verify(F::NAME, pat_index, errors)
+                .0;
         }
+
+        counter::NCalls(total_calls)
     }
 }
 
@@ -268,6 +268,18 @@ impl CallPatternNonGeneric {
         *assembler_call_index = self.call_index_range.end;
 
         Ok(())
+    }
+
+    pub fn matches_global_call_index(&self, global_call_index: usize) -> bool {
+        self.call_index_range.start <= global_call_index
+            && self.call_index_range.end > global_call_index
+    }
+
+    pub fn expected_range(&self) -> std::ops::Range<usize> {
+        std::ops::Range {
+            start: self.call_index_range.start + 1,
+            end: self.call_index_range.end + 1,
+        }
     }
 
     pub fn increase_call_counter(&self) -> usize {

@@ -306,7 +306,7 @@ mod mock_impl;
 
 use std::any::TypeId;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
 ///
@@ -548,7 +548,7 @@ impl Drop for Unimock {
                 .into_iter()
                 .map(|err| err.to_string())
                 .collect::<Vec<_>>();
-            panic!("{}", error_strings.join("/n"));
+            panic!("{}", error_strings.join("\n"));
         }
 
         {

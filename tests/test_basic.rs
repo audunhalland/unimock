@@ -281,7 +281,7 @@ trait WithModule {
 
 #[test]
 #[should_panic(
-    expected = "Mock for WithModule::func was never called. Dead mocks should be removed./nWithModule::func: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls."
+    expected = "WithModule::func: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.\nMock for WithModule::func was never called. Dead mocks should be removed."
 )]
 fn test_with_module() {
     mock(Some(

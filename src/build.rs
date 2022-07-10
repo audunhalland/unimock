@@ -56,7 +56,7 @@ where
     pub(crate) fn to_clause(self) -> Clause {
         Clause(ClausePrivate::Single(mock_impl::DynMockImpl::new(
             Box::new(mock_impl::TypedMockImpl::from_stub_patterns(self.patterns)),
-            mock_impl::PatternMatchMode::InOrder,
+            mock_impl::PatternMatchMode::InAnyOrder,
         )))
     }
 }

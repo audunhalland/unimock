@@ -158,16 +158,10 @@ fn eval_type_erased_mock_impl<'u>(
             FallbackMode::Error => Err(MockError::NoMockImplementation { name }),
             FallbackMode::Unmock => Ok(Eval::Unmock),
         },
-        Some(dyn_impl) => {
-            dyn_impl
-                .has_applications
-                .store(true, std::sync::atomic::Ordering::SeqCst);
-
-            Ok(Eval::Continue((
-                dyn_impl.typed_impl.as_ref().as_any(),
-                dyn_impl.pattern_match_mode,
-            )))
-        }
+        Some(dyn_impl) => Ok(Eval::Continue((
+            dyn_impl.typed_impl.as_ref().as_any(),
+            dyn_impl.pattern_match_mode,
+        ))),
     }
 }
 
@@ -187,8 +181,9 @@ fn match_pattern<'u, 'i, F: MockFn>(
                 .iter()
                 .enumerate()
                 .find(|(_, pattern)| {
-                    pattern.non_generic.call_index_range.start <= current_call_index
-                        && pattern.non_generic.call_index_range.end > current_call_index
+                    pattern
+                        .non_generic
+                        .matches_global_call_index(current_call_index)
                 })
                 .ok_or_else(|| MockError::CallOrderNotMatchedForMockFn {
                     name: F::NAME,
@@ -197,10 +192,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
                     expected_ranges: mock_impl
                         .patterns()
                         .iter()
-                        .map(|pattern| std::ops::Range {
-                            start: pattern.non_generic.call_index_range.start + 1,
-                            end: pattern.non_generic.call_index_range.end + 1,
-                        })
+                        .map(|pattern| pattern.non_generic.expected_range())
                         .collect(),
                 })?;
 

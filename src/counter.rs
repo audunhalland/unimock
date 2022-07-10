@@ -40,7 +40,12 @@ impl CallCounter {
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
-    pub fn verify(&self, name: &'static str, pat_index: usize, errors: &mut Vec<MockError>) {
+    pub fn verify(
+        &self,
+        name: &'static str,
+        pat_index: usize,
+        errors: &mut Vec<MockError>,
+    ) -> NCalls {
         let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::SeqCst));
 
         match self.exactness {
@@ -62,7 +67,9 @@ impl CallCounter {
                     errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match at least {expected}, but it actually matched {actual_calls}.")));
                 }
             }
-        }
+        };
+
+        actual_calls
     }
 }
 
@@ -72,7 +79,8 @@ pub(crate) enum Exactness {
     AtLeastPlusOne,
 }
 
-struct NCalls(usize);
+#[derive(Copy, Clone)]
+pub(crate) struct NCalls(pub usize);
 
 impl Display for NCalls {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

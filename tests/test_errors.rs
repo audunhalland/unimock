@@ -22,7 +22,7 @@ fn should_panic_for_unused_stub() {
 }
 
 #[test]
-#[should_panic(expected = "No call patterns found in stub")]
+#[should_panic(expected = "Stub contained no call patterns")]
 fn should_panic_for_empty_stub_closure() {
     let _ = SingleArg__method1.stub(|_| {});
 }

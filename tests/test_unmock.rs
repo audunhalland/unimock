@@ -25,6 +25,9 @@ mod unmock_simple {
     }
 
     #[test]
+    #[should_panic(
+        expected = "Mock for Spyable::concat was never called. Dead mocks should be removed."
+    )]
     fn works_with_a_spy_having_a_stub_with_non_matching_pattern() {
         assert_eq!(
             "ab",
