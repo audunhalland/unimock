@@ -194,8 +194,8 @@ fn match_pattern<'u, 'i, F: MockFn>(
                 .iter()
                 .enumerate()
                 .find(|(_, pattern)| {
-                    pattern.call_index_range.start <= current_call_index
-                        && pattern.call_index_range.end > current_call_index
+                    pattern.non_generic.call_index_range.start <= current_call_index
+                        && pattern.non_generic.call_index_range.end > current_call_index
                 })
                 .ok_or_else(|| MockError::CallOrderNotMatchedForMockFn {
                     name: F::NAME,
@@ -205,8 +205,8 @@ fn match_pattern<'u, 'i, F: MockFn>(
                         .patterns
                         .iter()
                         .map(|pattern| std::ops::Range {
-                            start: pattern.call_index_range.start + 1,
-                            end: pattern.call_index_range.end + 1,
+                            start: pattern.non_generic.call_index_range.start + 1,
+                            end: pattern.non_generic.call_index_range.end + 1,
                         })
                         .collect(),
                 })?;
@@ -231,7 +231,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
 }
 
 fn select_responder_for_call<F: MockFn>(pat: &CallPattern<F>) -> Option<&Responder<F>> {
-    let call_index = pat.call_counter.fetch_add();
+    let call_index = pat.non_generic.increase_call_counter();
 
     let mut responder = None;
 

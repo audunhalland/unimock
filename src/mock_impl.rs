@@ -91,7 +91,7 @@ impl DynMockImpl {
                 }
 
                 self.typed_impl.assemble(
-                    Some(entry.get_mut()),
+                    Some(entry.get_mut().typed_impl.as_any_mut()),
                     self.pattern_match_mode,
                     &mut assembler.current_call_index,
                 )?;
@@ -132,7 +132,7 @@ pub(crate) trait TypeErasedMockImpl: Any {
 
     fn assemble(
         &mut self,
-        target: Option<&mut DynMockImpl>,
+        target: Option<&mut dyn Any>,
         pattern_match_mode: PatternMatchMode,
         assembler_call_index: &mut usize,
     ) -> Result<(), AssembleError>;
@@ -166,9 +166,8 @@ impl<F: MockFn> TypedMockImpl<F> {
     ) -> Self {
         let mut mock_impl = Self::new();
         mock_impl.patterns.push(mock_impl::CallPattern {
+            non_generic: Default::default(),
             input_matcher,
-            call_index_range: Default::default(),
-            call_counter: counter::CallCounter::default(),
             responders: vec![],
         });
         mock_impl
@@ -197,7 +196,7 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
 
     fn assemble(
         &mut self,
-        merge_target: Option<&mut DynMockImpl>,
+        merge_target: Option<&mut dyn Any>,
         pattern_match_mode: PatternMatchMode,
         assembler_call_index: &mut usize,
     ) -> Result<(), AssembleError> {
@@ -208,26 +207,16 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
                 }
 
                 for pattern in self.patterns.iter_mut() {
-                    let exact_count = pattern
-                        .call_counter
-                        .get_expected_exact_count()
-                        .ok_or(AssembleError::MockHasNoExactExpectation { name: F::NAME })?;
-
-                    pattern.call_index_range.start = *assembler_call_index;
-                    pattern.call_index_range.end = *assembler_call_index + exact_count;
-
-                    *assembler_call_index = pattern.call_index_range.end;
+                    pattern
+                        .non_generic
+                        .assemble_setup_call_range(assembler_call_index, F::NAME)?;
                 }
             }
             _ => {}
         }
 
         if let Some(merge_target) = merge_target {
-            let existing_impl = merge_target
-                .typed_impl
-                .as_any_mut()
-                .downcast_mut::<Self>()
-                .unwrap();
+            let existing_impl = merge_target.downcast_mut::<Self>().unwrap();
 
             existing_impl.patterns.append(&mut self.patterns);
         }
@@ -237,16 +226,49 @@ impl<F: MockFn + 'static> TypeErasedMockImpl for TypedMockImpl<F> {
 
     fn verify(&self, errors: &mut Vec<MockError>) {
         for (pat_index, pattern) in self.patterns.iter().enumerate() {
-            pattern.call_counter.verify(F::NAME, pat_index, errors);
+            pattern
+                .non_generic
+                .call_counter
+                .verify(F::NAME, pat_index, errors);
         }
     }
 }
 
 pub(crate) struct CallPattern<F: MockFn> {
+    pub non_generic: CallPatternNonGeneric,
     pub input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
+    pub responders: Vec<CallOrderResponder<F>>,
+}
+
+/// Part of call pattern that is non-generic
+#[derive(Default)]
+pub(crate) struct CallPatternNonGeneric {
     pub call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
-    pub responders: Vec<CallOrderResponder<F>>,
+}
+
+impl CallPatternNonGeneric {
+    fn assemble_setup_call_range(
+        &mut self,
+        assembler_call_index: &mut usize,
+        name: &'static str,
+    ) -> Result<(), AssembleError> {
+        let exact_count = self
+            .call_counter
+            .get_expected_exact_count()
+            .ok_or(AssembleError::MockHasNoExactExpectation { name })?;
+
+        self.call_index_range.start = *assembler_call_index;
+        self.call_index_range.end = *assembler_call_index + exact_count;
+
+        *assembler_call_index = self.call_index_range.end;
+
+        Ok(())
+    }
+
+    pub fn increase_call_counter(&self) -> usize {
+        self.call_counter.fetch_add()
+    }
 }
 
 pub(crate) struct CallOrderResponder<F: MockFn> {

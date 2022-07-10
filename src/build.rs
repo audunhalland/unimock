@@ -33,9 +33,11 @@ where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         self.typed_impl.patterns.push(mock_impl::CallPattern {
+            non_generic: mock_impl::CallPatternNonGeneric {
+                call_index_range: Default::default(),
+                call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
+            },
             input_matcher: Box::new(matching),
-            call_index_range: Default::default(),
-            call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
             responders: vec![],
         });
 
@@ -227,27 +229,21 @@ where
 {
     /// Expect this call pattern to be called exactly once.
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.pattern
-            .get_mut()
-            .call_counter
+        self.pattern_call_counter()
             .add_to_minimum(1, counter::Exactness::Exact);
         self.into_exact(1)
     }
 
     /// Expect this call pattern to be called exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.pattern
-            .get_mut()
-            .call_counter
+        self.pattern_call_counter()
             .add_to_minimum(times, counter::Exactness::Exact);
         self.into_exact(times)
     }
 
     /// Expect this call pattern to be called at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast> {
-        self.pattern
-            .get_mut()
-            .call_counter
+        self.pattern_call_counter()
             .add_to_minimum(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
             pattern: self.pattern,
@@ -268,6 +264,10 @@ where
             )),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
+    }
+
+    fn pattern_call_counter(&mut self) -> &mut counter::CallCounter {
+        &mut self.pattern.get_mut().non_generic.call_counter
     }
 
     fn into_exact(self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
@@ -306,6 +306,7 @@ where
         // We just want to express that when using `then`, it should be called at least one time, if not `then` would be unnecessary.
         self.pattern
             .get_mut()
+            .non_generic
             .call_counter
             .add_to_minimum(0, counter::Exactness::AtLeastPlusOne);
 
