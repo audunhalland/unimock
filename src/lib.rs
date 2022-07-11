@@ -812,6 +812,7 @@ fn mock_from_iterator(
 #[must_use]
 pub struct Clause(pub(crate) clause::ClausePrivate);
 
+#[derive(Clone)]
 pub(crate) struct DynMockFn {
     type_id: TypeId,
     name: &'static str,

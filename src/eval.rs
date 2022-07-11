@@ -121,14 +121,12 @@ impl<'u, 's> DynCtx<'u, 's> {
         match responder {
             DynResponder::StaticRefClosure(_) | DynResponder::Borrowable(_) => {
                 MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
-                    name: self.mock_fn.name,
-                    inputs_debug: self.debug_inputs(),
+                    fn_call: self.fn_call(),
                     pat_index,
                 }
             }
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 pat_index,
                 msg: msg.clone(),
             },
@@ -144,13 +142,11 @@ impl<'u, 's> DynCtx<'u, 's> {
     ) -> MockError {
         match responder {
             DynResponder::Closure(_) => MockError::CannotBorrowValueProducedByClosure {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 pat_index,
             },
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 pat_index,
                 msg: msg.clone(),
             },
@@ -162,23 +158,19 @@ impl<'u, 's> DynCtx<'u, 's> {
     fn unsized_static_ref_error(&self, pat_index: PatIndex, responder: &DynResponder) -> MockError {
         match responder {
             DynResponder::Value(_) => MockError::CannotBorrowValueStatically {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 pat_index,
             },
             DynResponder::Closure(_) => MockError::CannotBorrowValueProducedByClosure {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 pat_index,
             },
             DynResponder::Borrowable(_) => MockError::CannotBorrowValueStatically {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 pat_index,
             },
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 pat_index,
                 msg: msg.clone(),
             },
@@ -227,15 +219,13 @@ impl<'u, 's> DynCtx<'u, 's> {
             Some((pat_index, pattern)) => match pattern.next_responder() {
                 Some(responder) => Ok(Eval::Continue((pat_index, responder))),
                 None => Err(MockError::NoOutputAvailableForCallPattern {
-                    name: self.mock_fn.name,
-                    inputs_debug: self.debug_inputs(),
+                    fn_call: self.fn_call(),
                     pat_index,
                 }),
             },
             None => match self.shared_state.fallback_mode {
                 FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
-                    name: self.mock_fn.name,
-                    inputs_debug: self.debug_inputs(),
+                    fn_call: self.fn_call(),
                 }),
                 FallbackMode::Unmock => Ok(Eval::Unmock),
             },
@@ -276,8 +266,7 @@ impl<'u, 's> DynCtx<'u, 's> {
                     && pattern.call_index_range.end > global_call_index
             })
             .ok_or_else(|| MockError::CallOrderNotMatchedForMockFn {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 actual_call_order: error::CallOrder(global_call_index),
                 expected_ranges: fn_mocker
                     .call_patterns
@@ -291,14 +280,20 @@ impl<'u, 's> DynCtx<'u, 's> {
 
         if !match_inputs(pattern)? {
             return Err(MockError::InputsNotMatchedInCallOrder {
-                name: self.mock_fn.name,
-                inputs_debug: self.debug_inputs(),
+                fn_call: self.fn_call(),
                 actual_call_order: error::CallOrder(global_call_index),
                 pat_index: PatIndex(pat_index),
             });
         }
 
         Ok(Some((PatIndex(pat_index), pattern)))
+    }
+
+    fn fn_call(&self) -> error::FnCall {
+        error::FnCall {
+            mock_fn: self.mock_fn.clone(),
+            inputs_debug: self.debug_inputs(),
+        }
     }
 
     fn debug_inputs(&self) -> String {

@@ -3,6 +3,18 @@ use crate::call_pattern::PatIndex;
 pub(crate) type MockResult<T> = Result<T, MockError>;
 
 #[derive(Clone)]
+pub(crate) struct FnCall {
+    pub mock_fn: crate::DynMockFn,
+    pub inputs_debug: String,
+}
+
+impl std::fmt::Display for FnCall {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.mock_fn.name, self.inputs_debug)
+    }
+}
+
+#[derive(Clone)]
 pub(crate) enum MockError {
     Downcast {
         name: &'static str,
@@ -11,42 +23,35 @@ pub(crate) enum MockError {
         name: &'static str,
     },
     NoMatchingCallPatterns {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
     },
     NoOutputAvailableForCallPattern {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
         pat_index: PatIndex,
     },
     MockNeverCalled {
         name: &'static str,
     },
     CallOrderNotMatchedForMockFn {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
         actual_call_order: CallOrder,
         expected_ranges: Vec<std::ops::Range<usize>>,
     },
     InputsNotMatchedInCallOrder {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
         actual_call_order: CallOrder,
         pat_index: PatIndex,
     },
     TypeMismatchExpectedOwnedInsteadOfBorrowed {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
         pat_index: PatIndex,
     },
     CannotBorrowValueStatically {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
         pat_index: PatIndex,
     },
     CannotBorrowValueProducedByClosure {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
         pat_index: PatIndex,
     },
     FailedVerification(String),
@@ -54,8 +59,7 @@ pub(crate) enum MockError {
         name: &'static str,
     },
     ExplicitPanic {
-        name: &'static str,
-        inputs_debug: String,
+        fn_call: FnCall,
         pat_index: PatIndex,
         msg: String,
     },
@@ -70,56 +74,50 @@ impl MockError {
             MockError::NoMockImplementation { name } => {
                 format!("No mock implementation found for {name}.")
             }
-            MockError::NoMatchingCallPatterns { name, inputs_debug } => {
-                format!("{name}{inputs_debug}: No matching call patterns.")
+            MockError::NoMatchingCallPatterns { fn_call } => {
+                format!("{fn_call}: No matching call patterns.")
             }
             MockError::NoOutputAvailableForCallPattern {
-                name,
-                inputs_debug,
+                fn_call,
                 pat_index,
             } => {
-                format!("{name}{inputs_debug}: No output available for matching call pattern {pat_index}.")
+                format!("{fn_call}: No output available for matching call pattern {pat_index}.")
             }
             MockError::MockNeverCalled { name } => {
                 format!("Mock for {name} was never called. Dead mocks should be removed.")
             }
             MockError::CallOrderNotMatchedForMockFn {
-                name,
-                inputs_debug,
+                fn_call,
                 actual_call_order,
                 expected_ranges,
             } => {
                 let ranges_dbg = expected_ranges.iter().map(format_call_range).collect::<Vec<_>>().join(", ");
-                format!("{name}{inputs_debug}: Matched in wrong order. It supported the call order ranges [{ranges_dbg}], but actual call order was {actual_call_order}.")
+                format!("{fn_call}: Matched in wrong order. It supported the call order ranges [{ranges_dbg}], but actual call order was {actual_call_order}.")
             }
             MockError::InputsNotMatchedInCallOrder {
-                name,
-                inputs_debug,
+                fn_call,
                 actual_call_order,
                 pat_index,
             } => {
-                format!("{name}{inputs_debug}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern {pat_index}.")
+                format!("{fn_call}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern {pat_index}.")
             }
             MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
-                name,
-                inputs_debug,
+                fn_call,
                 pat_index,
-            } => format!("{name}{inputs_debug}: Type mismatch: Expected an owned return value, but found a borrow for call pattern {pat_index}. Try using Match::returns() or Match::answers()."),
+            } => format!("{fn_call}: Type mismatch: Expected an owned return value, but found a borrow for call pattern {pat_index}. Try using Match::returns() or Match::answers()."),
             MockError::CannotBorrowValueStatically {
-                name,
-                inputs_debug,
+                fn_call,
                 pat_index,
-            } => format!("{name}{inputs_debug}: Cannot borrow output value statically for call pattern {pat_index}. Consider using Match::returns_static()."),
+            } => format!("{fn_call}: Cannot borrow output value statically for call pattern {pat_index}. Consider using Match::returns_static()."),
             MockError::CannotBorrowValueProducedByClosure {
-                name,
-                inputs_debug,
+                fn_call,
                 pat_index,
-            } => format!("{name}{inputs_debug}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. Consider using Match::returns_ref()."),
+            } => format!("{fn_call}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. Consider using Match::returns_ref()."),
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")
             },
-            MockError::ExplicitPanic { name, inputs_debug, pat_index, msg } => format!("{name}{inputs_debug}: Explicit panic for call pattern {pat_index}: {msg}")
+            MockError::ExplicitPanic { fn_call, pat_index, msg } => format!("{fn_call}: Explicit panic for call pattern {pat_index}: {msg}")
         }
     }
 }
