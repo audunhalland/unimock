@@ -251,10 +251,9 @@ impl<'u, 's> DynCtx<'u, 's> {
         fn_mocker: &'u FnMocker,
         match_inputs: &dyn Fn(&CallPattern) -> MockResult<bool>,
     ) -> MockResult<Option<(PatIndex, &'u CallPattern)>> {
-        // increase call index here, because stubs should not influence it:
-        let global_call_index = self
+        let ordered_call_index = self
             .shared_state
-            .next_call_index
+            .next_ordered_call_index
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         let (pat_index, pattern) = fn_mocker
@@ -262,18 +261,18 @@ impl<'u, 's> DynCtx<'u, 's> {
             .iter()
             .enumerate()
             .find(|(_, pattern)| {
-                pattern.call_index_range.start <= global_call_index
-                    && pattern.call_index_range.end > global_call_index
+                pattern.ordered_call_index_range.start <= ordered_call_index
+                    && pattern.ordered_call_index_range.end > ordered_call_index
             })
             .ok_or_else(|| MockError::CallOrderNotMatchedForMockFn {
                 fn_call: self.fn_call(),
-                actual_call_order: error::CallOrder(global_call_index),
+                actual_call_order: error::CallOrder(ordered_call_index),
                 expected_ranges: fn_mocker
                     .call_patterns
                     .iter()
                     .map(|pattern| std::ops::Range {
-                        start: pattern.call_index_range.start + 1,
-                        end: pattern.call_index_range.end + 1,
+                        start: pattern.ordered_call_index_range.start + 1,
+                        end: pattern.ordered_call_index_range.end + 1,
                     })
                     .collect(),
             })?;
@@ -281,7 +280,7 @@ impl<'u, 's> DynCtx<'u, 's> {
         if !match_inputs(pattern)? {
             return Err(MockError::InputsNotMatchedInCallOrder {
                 fn_call: self.fn_call(),
-                actual_call_order: error::CallOrder(global_call_index),
+                actual_call_order: error::CallOrder(ordered_call_index),
                 pat_index: PatIndex(pat_index),
             });
         }

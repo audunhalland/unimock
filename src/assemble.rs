@@ -66,7 +66,7 @@ impl MockAssembler {
         dyn_mock_fn: &DynMockFn,
         pattern_match_mode: PatternMatchMode,
     ) -> Result<CallPattern, AssembleError> {
-        let mut call_index_range: std::ops::Range<usize> = Default::default();
+        let mut ordered_call_index_range: std::ops::Range<usize> = Default::default();
 
         match pattern_match_mode {
             PatternMatchMode::InOrder => {
@@ -76,15 +76,15 @@ impl MockAssembler {
                     },
                 )?;
 
-                call_index_range.start = self.current_call_index;
-                call_index_range.end = self.current_call_index + exact_calls.0;
+                ordered_call_index_range.start = self.current_call_index;
+                ordered_call_index_range.end = self.current_call_index + exact_calls.0;
 
-                self.current_call_index = call_index_range.end;
+                self.current_call_index = ordered_call_index_range.end;
             }
             _ => {}
         };
 
-        Ok(builder.build(call_index_range))
+        Ok(builder.build(ordered_call_index_range))
     }
 }
 

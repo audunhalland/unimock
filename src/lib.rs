@@ -435,13 +435,13 @@ enum FallbackMode {
 /// the traits that it implements.
 pub struct Unimock {
     original_instance: bool,
-    state: Arc<SharedState>,
+    shared_state: Arc<SharedState>,
 }
 
 struct SharedState {
     fallback_mode: FallbackMode,
     fn_mockers: HashMap<TypeId, fn_mocker::FnMocker>,
-    next_call_index: AtomicUsize,
+    next_ordered_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
 
@@ -455,7 +455,7 @@ impl Unimock {
         F: MockFn + 'static,
         F::Output: Sized,
     {
-        match eval::EvalCtx::new::<F>(&self.state).eval_sized(inputs) {
+        match eval::EvalCtx::new::<F>(&self.shared_state).eval_sized(inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
@@ -469,7 +469,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::EvalCtx::new::<F>(&self.state).eval_unsized_self_borrowed(inputs) {
+        match eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_self_borrowed(inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
@@ -483,7 +483,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::EvalCtx::new::<F>(&self.state).eval_unsized_static_ref(inputs) {
+        match eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_static_ref(inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
@@ -492,7 +492,7 @@ impl Unimock {
     fn prepare_panic(&self, error: error::MockError) -> String {
         let msg = error.to_string();
 
-        let mut panic_reasons = self.state.panic_reasons.lock().unwrap();
+        let mut panic_reasons = self.shared_state.panic_reasons.lock().unwrap();
         panic_reasons.push(error.clone());
 
         msg
@@ -503,7 +503,7 @@ impl Clone for Unimock {
     fn clone(&self) -> Unimock {
         Unimock {
             original_instance: false,
-            state: self.state.clone(),
+            shared_state: self.shared_state.clone(),
         }
     }
 }
@@ -520,7 +520,7 @@ impl Drop for Unimock {
             return;
         }
 
-        let strong_count = Arc::strong_count(&self.state);
+        let strong_count = Arc::strong_count(&self.shared_state);
 
         if strong_count > 1 {
             panic!("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.");
@@ -541,12 +541,12 @@ impl Drop for Unimock {
         {
             // if already panicked, it must be in another thread. Forward that panic to the original thread.
             // (if original is even still in the original thread.. But panic as close to the test "root" as possible)
-            let panic_reasons = self.state.panic_reasons.lock().unwrap();
+            let panic_reasons = self.shared_state.panic_reasons.lock().unwrap();
             panic_if_nonempty(&panic_reasons);
         }
 
         let mut mock_errors = Vec::new();
-        for (_, fn_mocker) in self.state.fn_mockers.iter() {
+        for (_, fn_mocker) in self.shared_state.fn_mockers.iter() {
             fn_mocker.verify(&mut mock_errors);
         }
         panic_if_nonempty(&mock_errors);
@@ -760,10 +760,10 @@ fn mock_from_iterator(
 
     Unimock {
         original_instance: true,
-        state: Arc::new(SharedState {
+        shared_state: Arc::new(SharedState {
             fallback_mode,
             fn_mockers: assembler.fn_mockers,
-            next_call_index: AtomicUsize::new(0),
+            next_ordered_call_index: AtomicUsize::new(0),
             panic_reasons: Mutex::new(vec![]),
         }),
     }

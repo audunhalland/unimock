@@ -28,11 +28,11 @@ pub(crate) struct DynCallPatternBuilder {
 }
 
 impl DynCallPatternBuilder {
-    pub fn build(self, call_index_range: std::ops::Range<usize>) -> CallPattern {
+    pub fn build(self, ordered_call_index_range: std::ops::Range<usize>) -> CallPattern {
         CallPattern {
             input_matcher: self.input_matcher,
             responders: self.responders,
-            call_index_range,
+            ordered_call_index_range,
             call_counter: self.count_expectation.into_counter(),
         }
     }
@@ -41,7 +41,7 @@ impl DynCallPatternBuilder {
 pub(crate) struct CallPattern {
     input_matcher: DynInputMatcher,
     responders: Vec<DynCallOrderResponder>,
-    pub call_index_range: std::ops::Range<usize>,
+    pub ordered_call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
 }
 
