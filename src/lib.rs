@@ -440,7 +440,7 @@ pub struct Unimock {
 
 struct SharedState {
     fallback_mode: FallbackMode,
-    impls: HashMap<TypeId, mock_impl::DynMockImpl>,
+    impls: HashMap<TypeId, mock_impl::MockImpl>,
     next_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
@@ -455,7 +455,7 @@ impl Unimock {
         F: MockFn + 'static,
         F::Output: Sized,
     {
-        match eval::eval_sized::<F>(&self.state, inputs) {
+        match eval::EvalCtx::new::<F>(&self.state).eval_sized(inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
@@ -469,7 +469,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::eval_unsized_self_borrowed::<F>(&self.state, inputs) {
+        match eval::EvalCtx::new::<F>(&self.state).eval_unsized_self_borrowed(inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
@@ -483,7 +483,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::eval_unsized_static_ref::<F>(&self.state, inputs) {
+        match eval::EvalCtx::new::<F>(&self.state).eval_unsized_static_ref(inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }

@@ -1,6 +1,6 @@
-use crate::call_pattern::{DynCallPattern, DynCallPatternBuilder};
+use crate::call_pattern::{CallPattern, DynCallPatternBuilder};
 use crate::clause::{ClauseLeaf, ClausePrivate};
-use crate::mock_impl::{self, DynMockImpl, PatternMatchMode};
+use crate::mock_impl::{self, MockImpl, PatternMatchMode};
 use crate::DynMockFn;
 
 use std::any::TypeId;
@@ -8,7 +8,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 pub(crate) struct MockAssembler {
-    pub impls: HashMap<TypeId, DynMockImpl>,
+    pub impls: HashMap<TypeId, MockImpl>,
     pub current_call_index: usize,
 }
 
@@ -49,7 +49,7 @@ impl MockAssembler {
                 entry.get_mut().call_patterns.append(&mut call_patterns);
             }
             Entry::Vacant(entry) => {
-                entry.insert(DynMockImpl {
+                entry.insert(MockImpl {
                     call_patterns,
                     name: leaf.dyn_mock_fn.name,
                     pattern_match_mode,
@@ -65,7 +65,7 @@ impl MockAssembler {
         builder: DynCallPatternBuilder,
         dyn_mock_fn: &DynMockFn,
         pattern_match_mode: mock_impl::PatternMatchMode,
-    ) -> Result<DynCallPattern, AssembleError> {
+    ) -> Result<CallPattern, AssembleError> {
         let mut call_index_range: std::ops::Range<usize> = Default::default();
 
         match pattern_match_mode {

@@ -12,13 +12,13 @@ pub(crate) enum PatternMatchMode {
     InOrder,
 }
 
-pub(crate) struct DynMockImpl {
+pub(crate) struct MockImpl {
     pub name: &'static str,
     pub pattern_match_mode: PatternMatchMode,
-    pub call_patterns: Vec<call_pattern::DynCallPattern>,
+    pub call_patterns: Vec<call_pattern::CallPattern>,
 }
 
-impl DynMockImpl {
+impl MockImpl {
     pub fn verify(&self, errors: &mut Vec<MockError>) {
         let mut total_calls = 0;
 

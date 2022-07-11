@@ -13,6 +13,14 @@ impl std::fmt::Display for PatIndex {
     }
 }
 
+type AnyBox = Box<dyn Any + Send + Sync + 'static>;
+
+fn downcast_box<F: MockFn, T: 'static>(any_box: &AnyBox) -> MockResult<&T> {
+    any_box
+        .downcast_ref()
+        .ok_or(MockError::Downcast { name: F::NAME })
+}
+
 pub(crate) struct DynCallPatternBuilder {
     pub input_matcher: DynInputMatcher,
     pub responders: Vec<DynCallOrderResponder>,
@@ -20,8 +28,8 @@ pub(crate) struct DynCallPatternBuilder {
 }
 
 impl DynCallPatternBuilder {
-    pub fn build(self, call_index_range: std::ops::Range<usize>) -> DynCallPattern {
-        DynCallPattern {
+    pub fn build(self, call_index_range: std::ops::Range<usize>) -> CallPattern {
+        CallPattern {
             input_matcher: self.input_matcher,
             responders: self.responders,
             call_index_range,
@@ -30,23 +38,19 @@ impl DynCallPatternBuilder {
     }
 }
 
-pub(crate) struct DynCallPattern {
+pub(crate) struct CallPattern {
     input_matcher: DynInputMatcher,
     responders: Vec<DynCallOrderResponder>,
     pub call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
 }
 
-impl DynCallPattern {
+impl CallPattern {
     pub fn match_inputs<F: MockFn>(
         &self,
         inputs: &<F as MockInputs<'_>>::Inputs,
     ) -> MockResult<bool> {
-        let input_matcher = self
-            .input_matcher
-            .0
-            .downcast_ref::<InputMatcher<F>>()
-            .ok_or(MockError::Downcast { name: F::NAME })?;
+        let input_matcher = downcast_box::<F, InputMatcher<F>>(&self.input_matcher.0)?;
 
         Ok((input_matcher.0)(inputs))
     }
@@ -68,7 +72,7 @@ impl DynCallPattern {
     }
 }
 
-pub(crate) struct DynInputMatcher(Box<dyn Any + Send + Sync + 'static>);
+pub(crate) struct DynInputMatcher(AnyBox);
 
 pub(crate) struct InputMatcher<F: MockFn>(
     pub Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
@@ -94,18 +98,10 @@ pub(crate) enum DynResponder {
     Unmock,
 }
 
-type AnyBox = Box<dyn Any + Send + Sync + 'static>;
-
 pub(crate) struct DynValueResponder(AnyBox);
 pub(crate) struct DynBorrowableResponder(AnyBox);
 pub(crate) struct DynClosureResponder(AnyBox);
 pub(crate) struct DynStaticRefClosureResponder(AnyBox);
-
-fn downcast_box<F: MockFn, T: 'static>(any_box: &AnyBox) -> MockResult<&T> {
-    any_box
-        .downcast_ref()
-        .ok_or(MockError::Downcast { name: F::NAME })
-}
 
 impl DynValueResponder {
     pub fn downcast<F: MockFn>(&self) -> MockResult<&ValueResponder<F>> {
