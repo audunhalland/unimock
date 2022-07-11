@@ -1,48 +1,9 @@
 use crate::call_pattern;
+use crate::clause;
 use crate::property::*;
-use crate::DynMockFn;
 use crate::*;
 
 use std::panic;
-
-impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
-    fn from(clauses: I) -> Self {
-        Clause(ClausePrivate::Tree(clauses.into_iter().collect()))
-    }
-}
-
-pub(crate) enum ClausePrivate {
-    Leaf(ClauseLeaf),
-    Tree(Vec<Clause>),
-}
-
-pub(crate) struct ClauseLeaf {
-    pub dyn_mock_fn: DynMockFn,
-    pub kind: ClauseLeafKind,
-}
-
-pub(crate) enum ClauseLeafKind {
-    Stub(Vec<call_pattern::DynCallPatternBuilder>),
-    InAnyOrder(call_pattern::DynCallPatternBuilder),
-    InOrder(call_pattern::DynCallPatternBuilder),
-}
-
-impl ClauseLeafKind {
-    pub fn pattern_match_mode(&self) -> mock_impl::PatternMatchMode {
-        match self {
-            Self::Stub(_) | Self::InAnyOrder(_) => mock_impl::PatternMatchMode::InAnyOrder,
-            Self::InOrder(_) => mock_impl::PatternMatchMode::InOrder,
-        }
-    }
-
-    pub fn into_pattern_builders(self) -> Vec<call_pattern::DynCallPatternBuilder> {
-        match self {
-            Self::Stub(builders) => builders,
-            Self::InAnyOrder(builder) => vec![builder],
-            Self::InOrder(builder) => vec![builder],
-        }
-    }
-}
 
 pub(crate) struct CallPatternBuilder<F: MockFn> {
     input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
@@ -126,9 +87,9 @@ where
             panic!("Stub contained no call patterns");
         }
 
-        Clause(ClausePrivate::Leaf(ClauseLeaf {
+        Clause(clause::ClausePrivate::Leaf(clause::ClauseLeaf {
             dyn_mock_fn: DynMockFn::new::<F>(),
-            kind: ClauseLeafKind::Stub(
+            kind: clause::ClauseLeafKind::Stub(
                 self.patterns
                     .into_iter()
                     .map(|builder| builder.into_dyn())
@@ -313,10 +274,11 @@ where
         O: Ordering<Kind = InAnyOrder>,
     {
         match self.builder {
-            BuilderWrapper::Owned(builder) => Clause(ClausePrivate::Leaf(ClauseLeaf {
+            BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: ClauseLeafKind::InAnyOrder(builder.into_dyn()),
-            })),
+                kind: clause::ClauseLeafKind::InAnyOrder(builder.into_dyn()),
+            }
+            .into(),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }
@@ -400,10 +362,11 @@ where
         R: Repetition<Kind = Exact>,
     {
         match self.builder {
-            BuilderWrapper::Owned(builder) => Clause(ClausePrivate::Leaf(ClauseLeaf {
+            BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: ClauseLeafKind::InOrder(builder.into_dyn()),
-            })),
+                kind: clause::ClauseLeafKind::InOrder(builder.into_dyn()),
+            }
+            .into(),
             _ => panic!(),
         }
     }
@@ -414,10 +377,11 @@ where
         O: Ordering<Kind = InAnyOrder>,
     {
         match self.builder {
-            BuilderWrapper::Owned(builder) => Clause(ClausePrivate::Leaf(ClauseLeaf {
+            BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: ClauseLeafKind::InAnyOrder(builder.into_dyn()),
-            })),
+                kind: clause::ClauseLeafKind::InAnyOrder(builder.into_dyn()),
+            }
+            .into(),
             _ => panic!(),
         }
     }

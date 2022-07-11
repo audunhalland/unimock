@@ -301,6 +301,7 @@ pub mod property;
 
 mod assemble;
 mod call_pattern;
+mod clause;
 mod counter;
 mod error;
 mod eval;
@@ -809,7 +810,7 @@ fn mock_from_iterator(
 /// assert_eq!(6, unimock.foo(0) + unimock.bar(0) + unimock.baz(0));
 /// ```
 #[must_use]
-pub struct Clause(pub(crate) build::ClausePrivate);
+pub struct Clause(pub(crate) clause::ClausePrivate);
 
 pub(crate) struct DynMockFn {
     type_id: TypeId,

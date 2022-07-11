@@ -1,5 +1,5 @@
-use crate::build::{ClauseLeaf, ClausePrivate};
 use crate::call_pattern::{DynCallPattern, DynCallPatternBuilder};
+use crate::clause::{ClauseLeaf, ClausePrivate};
 use crate::mock_impl::{self, DynMockImpl, PatternMatchMode};
 use crate::DynMockFn;
 
