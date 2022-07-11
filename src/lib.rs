@@ -636,8 +636,8 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     where
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        build::Match::new_owned(
-            call_pattern::CallPattern::from_input_matcher(Box::new(matching)),
+        build::Match::with_owned_builder(
+            build::CallPatternBuilder::from_input_matcher(Box::new(matching)),
             property::InAnyOrder,
         )
     }
@@ -652,8 +652,8 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     where
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        build::Match::new_owned(
-            call_pattern::CallPattern::from_input_matcher(Box::new(matching)),
+        build::Match::with_owned_builder(
+            build::CallPatternBuilder::from_input_matcher(Box::new(matching)),
             property::InOrder,
         )
     }
@@ -771,10 +771,10 @@ fn mock_from_iterator(
         assembler: &mut assemble::MockAssembler,
     ) -> Result<(), assemble::AssembleError> {
         match clause.0 {
-            build::ClausePrivate::Single(dyn_impl) => {
-                dyn_impl.assemble_into(assembler)?;
+            build::ClausePrivate::Leaf(input) => {
+                assembler.add(input)?;
             }
-            build::ClausePrivate::Multiple(vec) => {
+            build::ClausePrivate::Tree(vec) => {
                 for clause in vec.into_iter() {
                     assemble(clause, assembler)?;
                 }
