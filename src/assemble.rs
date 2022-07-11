@@ -70,14 +70,14 @@ impl MockAssembler {
 
         match pattern_match_mode {
             PatternMatchMode::InOrder => {
-                let exact_count = builder.call_counter.get_expected_exact_count().ok_or(
+                let exact_calls = builder.count_expectation.exact_calls().ok_or(
                     AssembleError::MockHasNoExactExpectation {
                         name: dyn_mock_fn.name,
                     },
                 )?;
 
                 call_index_range.start = self.current_call_index;
-                call_index_range.end = self.current_call_index + exact_count;
+                call_index_range.end = self.current_call_index + exact_calls.0;
 
                 self.current_call_index = call_index_range.end;
             }

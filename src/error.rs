@@ -1,5 +1,7 @@
 use crate::call_pattern::PatIndex;
 
+pub(crate) type MockResult<T> = Result<T, MockError>;
+
 #[derive(Clone)]
 pub(crate) enum MockError {
     Downcast {

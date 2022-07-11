@@ -1,6 +1,6 @@
 use crate::call_pattern::{DynCallPattern, PatIndex, Responder};
 use crate::error;
-use crate::error::MockError;
+use crate::error::{MockError, MockResult};
 use crate::macro_api::Evaluation;
 use crate::mock_impl::{DynMockImpl, PatternMatchMode};
 use crate::{DynMockFn, SharedState};
@@ -16,7 +16,7 @@ enum Eval<C> {
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
     state: &SharedState,
     inputs: <F as MockInputs<'i>>::Inputs,
-) -> Result<Evaluation<'i, F::Output, F>, MockError>
+) -> MockResult<Evaluation<'i, F::Output, F>>
 where
     F::Output: Sized,
 {
@@ -46,7 +46,7 @@ where
 pub(crate) fn eval_unsized_self_borrowed<'u, 'i, F: MockFn + 'static>(
     state: &'u SharedState,
     inputs: <F as MockInputs<'i>>::Inputs,
-) -> Result<Evaluation<'i, &'u F::Output, F>, MockError> {
+) -> MockResult<Evaluation<'i, &'u F::Output, F>> {
     match eval_responder::<F>(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Value(stored) => Ok(Evaluation::Evaluated(stored.borrow_stored())),
@@ -76,7 +76,7 @@ pub(crate) fn eval_unsized_self_borrowed<'u, 'i, F: MockFn + 'static>(
 pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
     state: &SharedState,
     inputs: <F as MockInputs<'i>>::Inputs,
-) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
+) -> MockResult<Evaluation<'i, &'static F::Output, F>> {
     match eval_responder::<F>(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Value(_) => Err(MockError::CannotBorrowValueStatically {
@@ -110,7 +110,7 @@ pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
 fn eval_responder<'u, 'i, F: MockFn + 'static>(
     state: &'u SharedState,
     inputs: &<F as MockInputs<'i>>::Inputs,
-) -> Result<Eval<(PatIndex, &'u Responder<F>)>, MockError> {
+) -> MockResult<Eval<(PatIndex, &'u Responder<F>)>> {
     match eval_mock_op(state, DynMockFn::new::<F>())? {
         Eval::Continue(dyn_mock_impl) => match match_pattern::<F>(state, dyn_mock_impl, inputs)? {
             Some((pat_index, pattern)) => match select_responder_for_call(pattern)? {
@@ -137,10 +137,8 @@ fn eval_responder<'u, 'i, F: MockFn + 'static>(
 fn eval_mock_op<'u>(
     state: &'u SharedState,
     dyn_mock_fn: DynMockFn,
-) -> Result<Eval<&'u DynMockImpl>, MockError> {
-    let dyn_impl = state.impls.get(&dyn_mock_fn.type_id);
-
-    match dyn_impl {
+) -> MockResult<Eval<&'u DynMockImpl>> {
+    match state.impls.get(&dyn_mock_fn.type_id) {
         None => match state.fallback_mode {
             FallbackMode::Error => Err(MockError::NoMockImplementation {
                 name: dyn_mock_fn.name,
@@ -155,7 +153,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
     state: &'u SharedState,
     mock_impl: &'u DynMockImpl,
     inputs: &<F as MockInputs<'i>>::Inputs,
-) -> Result<Option<(PatIndex, &'u DynCallPattern)>, MockError> {
+) -> MockResult<Option<(PatIndex, &'u DynCallPattern)>> {
     match mock_impl.pattern_match_mode {
         PatternMatchMode::InOrder => {
             let MatchedInOrderCallPattern {
@@ -197,7 +195,7 @@ fn try_select_in_order_call_pattern<'u>(
     state: &'u SharedState,
     mock_impl: &'u DynMockImpl,
     debug_inputs: &dyn Fn() -> String,
-) -> Result<MatchedInOrderCallPattern<'u>, MockError> {
+) -> MockResult<MatchedInOrderCallPattern<'u>> {
     // increase call index here, because stubs should not influence it:
     let global_call_index = state
         .next_call_index
@@ -232,15 +230,13 @@ fn try_select_in_order_call_pattern<'u>(
     })
 }
 
-fn select_responder_for_call<F: MockFn>(
-    pat: &DynCallPattern,
-) -> Result<Option<&Responder<F>>, MockError> {
+fn select_responder_for_call<F: MockFn>(pat: &DynCallPattern) -> MockResult<Option<&Responder<F>>> {
     let call_index = pat.call_counter.fetch_add();
-    let match_and_respond = pat.downcast_match_and_respond::<F>()?;
+    let responders = pat.responders::<F>()?;
 
     let mut responder = None;
 
-    for call_index_responder in match_and_respond.responders.iter() {
+    for call_index_responder in responders.iter() {
         if call_index_responder.response_index > call_index {
             break;
         }

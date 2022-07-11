@@ -6,29 +6,24 @@ use crate::*;
 use std::panic;
 
 pub(crate) struct CallPatternBuilder<F: MockFn> {
-    input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
-    call_counter: counter::CallCounter,
-    responders: Vec<call_pattern::CallOrderResponder<F>>,
+    match_and_respond: call_pattern::MatchAndRespond<F>,
+    count_expectation: counter::CallCountExpectation,
 }
 
-impl<F: MockFn> CallPatternBuilder<F> {
-    pub fn from_input_matcher(
-        matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
-    ) -> Self {
+impl<F: MockFn> From<CallPatternBuilder<F>> for call_pattern::DynCallPatternBuilder {
+    fn from(builder: CallPatternBuilder<F>) -> Self {
         Self {
-            input_matcher: matcher,
-            call_counter: Default::default(),
-            responders: vec![],
+            count_expectation: builder.count_expectation,
+            match_and_respond: builder.match_and_respond.into(),
         }
     }
+}
 
-    pub fn into_dyn(self) -> call_pattern::DynCallPatternBuilder {
-        call_pattern::DynCallPatternBuilder {
-            call_counter: self.call_counter,
-            match_and_respond: Box::new(call_pattern::MatchAndRespond {
-                input_matcher: self.input_matcher,
-                responders: self.responders,
-            }),
+impl<F: MockFn> From<call_pattern::MatchAndRespond<F>> for CallPatternBuilder<F> {
+    fn from(match_and_respond: call_pattern::MatchAndRespond<F>) -> Self {
+        Self {
+            count_expectation: Default::default(),
+            match_and_respond,
         }
     }
 }
@@ -66,9 +61,8 @@ where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         self.patterns.push(CallPatternBuilder {
-            input_matcher: Box::new(matching),
-            call_counter: counter::CallCounter::new(0, counter::Exactness::AtLeast),
-            responders: vec![],
+            match_and_respond: call_pattern::MatchAndRespond::new(Box::new(matching)),
+            count_expectation: counter::CallCountExpectation::new(0, counter::Exactness::AtLeast),
         });
 
         Match {
@@ -92,7 +86,7 @@ where
             kind: clause::ClauseLeafKind::Stub(
                 self.patterns
                     .into_iter()
-                    .map(|builder| builder.into_dyn())
+                    .map(|builder| builder.into())
                     .collect(),
             ),
         }))
@@ -215,13 +209,12 @@ where
     }
 
     fn responder(mut self, responder: call_pattern::Responder<F>) -> QuantifyResponse<'p, F, O> {
-        self.builder
-            .get_mut()
-            .responders
-            .push(call_pattern::CallOrderResponder {
+        self.builder.get_mut().match_and_respond.responders.push(
+            call_pattern::CallOrderResponder {
                 response_index: self.response_index,
                 responder,
-            });
+            },
+        );
         QuantifyResponse {
             builder: self.builder,
             response_index: self.response_index,
@@ -244,21 +237,21 @@ where
 {
     /// Expect this call pattern to be called exactly once.
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.pattern_call_counter()
+        self.count_expectation()
             .add_to_minimum(1, counter::Exactness::Exact);
         self.into_exact(1)
     }
 
     /// Expect this call pattern to be called exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.pattern_call_counter()
+        self.count_expectation()
             .add_to_minimum(times, counter::Exactness::Exact);
         self.into_exact(times)
     }
 
     /// Expect this call pattern to be called at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast> {
-        self.pattern_call_counter()
+        self.count_expectation()
             .add_to_minimum(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
             builder: self.builder,
@@ -276,15 +269,15 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InAnyOrder(builder.into_dyn()),
+                kind: clause::ClauseLeafKind::InAnyOrder(builder.into()),
             }
             .into(),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }
 
-    fn pattern_call_counter(&mut self) -> &mut counter::CallCounter {
-        &mut self.builder.get_mut().call_counter
+    fn count_expectation(&mut self) -> &mut counter::CallCountExpectation {
+        &mut self.builder.get_mut().count_expectation
     }
 
     fn into_exact(self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
@@ -323,7 +316,7 @@ where
         // We just want to express that when using `then`, it should be called at least one time, if not `then` would be unnecessary.
         self.builder
             .get_mut()
-            .call_counter
+            .count_expectation
             .add_to_minimum(0, counter::Exactness::AtLeastPlusOne);
 
         Match {
@@ -364,7 +357,7 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InOrder(builder.into_dyn()),
+                kind: clause::ClauseLeafKind::InOrder(builder.into()),
             }
             .into(),
             _ => panic!(),
@@ -379,7 +372,7 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InAnyOrder(builder.into_dyn()),
+                kind: clause::ClauseLeafKind::InAnyOrder(builder.into()),
             }
             .into(),
             _ => panic!(),

@@ -622,7 +622,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::Match::with_owned_builder(
-            build::CallPatternBuilder::from_input_matcher(Box::new(matching)),
+            call_pattern::MatchAndRespond::new(Box::new(matching)).into(),
             property::InAnyOrder,
         )
     }
@@ -638,7 +638,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         build::Match::with_owned_builder(
-            build::CallPatternBuilder::from_input_matcher(Box::new(matching)),
+            call_pattern::MatchAndRespond::new(Box::new(matching)).into(),
             property::InOrder,
         )
     }

@@ -1,4 +1,4 @@
-use crate::error::MockError;
+use crate::error::{MockError, MockResult};
 use crate::*;
 
 use std::any::Any;
@@ -14,50 +14,76 @@ impl std::fmt::Display for PatIndex {
 }
 
 pub(crate) struct DynCallPatternBuilder {
-    pub call_counter: counter::CallCounter,
-    pub match_and_respond: Box<dyn TypeErasedMatchAndRespond + Send + Sync + 'static>,
+    pub match_and_respond: DynMatchAndRespond,
+    pub count_expectation: counter::CallCountExpectation,
 }
 
 impl DynCallPatternBuilder {
     pub fn build(self, call_index_range: std::ops::Range<usize>) -> DynCallPattern {
         DynCallPattern {
             call_index_range,
-            call_counter: self.call_counter,
+            call_counter: self.count_expectation.into_counter(),
             match_and_respond: self.match_and_respond,
         }
     }
 }
 
 pub(crate) struct DynCallPattern {
+    match_and_respond: DynMatchAndRespond,
     pub call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
-    pub match_and_respond: Box<dyn TypeErasedMatchAndRespond + Send + Sync + 'static>,
 }
 
 impl DynCallPattern {
-    pub fn downcast_match_and_respond<F: MockFn>(&self) -> Result<&MatchAndRespond<F>, MockError> {
-        self.match_and_respond
-            .as_any()
-            .downcast_ref::<MatchAndRespond<F>>()
-            .ok_or_else(|| MockError::Downcast { name: F::NAME })
-    }
-
     pub fn match_inputs<F: MockFn>(
         &self,
         inputs: &<F as MockInputs<'_>>::Inputs,
-    ) -> Result<bool, MockError> {
-        let match_and_respond = self.downcast_match_and_respond::<F>()?;
+    ) -> MockResult<bool> {
+        let match_and_respond = self.match_and_respond.downcast::<F>()?;
         Ok((match_and_respond.input_matcher)(inputs))
+    }
+
+    pub fn responders<F: MockFn>(&self) -> MockResult<&[CallOrderResponder<F>]> {
+        let match_and_respond = self.match_and_respond.downcast::<F>()?;
+        Ok(&match_and_respond.responders)
     }
 }
 
-pub(crate) trait TypeErasedMatchAndRespond: Any {
+pub(crate) struct DynMatchAndRespond(Box<dyn TypeErasedMatchAndRespond + Send + Sync + 'static>);
+
+impl DynMatchAndRespond {
+    pub fn downcast<F: MockFn>(&self) -> MockResult<&MatchAndRespond<F>> {
+        self.0
+            .as_any()
+            .downcast_ref::<MatchAndRespond<F>>()
+            .ok_or(MockError::Downcast { name: F::NAME })
+    }
+}
+
+impl<F: MockFn> From<MatchAndRespond<F>> for DynMatchAndRespond {
+    fn from(value: MatchAndRespond<F>) -> Self {
+        DynMatchAndRespond(Box::new(value))
+    }
+}
+
+trait TypeErasedMatchAndRespond: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
 pub(crate) struct MatchAndRespond<F: MockFn> {
     pub input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
     pub responders: Vec<CallOrderResponder<F>>,
+}
+
+impl<F: MockFn> MatchAndRespond<F> {
+    pub fn new(
+        input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
+    ) -> Self {
+        Self {
+            input_matcher,
+            responders: vec![],
+        }
+    }
 }
 
 impl<F: MockFn> TypeErasedMatchAndRespond for MatchAndRespond<F> {
