@@ -97,7 +97,7 @@ impl Display for NCalls {
         match self.0 {
             0 => write!(f, "no calls"),
             1 => write!(f, "1 call"),
-            _ => write!(f, "{} calls", self.0),
+            more => write!(f, "{more} calls"),
         }
     }
 }
