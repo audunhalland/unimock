@@ -32,11 +32,11 @@ where
 
     match eval_responder::<F>(&call, state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
-            DynResponder::Value(inner) => {
-                Ok(Evaluation::Evaluated(*inner.downcast::<F>().0.box_clone()))
-            }
+            DynResponder::Value(inner) => Ok(Evaluation::Evaluated(
+                *inner.downcast::<F>()?.stored_value.box_clone(),
+            )),
             DynResponder::Closure(inner) => {
-                Ok(Evaluation::Evaluated(inner.downcast::<F>().0(inputs)))
+                Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
             }
             DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
             responder => Err(sized_error(&call, pat_index, responder)),
@@ -77,14 +77,14 @@ pub(crate) fn eval_unsized_self_borrowed<'u, 'i, F: MockFn + 'static>(
     match eval_responder::<F>(&call, state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
             DynResponder::Value(inner) => Ok(Evaluation::Evaluated(
-                inner.downcast::<F>().0.borrow_stored(),
+                inner.downcast::<F>()?.stored_value.borrow_stored(),
             )),
             DynResponder::StaticRefClosure(inner) => {
-                Ok(Evaluation::Evaluated(inner.downcast::<F>().0(inputs)))
+                Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
             }
             DynResponder::Borrowable(inner) => {
                 let borrowable: &dyn Borrow<<F as MockFn>::Output> =
-                    inner.downcast::<F>().0.as_ref();
+                    inner.downcast::<F>()?.borrowable.as_ref();
                 let borrow = borrowable.borrow();
                 Ok(Evaluation::Evaluated(borrow))
             }
@@ -129,7 +129,7 @@ pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
     match eval_responder::<F>(&call, state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
             DynResponder::StaticRefClosure(inner) => {
-                Ok(Evaluation::Evaluated(inner.downcast::<F>().0(inputs)))
+                Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
             }
             DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
             responder => Err(unsized_static_ref_error(&call, pat_index, responder)),

@@ -126,7 +126,12 @@ where
         F::Output: Send + Sync + Clone + 'static,
     {
         let value = value.into();
-        self.responder(ValueResponder::<F>(Box::new(StoredValueSlot(value))).into_dyn_responder())
+        self.responder(
+            ValueResponder::<F> {
+                stored_value: Box::new(StoredValueSlot(value)),
+            }
+            .into_dyn_responder(),
+        )
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
@@ -134,7 +139,12 @@ where
     where
         F::Output: Default,
     {
-        self.responder(ClosureResponder::<F>(Box::new(|_| Default::default())).into_dyn_responder())
+        self.responder(
+            ClosureResponder::<F> {
+                func: Box::new(|_| Default::default()),
+            }
+            .into_dyn_responder(),
+        )
     }
 
     /// Specify the output of the call to be a borrow of the provided value.
@@ -144,7 +154,12 @@ where
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
     {
-        self.responder(BorrowableResponder::<F>(Box::new(value)).into_dyn_responder())
+        self.responder(
+            BorrowableResponder::<F> {
+                borrowable: Box::new(value),
+            }
+            .into_dyn_responder(),
+        )
     }
 
     /// Specify the output of the call to be a reference to static value.
@@ -154,7 +169,10 @@ where
         F::Output: Send + Sync + 'static,
     {
         self.responder(
-            StaticRefClosureResponder::<F>(Box::new(move |_| value)).into_dyn_responder(),
+            StaticRefClosureResponder::<F> {
+                func: Box::new(move |_| value),
+            }
+            .into_dyn_responder(),
         )
     }
 
@@ -166,7 +184,10 @@ where
         F::Output: Sized,
     {
         self.responder(
-            ClosureResponder::<F>(Box::new(move |inputs| func(inputs).into())).into_dyn_responder(),
+            ClosureResponder::<F> {
+                func: Box::new(move |inputs| func(inputs).into()),
+            }
+            .into_dyn_responder(),
         )
     }
 
@@ -185,11 +206,13 @@ where
         F::Output: Sized,
     {
         self.responder(
-            StaticRefClosureResponder::<F>(Box::new(move |inputs| {
-                let value = func(inputs);
-                let leaked_ref = Box::leak(Box::new(value));
-                <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
-            }))
+            StaticRefClosureResponder::<F> {
+                func: Box::new(move |inputs| {
+                    let value = func(inputs);
+                    let leaked_ref = Box::leak(Box::new(value));
+                    <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
+                }),
+            }
             .into_dyn_responder(),
         )
     }
