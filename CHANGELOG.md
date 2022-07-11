@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Changed
-- Refactor code to keep more things non-generic, saves code size.
+- Lots of internal refactoring to keep more things non-generic, saves code size.
 
 ## [0.3.5] - 2022-06-30
 ### Added

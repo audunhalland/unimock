@@ -26,22 +26,18 @@ pub(crate) struct DynCallPattern {
 }
 
 impl DynCallPattern {
-    pub fn downcast_match_and_respond<F: MockFn>(
-        &self,
-        name: &'static str,
-    ) -> Result<&MatchAndRespond<F>, MockError> {
+    pub fn downcast_match_and_respond<F: MockFn>(&self) -> Result<&MatchAndRespond<F>, MockError> {
         self.match_and_respond
             .as_any()
             .downcast_ref::<MatchAndRespond<F>>()
-            .ok_or_else(|| MockError::Downcast { name })
+            .ok_or_else(|| MockError::Downcast { name: F::NAME })
     }
 
     pub fn match_inputs<F: MockFn>(
         &self,
-        name: &'static str,
         inputs: &<F as MockInputs<'_>>::Inputs,
     ) -> Result<bool, MockError> {
-        let match_and_respond = self.downcast_match_and_respond(name)?;
+        let match_and_respond = self.downcast_match_and_respond::<F>()?;
         Ok((match_and_respond.input_matcher)(inputs))
     }
 }

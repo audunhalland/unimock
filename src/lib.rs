@@ -433,12 +433,12 @@ enum FallbackMode {
 /// The interaction with these mock objects always happen via the Unimock facade and
 /// the traits that it implements.
 pub struct Unimock {
-    fallback_mode: FallbackMode,
     original_instance: bool,
     state: Arc<SharedState>,
 }
 
 struct SharedState {
+    fallback_mode: FallbackMode,
     impls: HashMap<TypeId, mock_impl::DynMockImpl>,
     next_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
@@ -454,31 +454,21 @@ impl Unimock {
         F: MockFn + 'static,
         F::Output: Sized,
     {
-        match eval::eval_sized::<F>(
-            self.state.impls.get(&TypeId::of::<F>()),
-            inputs,
-            &self.state.next_call_index,
-            self.fallback_mode,
-        ) {
+        match eval::eval_sized::<F>(&self.state, inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
-    pub fn eval_borrowed<'s, 'i, F>(
-        &'s self,
+    pub fn eval_borrowed<'u, 'i, F>(
+        &'u self,
         inputs: <F as MockInputs<'i>>::Inputs,
-    ) -> macro_api::Evaluation<'i, &'s F::Output, F>
+    ) -> macro_api::Evaluation<'i, &'u F::Output, F>
     where
         F: MockFn + 'static,
     {
-        match eval::eval_unsized_self_borrowed::<F>(
-            self.state.impls.get(&TypeId::of::<F>()),
-            inputs,
-            &self.state.next_call_index,
-            self.fallback_mode,
-        ) {
+        match eval::eval_unsized_self_borrowed::<F>(&self.state, inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
@@ -492,12 +482,7 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::eval_unsized_static_ref::<F>(
-            self.state.impls.get(&TypeId::of::<F>()),
-            inputs,
-            &self.state.next_call_index,
-            self.fallback_mode,
-        ) {
+        match eval::eval_unsized_static_ref::<F>(&self.state, inputs) {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
@@ -516,7 +501,6 @@ impl Unimock {
 impl Clone for Unimock {
     fn clone(&self) -> Unimock {
         Unimock {
-            fallback_mode: self.fallback_mode,
             original_instance: false,
             state: self.state.clone(),
         }
@@ -774,9 +758,9 @@ fn mock_from_iterator(
     }
 
     Unimock {
-        fallback_mode,
         original_instance: true,
         state: Arc::new(SharedState {
+            fallback_mode,
             impls: assembler.impls,
             next_call_index: AtomicUsize::new(0),
             panic_reasons: Mutex::new(vec![]),

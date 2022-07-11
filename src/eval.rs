@@ -4,10 +4,10 @@ use crate::error;
 use crate::error::MockError;
 use crate::macro_api::Evaluation;
 use crate::mock_impl::{DynMockImpl, PatternMatchMode};
+use crate::{DynMockFn, SharedState};
 use crate::{FallbackMode, MockFn, MockInputs};
 
 use std::borrow::Borrow;
-use std::sync::atomic::AtomicUsize;
 
 enum Eval<C> {
     Continue(C),
@@ -15,15 +15,13 @@ enum Eval<C> {
 }
 
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
-    dyn_impl: Option<&DynMockImpl>,
+    state: &SharedState,
     inputs: <F as MockInputs<'i>>::Inputs,
-    call_index: &AtomicUsize,
-    fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, F::Output, F>, MockError>
 where
     F::Output: Sized,
 {
-    match eval_responder(dyn_impl, &inputs, call_index, fallback_mode)? {
+    match eval_responder(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Value(stored) => Ok(Evaluation::Evaluated(*stored.box_clone())),
             Responder::Closure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
@@ -47,12 +45,10 @@ where
 }
 
 pub(crate) fn eval_unsized_self_borrowed<'u, 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'u DynMockImpl>,
+    state: &'u SharedState,
     inputs: <F as MockInputs<'i>>::Inputs,
-    call_index: &AtomicUsize,
-    fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'u F::Output, F>, MockError> {
-    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
+    match eval_responder::<F>(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Value(stored) => Ok(Evaluation::Evaluated(stored.borrow_stored())),
             Responder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
@@ -79,12 +75,10 @@ pub(crate) fn eval_unsized_self_borrowed<'u, 'i, F: MockFn + 'static>(
 }
 
 pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
-    dyn_impl: Option<&DynMockImpl>,
+    state: &SharedState,
     inputs: <F as MockInputs<'i>>::Inputs,
-    call_index: &AtomicUsize,
-    fallback_mode: FallbackMode,
 ) -> Result<Evaluation<'i, &'static F::Output, F>, MockError> {
-    match eval_responder::<F>(dyn_impl, &inputs, call_index, fallback_mode)? {
+    match eval_responder::<F>(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
             Responder::Value(_) => Err(MockError::CannotBorrowValueStatically {
                 name: F::NAME,
@@ -115,44 +109,43 @@ pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
 }
 
 fn eval_responder<'u, 'i, F: MockFn + 'static>(
-    dyn_impl: Option<&'u DynMockImpl>,
+    state: &'u SharedState,
     inputs: &<F as MockInputs<'i>>::Inputs,
-    call_index: &AtomicUsize,
-    fallback_mode: FallbackMode,
 ) -> Result<Eval<(usize, &'u Responder<F>)>, MockError> {
-    match eval_mock_op(dyn_impl, F::NAME, fallback_mode)? {
-        Eval::Continue(dyn_mock_impl) => {
-            match match_pattern::<F>(dyn_mock_impl, inputs, call_index)? {
-                Some((pat_index, pattern)) => match select_responder_for_call(pattern)? {
-                    Some(responder) => Ok(Eval::Continue((pat_index, responder))),
-                    None => Err(MockError::NoOutputAvailableForCallPattern {
-                        name: F::NAME,
-                        inputs_debug: F::debug_inputs(inputs),
-                        pat_index,
-                    }),
-                },
-                None => match fallback_mode {
-                    FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
-                        name: F::NAME,
-                        inputs_debug: F::debug_inputs(inputs),
-                    }),
-                    FallbackMode::Unmock => Ok(Eval::Unmock),
-                },
-            }
-        }
+    match eval_mock_op(state, DynMockFn::new::<F>())? {
+        Eval::Continue(dyn_mock_impl) => match match_pattern::<F>(state, dyn_mock_impl, inputs)? {
+            Some((pat_index, pattern)) => match select_responder_for_call(pattern)? {
+                Some(responder) => Ok(Eval::Continue((pat_index, responder))),
+                None => Err(MockError::NoOutputAvailableForCallPattern {
+                    name: F::NAME,
+                    inputs_debug: F::debug_inputs(inputs),
+                    pat_index,
+                }),
+            },
+            None => match state.fallback_mode {
+                FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
+                    name: F::NAME,
+                    inputs_debug: F::debug_inputs(inputs),
+                }),
+                FallbackMode::Unmock => Ok(Eval::Unmock),
+            },
+        },
         Eval::Unmock => Ok(Eval::Unmock),
     }
 }
 
 #[inline(never)]
 fn eval_mock_op<'u>(
-    dyn_impl: Option<&'u DynMockImpl>,
-    name: &'static str,
-    fallback_mode: FallbackMode,
+    state: &'u SharedState,
+    dyn_mock_fn: DynMockFn,
 ) -> Result<Eval<&'u DynMockImpl>, MockError> {
+    let dyn_impl = state.impls.get(&dyn_mock_fn.type_id);
+
     match dyn_impl {
-        None => match fallback_mode {
-            FallbackMode::Error => Err(MockError::NoMockImplementation { name }),
+        None => match state.fallback_mode {
+            FallbackMode::Error => Err(MockError::NoMockImplementation {
+                name: dyn_mock_fn.name,
+            }),
             FallbackMode::Unmock => Ok(Eval::Unmock),
         },
         Some(dyn_impl) => Ok(Eval::Continue(dyn_impl)),
@@ -160,25 +153,23 @@ fn eval_mock_op<'u>(
 }
 
 fn match_pattern<'u, 'i, F: MockFn>(
+    state: &'u SharedState,
     mock_impl: &'u DynMockImpl,
     inputs: &<F as MockInputs<'i>>::Inputs,
-    global_call_index: &AtomicUsize,
 ) -> Result<Option<(usize, &'u DynCallPattern)>, MockError> {
     match mock_impl.pattern_match_mode {
         PatternMatchMode::InOrder => {
             let MatchedInOrderCallPattern {
                 pat_index,
                 pattern,
-                global_call_index,
-            } = try_select_in_order_call_pattern(mock_impl, global_call_index, &|| {
-                F::debug_inputs(inputs)
-            })?;
+                actual_call_order,
+            } = try_select_in_order_call_pattern(state, mock_impl, &|| F::debug_inputs(inputs))?;
 
-            if !pattern.match_inputs::<F>(mock_impl.name, inputs)? {
+            if !pattern.match_inputs::<F>(inputs)? {
                 return Err(MockError::InputsNotMatchedInCallOrder {
                     name: F::NAME,
                     inputs_debug: F::debug_inputs(inputs),
-                    actual_call_order: error::CallOrder(global_call_index),
+                    actual_call_order,
                     pat_index,
                 });
             }
@@ -187,7 +178,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
         }
         PatternMatchMode::InAnyOrder => {
             for (index, pattern) in mock_impl.call_patterns.iter().enumerate() {
-                if pattern.match_inputs::<F>(F::NAME, inputs)? {
+                if pattern.match_inputs::<F>(inputs)? {
                     return Ok(Some((index, pattern)));
                 }
             }
@@ -200,16 +191,18 @@ fn match_pattern<'u, 'i, F: MockFn>(
 struct MatchedInOrderCallPattern<'u> {
     pat_index: usize,
     pattern: &'u DynCallPattern,
-    global_call_index: usize,
+    actual_call_order: error::CallOrder,
 }
 
 fn try_select_in_order_call_pattern<'u>(
+    state: &'u SharedState,
     mock_impl: &'u DynMockImpl,
-    global_call_index: &AtomicUsize,
     debug_inputs: &dyn Fn() -> String,
 ) -> Result<MatchedInOrderCallPattern<'u>, MockError> {
     // increase call index here, because stubs should not influence it:
-    let global_call_index = global_call_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let global_call_index = state
+        .next_call_index
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
     let (pat_index, pattern) = mock_impl
         .call_patterns
@@ -236,7 +229,7 @@ fn try_select_in_order_call_pattern<'u>(
     Ok(MatchedInOrderCallPattern {
         pat_index,
         pattern,
-        global_call_index,
+        actual_call_order: error::CallOrder(global_call_index),
     })
 }
 
@@ -244,7 +237,7 @@ fn select_responder_for_call<F: MockFn>(
     pat: &DynCallPattern,
 ) -> Result<Option<&Responder<F>>, MockError> {
     let call_index = pat.call_counter.fetch_add();
-    let match_and_respond = pat.downcast_match_and_respond::<F>(F::NAME)?;
+    let match_and_respond = pat.downcast_match_and_respond::<F>()?;
 
     let mut responder = None;
 
