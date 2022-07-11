@@ -22,6 +22,24 @@ fn should_panic_for_unused_stub() {
 }
 
 #[test]
+#[should_panic(
+    expected = "A clause for SingleArg::method1 has already been registered as InAnyOrder, but got re-registered as InOrder. They cannot be mixed for the same MockFn."
+)]
+fn should_complain_about_mismatched_modes() {
+    mock([
+        SingleArg__method1
+            .each_call(matching!(_))
+            .returns_ref("a")
+            .in_any_order(),
+        SingleArg__method1
+            .next_call(matching!(_))
+            .returns_ref("b")
+            .once()
+            .in_order(),
+    ]);
+}
+
+#[test]
 #[should_panic(expected = "Stub contained no call patterns")]
 fn should_panic_for_empty_stub_closure() {
     let _ = SingleArg__method1.stub(|_| {});

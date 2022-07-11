@@ -766,25 +766,8 @@ fn mock_from_iterator(
 ) -> Unimock {
     let mut assembler = assemble::MockAssembler::new();
 
-    fn assemble(
-        clause: Clause,
-        assembler: &mut assemble::MockAssembler,
-    ) -> Result<(), assemble::AssembleError> {
-        match clause.0 {
-            build::ClausePrivate::Leaf(input) => {
-                assembler.add(input)?;
-            }
-            build::ClausePrivate::Tree(vec) => {
-                for clause in vec.into_iter() {
-                    assemble(clause, assembler)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
     for clause in clause_iterator {
-        match assemble(clause, &mut assembler) {
+        match assembler.append_clause(clause) {
             Ok(_) => {}
             Err(error) => panic!("{}", error.to_string()),
         }
@@ -843,3 +826,17 @@ fn mock_from_iterator(
 /// ```
 #[must_use]
 pub struct Clause(pub(crate) build::ClausePrivate);
+
+pub(crate) struct DynMockFn {
+    type_id: TypeId,
+    name: &'static str,
+}
+
+impl DynMockFn {
+    pub fn new<F: crate::MockFn>() -> Self {
+        Self {
+            type_id: TypeId::of::<F>(),
+            name: F::NAME,
+        }
+    }
+}

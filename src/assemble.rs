@@ -1,51 +1,11 @@
+use crate::build::{ClauseLeaf, ClausePrivate};
 use crate::call_pattern::{DynCallPattern, DynCallPatternBuilder};
 use crate::mock_impl::{self, DynMockImpl, PatternMatchMode};
+use crate::DynMockFn;
 
 use std::any::TypeId;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-
-pub(crate) struct DynMockFn {
-    type_id: TypeId,
-    name: &'static str,
-}
-
-impl DynMockFn {
-    pub fn new<F: crate::MockFn>() -> Self {
-        Self {
-            type_id: TypeId::of::<F>(),
-            name: F::NAME,
-        }
-    }
-}
-
-pub(crate) struct AssembleInput {
-    pub dyn_mock_fn: DynMockFn,
-    pub kind: AssembleInputKind,
-}
-
-pub(crate) enum AssembleInputKind {
-    Stub(Vec<DynCallPatternBuilder>),
-    InAnyOrder(DynCallPatternBuilder),
-    InOrder(DynCallPatternBuilder),
-}
-
-impl AssembleInputKind {
-    fn pattern_match_mode(&self) -> mock_impl::PatternMatchMode {
-        match self {
-            Self::Stub(_) | Self::InAnyOrder(_) => mock_impl::PatternMatchMode::InAnyOrder,
-            Self::InOrder(_) => mock_impl::PatternMatchMode::InOrder,
-        }
-    }
-
-    fn into_pattern_builders(self) -> Vec<DynCallPatternBuilder> {
-        match self {
-            Self::Stub(builders) => builders,
-            Self::InAnyOrder(builder) => vec![builder],
-            Self::InOrder(builder) => vec![builder],
-        }
-    }
-}
 
 pub(crate) struct MockAssembler {
     pub impls: HashMap<TypeId, DynMockImpl>,
@@ -53,16 +13,30 @@ pub(crate) struct MockAssembler {
 }
 
 impl MockAssembler {
-    pub fn add(&mut self, input: AssembleInput) -> Result<(), AssembleError> {
-        let pattern_match_mode = input.kind.pattern_match_mode();
-        let mut call_patterns = input
+    pub fn append_clause(&mut self, clause: crate::Clause) -> Result<(), AssembleError> {
+        match clause.0 {
+            ClausePrivate::Leaf(leaf) => {
+                self.append_leaf(leaf)?;
+            }
+            ClausePrivate::Tree(vec) => {
+                for clause in vec.into_iter() {
+                    self.append_clause(clause)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn append_leaf(&mut self, leaf: ClauseLeaf) -> Result<(), AssembleError> {
+        let pattern_match_mode = leaf.kind.pattern_match_mode();
+        let mut call_patterns = leaf
             .kind
             .into_pattern_builders()
             .into_iter()
-            .map(|builder| self.build_call_pattern(builder, &input.dyn_mock_fn, pattern_match_mode))
+            .map(|builder| self.build_call_pattern(builder, &leaf.dyn_mock_fn, pattern_match_mode))
             .collect::<Result<Vec<_>, AssembleError>>()?;
 
-        match self.impls.entry(input.dyn_mock_fn.type_id) {
+        match self.impls.entry(leaf.dyn_mock_fn.type_id) {
             Entry::Occupied(mut entry) => {
                 if entry.get().pattern_match_mode != pattern_match_mode {
                     return Err(AssembleError::IncompatiblePatternMatchMode {
@@ -77,7 +51,7 @@ impl MockAssembler {
             Entry::Vacant(entry) => {
                 entry.insert(DynMockImpl {
                     call_patterns,
-                    name: input.dyn_mock_fn.name,
+                    name: leaf.dyn_mock_fn.name,
                     pattern_match_mode,
                 });
             }
@@ -133,7 +107,7 @@ impl AssembleError {
                 old_mode,
                 new_mode,
             } => {
-                format!("A clause {name} has already been registered as a {old_mode:?}, but got re-registered as a {new_mode:?}. They cannot be mixed.")
+                format!("A clause for {name} has already been registered as {old_mode:?}, but got re-registered as {new_mode:?}. They cannot be mixed for the same MockFn.")
             }
             AssembleError::MockHasNoExactExpectation { name } => {
                 format!("{name} mock has no exact count expectation, which is needed for a mock.")
