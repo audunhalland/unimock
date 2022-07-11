@@ -12,13 +12,15 @@ pub(crate) enum PatternMatchMode {
     InOrder,
 }
 
-pub(crate) struct MockImpl {
+/// Holds all the state for mocking one particular MockFn
+/// during Unimock's lifetime
+pub(crate) struct FnMocker {
     pub name: &'static str,
     pub pattern_match_mode: PatternMatchMode,
     pub call_patterns: Vec<call_pattern::CallPattern>,
 }
 
-impl MockImpl {
+impl FnMocker {
     pub fn verify(&self, errors: &mut Vec<MockError>) {
         let mut total_calls = 0;
 

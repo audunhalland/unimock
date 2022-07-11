@@ -305,7 +305,7 @@ mod clause;
 mod counter;
 mod error;
 mod eval;
-mod mock_impl;
+mod fn_mocker;
 
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -440,7 +440,7 @@ pub struct Unimock {
 
 struct SharedState {
     fallback_mode: FallbackMode,
-    impls: HashMap<TypeId, mock_impl::MockImpl>,
+    fn_mockers: HashMap<TypeId, fn_mocker::FnMocker>,
     next_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
@@ -546,8 +546,8 @@ impl Drop for Unimock {
         }
 
         let mut mock_errors = Vec::new();
-        for (_, dyn_impl) in self.state.impls.iter() {
-            dyn_impl.verify(&mut mock_errors);
+        for (_, fn_mocker) in self.state.fn_mockers.iter() {
+            fn_mocker.verify(&mut mock_errors);
         }
         panic_if_nonempty(&mock_errors);
     }
@@ -762,7 +762,7 @@ fn mock_from_iterator(
         original_instance: true,
         state: Arc::new(SharedState {
             fallback_mode,
-            impls: assembler.impls,
+            fn_mockers: assembler.fn_mockers,
             next_call_index: AtomicUsize::new(0),
             panic_reasons: Mutex::new(vec![]),
         }),

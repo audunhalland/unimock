@@ -1,8 +1,8 @@
 use crate::call_pattern::{CallPattern, DynResponder, PatIndex};
 use crate::error;
 use crate::error::{MockError, MockResult};
+use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::Evaluation;
-use crate::mock_impl::{MockImpl, PatternMatchMode};
 use crate::{DynMockFn, SharedState};
 use crate::{FallbackMode, MockFn, MockInputs};
 
@@ -190,10 +190,10 @@ impl<'u, 's> DynCtx<'u, 's> {
         &self,
         inputs: &<F as MockInputs<'i>>::Inputs,
     ) -> MockResult<Eval<(PatIndex, &'u DynResponder)>> {
-        match self.eval_mock_op()? {
-            Eval::Continue(dyn_mock_impl) => {
-                let matched_pattern = match dyn_mock_impl.pattern_match_mode {
-                    PatternMatchMode::InAnyOrder => dyn_mock_impl
+        match self.eval_fn_mocker()? {
+            Eval::Continue(fn_mocker) => {
+                let matched_pattern = match fn_mocker.pattern_match_mode {
+                    PatternMatchMode::InAnyOrder => fn_mocker
                         .call_patterns
                         .iter()
                         .enumerate()
@@ -207,7 +207,7 @@ impl<'u, 's> DynCtx<'u, 's> {
                         .next()
                         .transpose()?,
                     PatternMatchMode::InOrder => self
-                        .try_select_in_order_call_pattern(dyn_mock_impl, &|pattern| {
+                        .try_select_in_order_call_pattern(fn_mocker, &|pattern| {
                             pattern.match_inputs::<F>(inputs)
                         })?,
                 };
@@ -243,22 +243,22 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 
     #[inline(never)]
-    fn eval_mock_op(&self) -> MockResult<Eval<&'u MockImpl>> {
-        match self.shared_state.impls.get(&self.mock_fn.type_id) {
+    fn eval_fn_mocker(&self) -> MockResult<Eval<&'u FnMocker>> {
+        match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
             None => match self.shared_state.fallback_mode {
                 FallbackMode::Error => Err(MockError::NoMockImplementation {
                     name: self.mock_fn.name,
                 }),
                 FallbackMode::Unmock => Ok(Eval::Unmock),
             },
-            Some(dyn_impl) => Ok(Eval::Continue(dyn_impl)),
+            Some(fn_mocker) => Ok(Eval::Continue(fn_mocker)),
         }
     }
 
     #[inline(never)]
     fn try_select_in_order_call_pattern(
         &self,
-        mock_impl: &'u MockImpl,
+        fn_mocker: &'u FnMocker,
         match_inputs: &dyn Fn(&CallPattern) -> MockResult<bool>,
     ) -> MockResult<Option<(PatIndex, &'u CallPattern)>> {
         // increase call index here, because stubs should not influence it:
@@ -267,7 +267,7 @@ impl<'u, 's> DynCtx<'u, 's> {
             .next_call_index
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-        let (pat_index, pattern) = mock_impl
+        let (pat_index, pattern) = fn_mocker
             .call_patterns
             .iter()
             .enumerate()
@@ -279,7 +279,7 @@ impl<'u, 's> DynCtx<'u, 's> {
                 name: self.mock_fn.name,
                 inputs_debug: self.debug_inputs(),
                 actual_call_order: error::CallOrder(global_call_index),
-                expected_ranges: mock_impl
+                expected_ranges: fn_mocker
                     .call_patterns
                     .iter()
                     .map(|pattern| std::ops::Range {

@@ -29,10 +29,10 @@ pub(crate) enum ClauseLeafKind {
 }
 
 impl ClauseLeafKind {
-    pub fn pattern_match_mode(&self) -> mock_impl::PatternMatchMode {
+    pub fn pattern_match_mode(&self) -> fn_mocker::PatternMatchMode {
         match self {
-            Self::Stub(_) | Self::InAnyOrder(_) => mock_impl::PatternMatchMode::InAnyOrder,
-            Self::InOrder(_) => mock_impl::PatternMatchMode::InOrder,
+            Self::Stub(_) | Self::InAnyOrder(_) => fn_mocker::PatternMatchMode::InAnyOrder,
+            Self::InOrder(_) => fn_mocker::PatternMatchMode::InOrder,
         }
     }
 

@@ -1,6 +1,6 @@
 use crate::call_pattern::{CallPattern, DynCallPatternBuilder};
 use crate::clause::{ClauseLeaf, ClausePrivate};
-use crate::mock_impl::{self, MockImpl, PatternMatchMode};
+use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::DynMockFn;
 
 use std::any::TypeId;
@@ -8,7 +8,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 pub(crate) struct MockAssembler {
-    pub impls: HashMap<TypeId, MockImpl>,
+    pub fn_mockers: HashMap<TypeId, FnMocker>,
     pub current_call_index: usize,
 }
 
@@ -36,7 +36,7 @@ impl MockAssembler {
             .map(|builder| self.build_call_pattern(builder, &leaf.dyn_mock_fn, pattern_match_mode))
             .collect::<Result<Vec<_>, AssembleError>>()?;
 
-        match self.impls.entry(leaf.dyn_mock_fn.type_id) {
+        match self.fn_mockers.entry(leaf.dyn_mock_fn.type_id) {
             Entry::Occupied(mut entry) => {
                 if entry.get().pattern_match_mode != pattern_match_mode {
                     return Err(AssembleError::IncompatiblePatternMatchMode {
@@ -49,7 +49,7 @@ impl MockAssembler {
                 entry.get_mut().call_patterns.append(&mut call_patterns);
             }
             Entry::Vacant(entry) => {
-                entry.insert(MockImpl {
+                entry.insert(FnMocker {
                     call_patterns,
                     name: leaf.dyn_mock_fn.name,
                     pattern_match_mode,
@@ -64,7 +64,7 @@ impl MockAssembler {
         &mut self,
         builder: DynCallPatternBuilder,
         dyn_mock_fn: &DynMockFn,
-        pattern_match_mode: mock_impl::PatternMatchMode,
+        pattern_match_mode: PatternMatchMode,
     ) -> Result<CallPattern, AssembleError> {
         let mut call_index_range: std::ops::Range<usize> = Default::default();
 
@@ -119,7 +119,7 @@ impl AssembleError {
 impl MockAssembler {
     pub fn new() -> Self {
         Self {
-            impls: HashMap::new(),
+            fn_mockers: HashMap::new(),
             current_call_index: 0,
         }
     }
