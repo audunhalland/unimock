@@ -1,4 +1,4 @@
-use crate::call_pattern::{DynCallPattern, PatIndex, Responder};
+use crate::call_pattern::{DynCallPattern, DynResponder, PatIndex};
 use crate::error;
 use crate::error::{MockError, MockResult};
 use crate::macro_api::Evaluation;
@@ -13,6 +13,12 @@ enum Eval<C> {
     Unmock,
 }
 
+enum OutputVariant {
+    Sized,
+    SelfBorrowed,
+    UnsizedStaticRef,
+}
+
 pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
     state: &SharedState,
     inputs: <F as MockInputs<'i>>::Inputs,
@@ -20,24 +26,28 @@ pub(crate) fn eval_sized<'i, F: MockFn + 'static>(
 where
     F::Output: Sized,
 {
-    match eval_responder(state, &inputs)? {
+    match eval_responder::<F>(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
-            Responder::Value(stored) => Ok(Evaluation::Evaluated(*stored.box_clone())),
-            Responder::Closure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
-            Responder::StaticRefClosure(_) | Responder::Borrowable(_) => {
+            DynResponder::Value(inner) => {
+                Ok(Evaluation::Evaluated(*inner.downcast::<F>().0.box_clone()))
+            }
+            DynResponder::Closure(inner) => {
+                Ok(Evaluation::Evaluated(inner.downcast::<F>().0(inputs)))
+            }
+            DynResponder::StaticRefClosure(_) | DynResponder::Borrowable(_) => {
                 Err(MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
                     name: F::NAME,
                     inputs_debug: F::debug_inputs(&inputs),
                     pat_index,
                 })
             }
-            Responder::Panic(msg) => Err(MockError::ExplicitPanic {
+            DynResponder::Panic(msg) => Err(MockError::ExplicitPanic {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
                 msg: msg.clone(),
             }),
-            Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
+            DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
         Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
     }
@@ -49,25 +59,30 @@ pub(crate) fn eval_unsized_self_borrowed<'u, 'i, F: MockFn + 'static>(
 ) -> MockResult<Evaluation<'i, &'u F::Output, F>> {
     match eval_responder::<F>(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
-            Responder::Value(stored) => Ok(Evaluation::Evaluated(stored.borrow_stored())),
-            Responder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
+            DynResponder::Value(inner) => Ok(Evaluation::Evaluated(
+                inner.downcast::<F>().0.borrow_stored(),
+            )),
+            DynResponder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
             }),
-            Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
-            Responder::Borrowable(borrowable) => {
-                let borrowable: &dyn Borrow<<F as MockFn>::Output> = borrowable.as_ref();
+            DynResponder::StaticRefClosure(inner) => {
+                Ok(Evaluation::Evaluated(inner.downcast::<F>().0(inputs)))
+            }
+            DynResponder::Borrowable(inner) => {
+                let borrowable: &dyn Borrow<<F as MockFn>::Output> =
+                    inner.downcast::<F>().0.as_ref();
                 let borrow = borrowable.borrow();
                 Ok(Evaluation::Evaluated(borrow))
             }
-            Responder::Panic(msg) => Err(MockError::ExplicitPanic {
+            DynResponder::Panic(msg) => Err(MockError::ExplicitPanic {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
                 msg: msg.clone(),
             }),
-            Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
+            DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
         Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
     }
@@ -79,29 +94,31 @@ pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
 ) -> MockResult<Evaluation<'i, &'static F::Output, F>> {
     match eval_responder::<F>(state, &inputs)? {
         Eval::Continue((pat_index, responder)) => match responder {
-            Responder::Value(_) => Err(MockError::CannotBorrowValueStatically {
+            DynResponder::Value(_) => Err(MockError::CannotBorrowValueStatically {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
             }),
-            Responder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
+            DynResponder::Closure(_) => Err(MockError::CannotBorrowValueProducedByClosure {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
             }),
-            Responder::StaticRefClosure(closure) => Ok(Evaluation::Evaluated(closure(inputs))),
-            Responder::Borrowable(_) => Err(MockError::CannotBorrowValueStatically {
+            DynResponder::StaticRefClosure(inner) => {
+                Ok(Evaluation::Evaluated(inner.downcast::<F>().0(inputs)))
+            }
+            DynResponder::Borrowable(_) => Err(MockError::CannotBorrowValueStatically {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
             }),
-            Responder::Panic(msg) => Err(MockError::ExplicitPanic {
+            DynResponder::Panic(msg) => Err(MockError::ExplicitPanic {
                 name: F::NAME,
                 inputs_debug: F::debug_inputs(&inputs),
                 pat_index,
                 msg: msg.clone(),
             }),
-            Responder::Unmock => Ok(Evaluation::Skipped(inputs)),
+            DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
         Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
     }
@@ -110,10 +127,10 @@ pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
 fn eval_responder<'u, 'i, F: MockFn + 'static>(
     state: &'u SharedState,
     inputs: &<F as MockInputs<'i>>::Inputs,
-) -> MockResult<Eval<(PatIndex, &'u Responder<F>)>> {
+) -> MockResult<Eval<(PatIndex, &'u DynResponder)>> {
     match eval_mock_op(state, DynMockFn::new::<F>())? {
         Eval::Continue(dyn_mock_impl) => match match_pattern::<F>(state, dyn_mock_impl, inputs)? {
-            Some((pat_index, pattern)) => match select_responder_for_call(pattern)? {
+            Some((pat_index, pattern)) => match pattern.next_responder() {
                 Some(responder) => Ok(Eval::Continue((pat_index, responder))),
                 None => Err(MockError::NoOutputAvailableForCallPattern {
                     name: F::NAME,
@@ -228,21 +245,4 @@ fn try_select_in_order_call_pattern<'u>(
         pattern,
         actual_call_order: error::CallOrder(global_call_index),
     })
-}
-
-fn select_responder_for_call<F: MockFn>(pat: &DynCallPattern) -> MockResult<Option<&Responder<F>>> {
-    let call_index = pat.call_counter.fetch_add();
-    let responders = pat.responders::<F>()?;
-
-    let mut responder = None;
-
-    for call_index_responder in responders.iter() {
-        if call_index_responder.response_index > call_index {
-            break;
-        }
-
-        responder = Some(&call_index_responder.responder)
-    }
-
-    Ok(responder)
 }

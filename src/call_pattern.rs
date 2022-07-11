@@ -14,22 +14,25 @@ impl std::fmt::Display for PatIndex {
 }
 
 pub(crate) struct DynCallPatternBuilder {
-    pub match_and_respond: DynMatchAndRespond,
+    pub input_matcher: DynInputMatcher,
+    pub responders: Vec<DynCallOrderResponder>,
     pub count_expectation: counter::CallCountExpectation,
 }
 
 impl DynCallPatternBuilder {
     pub fn build(self, call_index_range: std::ops::Range<usize>) -> DynCallPattern {
         DynCallPattern {
+            input_matcher: self.input_matcher,
+            responders: self.responders,
             call_index_range,
             call_counter: self.count_expectation.into_counter(),
-            match_and_respond: self.match_and_respond,
         }
     }
 }
 
 pub(crate) struct DynCallPattern {
-    match_and_respond: DynMatchAndRespond,
+    input_matcher: DynInputMatcher,
+    responders: Vec<DynCallOrderResponder>,
     pub call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
 }
@@ -39,73 +42,128 @@ impl DynCallPattern {
         &self,
         inputs: &<F as MockInputs<'_>>::Inputs,
     ) -> MockResult<bool> {
-        let match_and_respond = self.match_and_respond.downcast::<F>()?;
-        Ok((match_and_respond.input_matcher)(inputs))
+        let input_matcher = self
+            .input_matcher
+            .0
+            .downcast_ref::<InputMatcher<F>>()
+            .ok_or(MockError::Downcast { name: F::NAME })?;
+
+        Ok((input_matcher.0)(inputs))
     }
 
-    pub fn responders<F: MockFn>(&self) -> MockResult<&[CallOrderResponder<F>]> {
-        let match_and_respond = self.match_and_respond.downcast::<F>()?;
-        Ok(&match_and_respond.responders)
-    }
-}
+    pub fn next_responder(&self) -> Option<&DynResponder> {
+        let call_index = self.call_counter.fetch_add();
 
-pub(crate) struct DynMatchAndRespond(Box<dyn TypeErasedMatchAndRespond + Send + Sync + 'static>);
+        let mut responder = None;
 
-impl DynMatchAndRespond {
-    pub fn downcast<F: MockFn>(&self) -> MockResult<&MatchAndRespond<F>> {
-        self.0
-            .as_any()
-            .downcast_ref::<MatchAndRespond<F>>()
-            .ok_or(MockError::Downcast { name: F::NAME })
-    }
-}
+        for call_index_responder in self.responders.iter() {
+            if call_index_responder.response_index > call_index {
+                break;
+            }
 
-impl<F: MockFn> From<MatchAndRespond<F>> for DynMatchAndRespond {
-    fn from(value: MatchAndRespond<F>) -> Self {
-        DynMatchAndRespond(Box::new(value))
-    }
-}
-
-trait TypeErasedMatchAndRespond: Any {
-    fn as_any(&self) -> &dyn Any;
-}
-
-pub(crate) struct MatchAndRespond<F: MockFn> {
-    pub input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
-    pub responders: Vec<CallOrderResponder<F>>,
-}
-
-impl<F: MockFn> MatchAndRespond<F> {
-    pub fn new(
-        input_matcher: Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
-    ) -> Self {
-        Self {
-            input_matcher,
-            responders: vec![],
+            responder = Some(&call_index_responder.responder);
         }
+
+        return responder;
     }
 }
 
-impl<F: MockFn> TypeErasedMatchAndRespond for MatchAndRespond<F> {
-    fn as_any(&self) -> &dyn Any {
-        self
+pub(crate) struct DynInputMatcher(Box<dyn Any + Send + Sync + 'static>);
+
+pub(crate) struct InputMatcher<F: MockFn>(
+    pub Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
+);
+
+impl<F: MockFn> InputMatcher<F> {
+    pub fn into_dyn(self) -> DynInputMatcher {
+        DynInputMatcher(Box::new(self))
     }
 }
 
-pub(crate) struct CallOrderResponder<F: MockFn> {
+pub(crate) struct DynCallOrderResponder {
     pub response_index: usize,
-    pub responder: Responder<F>,
+    pub responder: DynResponder,
 }
 
-pub(crate) enum Responder<F: MockFn> {
-    Value(Box<dyn StoredValue<F::Output>>),
-    Borrowable(Box<dyn Borrow<F::Output> + Send + Sync>),
-    Closure(Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> F::Output) + Send + Sync>),
-    StaticRefClosure(
-        Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> &'static F::Output) + Send + Sync>,
-    ),
+pub(crate) enum DynResponder {
+    Value(DynValueResponder),
+    Borrowable(DynBorrowableResponder),
+    Closure(DynClosureResponder),
+    StaticRefClosure(DynStaticRefClosureResponder),
     Panic(String),
     Unmock,
+}
+
+pub(crate) struct DynValueResponder(Box<dyn Any + Send + Sync + 'static>);
+
+impl DynValueResponder {
+    pub fn downcast<F: MockFn>(&self) -> &ValueResponder<F> {
+        self.0.downcast_ref().unwrap()
+    }
+}
+
+pub(crate) struct DynBorrowableResponder(Box<dyn Any + Send + Sync + 'static>);
+
+impl DynBorrowableResponder {
+    pub fn downcast<F: MockFn>(&self) -> &BorrowableResponder<F> {
+        self.0.downcast_ref().unwrap()
+    }
+}
+
+pub(crate) struct DynClosureResponder(Box<dyn Any + Send + Sync + 'static>);
+
+impl DynClosureResponder {
+    pub fn downcast<F: MockFn>(&self) -> &ClosureResponder<F> {
+        self.0.downcast_ref().unwrap()
+    }
+}
+
+pub(crate) struct DynStaticRefClosureResponder(Box<dyn Any + Send + Sync + 'static>);
+
+impl DynStaticRefClosureResponder {
+    pub fn downcast<F: MockFn>(&self) -> &StaticRefClosureResponder<F> {
+        self.0.downcast_ref().unwrap()
+    }
+}
+
+pub(crate) trait IntoDynResponder: Sized {
+    fn into_dyn_responder(self) -> DynResponder;
+}
+
+pub(crate) struct ValueResponder<F: MockFn>(pub Box<dyn StoredValue<F::Output>>);
+
+impl<F: MockFn> IntoDynResponder for ValueResponder<F> {
+    fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::Value(DynValueResponder(Box::new(self)))
+    }
+}
+
+pub(crate) struct BorrowableResponder<F: MockFn>(pub Box<dyn Borrow<F::Output> + Send + Sync>);
+
+impl<F: MockFn> IntoDynResponder for BorrowableResponder<F> {
+    fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::Borrowable(DynBorrowableResponder(Box::new(self)))
+    }
+}
+
+pub(crate) struct ClosureResponder<F: MockFn>(
+    pub Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> F::Output) + Send + Sync>,
+);
+
+impl<F: MockFn> IntoDynResponder for ClosureResponder<F> {
+    fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::Closure(DynClosureResponder(Box::new(self)))
+    }
+}
+
+pub(crate) struct StaticRefClosureResponder<F: MockFn>(
+    pub Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> &'static F::Output) + Send + Sync>,
+);
+
+impl<F: MockFn> IntoDynResponder for StaticRefClosureResponder<F> {
+    fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::StaticRefClosure(DynStaticRefClosureResponder(Box::new(self)))
+    }
 }
 
 pub trait StoredValue<T: ?Sized>: Send + Sync {

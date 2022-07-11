@@ -1,4 +1,4 @@
-use crate::call_pattern;
+use crate::call_pattern::*;
 use crate::clause;
 use crate::property::*;
 use crate::*;
@@ -6,24 +6,27 @@ use crate::*;
 use std::panic;
 
 pub(crate) struct CallPatternBuilder<F: MockFn> {
-    match_and_respond: call_pattern::MatchAndRespond<F>,
+    input_matcher: InputMatcher<F>,
+    responders: Vec<DynCallOrderResponder>,
     count_expectation: counter::CallCountExpectation,
 }
 
-impl<F: MockFn> From<CallPatternBuilder<F>> for call_pattern::DynCallPatternBuilder {
-    fn from(builder: CallPatternBuilder<F>) -> Self {
+impl<F: MockFn> From<InputMatcher<F>> for CallPatternBuilder<F> {
+    fn from(input_matcher: InputMatcher<F>) -> Self {
         Self {
-            count_expectation: builder.count_expectation,
-            match_and_respond: builder.match_and_respond.into(),
+            input_matcher,
+            responders: Default::default(),
+            count_expectation: Default::default(),
         }
     }
 }
 
-impl<F: MockFn> From<call_pattern::MatchAndRespond<F>> for CallPatternBuilder<F> {
-    fn from(match_and_respond: call_pattern::MatchAndRespond<F>) -> Self {
+impl<F: MockFn> From<CallPatternBuilder<F>> for DynCallPatternBuilder {
+    fn from(builder: CallPatternBuilder<F>) -> Self {
         Self {
-            count_expectation: Default::default(),
-            match_and_respond,
+            input_matcher: builder.input_matcher.into_dyn(),
+            responders: builder.responders,
+            count_expectation: builder.count_expectation,
         }
     }
 }
@@ -61,7 +64,8 @@ where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         self.patterns.push(CallPatternBuilder {
-            match_and_respond: call_pattern::MatchAndRespond::new(Box::new(matching)),
+            input_matcher: InputMatcher(Box::new(matching)),
+            responders: Default::default(),
             count_expectation: counter::CallCountExpectation::new(0, counter::Exactness::AtLeast),
         });
 
@@ -122,9 +126,7 @@ where
         F::Output: Send + Sync + Clone + 'static,
     {
         let value = value.into();
-        self.responder(call_pattern::Responder::Value(Box::new(
-            call_pattern::StoredValueSlot(value),
-        )))
+        self.responder(ValueResponder::<F>(Box::new(StoredValueSlot(value))).into_dyn_responder())
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
@@ -132,9 +134,7 @@ where
     where
         F::Output: Default,
     {
-        self.responder(call_pattern::Responder::Closure(Box::new(|_| {
-            Default::default()
-        })))
+        self.responder(ClosureResponder::<F>(Box::new(|_| Default::default())).into_dyn_responder())
     }
 
     /// Specify the output of the call to be a borrow of the provided value.
@@ -144,7 +144,7 @@ where
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
     {
-        self.responder(call_pattern::Responder::Borrowable(Box::new(value)))
+        self.responder(BorrowableResponder::<F>(Box::new(value)).into_dyn_responder())
     }
 
     /// Specify the output of the call to be a reference to static value.
@@ -153,9 +153,9 @@ where
     where
         F::Output: Send + Sync + 'static,
     {
-        self.responder(call_pattern::Responder::StaticRefClosure(Box::new(
-            move |_| value,
-        )))
+        self.responder(
+            StaticRefClosureResponder::<F>(Box::new(move |_| value)).into_dyn_responder(),
+        )
     }
 
     /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
@@ -165,9 +165,9 @@ where
         R: Into<F::Output>,
         F::Output: Sized,
     {
-        self.responder(call_pattern::Responder::Closure(Box::new(move |inputs| {
-            func(inputs).into()
-        })))
+        self.responder(
+            ClosureResponder::<F>(Box::new(move |inputs| func(inputs).into())).into_dyn_responder(),
+        )
     }
 
     /// Specify the output of the call pattern to be a static reference to leaked memory.
@@ -184,20 +184,19 @@ where
         R: std::borrow::Borrow<F::Output> + 'static,
         F::Output: Sized,
     {
-        self.responder(call_pattern::Responder::StaticRefClosure(Box::new(
-            move |inputs| {
+        self.responder(
+            StaticRefClosureResponder::<F>(Box::new(move |inputs| {
                 let value = func(inputs);
                 let leaked_ref = Box::leak(Box::new(value));
                 <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
-            },
-        )))
+            }))
+            .into_dyn_responder(),
+        )
     }
 
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
     pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, O> {
-        let message = message.into();
-
-        self.responder(call_pattern::Responder::Panic(message))
+        self.responder(DynResponder::Panic(message.into()))
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
@@ -205,16 +204,17 @@ where
     where
         F: Unmock,
     {
-        self.responder(call_pattern::Responder::Unmock)
+        self.responder(DynResponder::Unmock)
     }
 
-    fn responder(mut self, responder: call_pattern::Responder<F>) -> QuantifyResponse<'p, F, O> {
-        self.builder.get_mut().match_and_respond.responders.push(
-            call_pattern::CallOrderResponder {
+    fn responder(mut self, responder: DynResponder) -> QuantifyResponse<'p, F, O> {
+        self.builder
+            .get_mut()
+            .responders
+            .push(DynCallOrderResponder {
                 response_index: self.response_index,
                 responder,
-            },
-        );
+            });
         QuantifyResponse {
             builder: self.builder,
             response_index: self.response_index,
