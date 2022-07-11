@@ -1,3 +1,4 @@
+use crate::call_pattern::PatIndex;
 use crate::error::MockError;
 use crate::*;
 
@@ -22,7 +23,10 @@ impl DynMockImpl {
         let mut total_calls = 0;
 
         for (pat_index, pattern) in self.call_patterns.iter().enumerate() {
-            total_calls += pattern.call_counter.verify(self.name, pat_index, errors).0;
+            total_calls += pattern
+                .call_counter
+                .verify(self.name, PatIndex(pat_index), errors)
+                .0;
         }
 
         if total_calls == 0 {

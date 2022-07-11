@@ -78,9 +78,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
 }
 
 #[test]
-#[should_panic(
-    expected = "SingleArg::method1(\"b\"): Explicit panic for call pattern (0): foobar!"
-)]
+#[should_panic(expected = "SingleArg::method1(\"b\"): Explicit panic for call pattern #0: foobar!")]
 fn should_panic_with_explicit_message() {
     mock([SingleArg__method1.stub(|each| {
         each.call(matching!(_)).panics("foobar!");

@@ -1,5 +1,4 @@
-use crate::call_pattern::DynCallPattern;
-use crate::call_pattern::Responder;
+use crate::call_pattern::{DynCallPattern, PatIndex, Responder};
 use crate::error;
 use crate::error::MockError;
 use crate::macro_api::Evaluation;
@@ -111,7 +110,7 @@ pub(crate) fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
 fn eval_responder<'u, 'i, F: MockFn + 'static>(
     state: &'u SharedState,
     inputs: &<F as MockInputs<'i>>::Inputs,
-) -> Result<Eval<(usize, &'u Responder<F>)>, MockError> {
+) -> Result<Eval<(PatIndex, &'u Responder<F>)>, MockError> {
     match eval_mock_op(state, DynMockFn::new::<F>())? {
         Eval::Continue(dyn_mock_impl) => match match_pattern::<F>(state, dyn_mock_impl, inputs)? {
             Some((pat_index, pattern)) => match select_responder_for_call(pattern)? {
@@ -156,7 +155,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
     state: &'u SharedState,
     mock_impl: &'u DynMockImpl,
     inputs: &<F as MockInputs<'i>>::Inputs,
-) -> Result<Option<(usize, &'u DynCallPattern)>, MockError> {
+) -> Result<Option<(PatIndex, &'u DynCallPattern)>, MockError> {
     match mock_impl.pattern_match_mode {
         PatternMatchMode::InOrder => {
             let MatchedInOrderCallPattern {
@@ -179,7 +178,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
         PatternMatchMode::InAnyOrder => {
             for (index, pattern) in mock_impl.call_patterns.iter().enumerate() {
                 if pattern.match_inputs::<F>(inputs)? {
-                    return Ok(Some((index, pattern)));
+                    return Ok(Some((PatIndex(index), pattern)));
                 }
             }
 
@@ -189,7 +188,7 @@ fn match_pattern<'u, 'i, F: MockFn>(
 }
 
 struct MatchedInOrderCallPattern<'u> {
-    pat_index: usize,
+    pat_index: PatIndex,
     pattern: &'u DynCallPattern,
     actual_call_order: error::CallOrder,
 }
@@ -227,7 +226,7 @@ fn try_select_in_order_call_pattern<'u>(
         })?;
 
     Ok(MatchedInOrderCallPattern {
-        pat_index,
+        pat_index: PatIndex(pat_index),
         pattern,
         actual_call_order: error::CallOrder(global_call_index),
     })

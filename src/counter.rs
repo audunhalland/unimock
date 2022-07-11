@@ -1,3 +1,4 @@
+use crate::call_pattern::PatIndex;
 use crate::error::MockError;
 
 use std::{fmt::Display, sync::atomic::AtomicUsize};
@@ -43,7 +44,7 @@ impl CallCounter {
     pub fn verify(
         &self,
         name: &'static str,
-        pat_index: usize,
+        pat_index: PatIndex,
         errors: &mut Vec<MockError>,
     ) -> NCalls {
         let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::SeqCst));
@@ -52,7 +53,7 @@ impl CallCounter {
             Exactness::Exact => {
                 if actual_calls.0 != self.minimum {
                     let expected = NCalls(self.minimum);
-                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match exactly {expected}, but it actually matched {actual_calls}.")));
+                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern {pat_index} to match exactly {expected}, but it actually matched {actual_calls}.")));
                 }
             }
             Exactness::AtLeast | Exactness::AtLeastPlusOne => {
@@ -64,7 +65,7 @@ impl CallCounter {
 
                 if actual_calls.0 < minimum {
                     let expected = NCalls(minimum);
-                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern #{pat_index} to match at least {expected}, but it actually matched {actual_calls}.")));
+                    errors.push(MockError::FailedVerification(format!("{name}: Expected call pattern {pat_index} to match at least {expected}, but it actually matched {actual_calls}.")));
                 }
             }
         };

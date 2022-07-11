@@ -1,5 +1,7 @@
+use crate::call_pattern::PatIndex;
+
 #[derive(Clone)]
-pub enum MockError {
+pub(crate) enum MockError {
     Downcast {
         name: &'static str,
     },
@@ -13,7 +15,7 @@ pub enum MockError {
     NoOutputAvailableForCallPattern {
         name: &'static str,
         inputs_debug: String,
-        pat_index: usize,
+        pat_index: PatIndex,
     },
     MockNeverCalled {
         name: &'static str,
@@ -28,22 +30,22 @@ pub enum MockError {
         name: &'static str,
         inputs_debug: String,
         actual_call_order: CallOrder,
-        pat_index: usize,
+        pat_index: PatIndex,
     },
     TypeMismatchExpectedOwnedInsteadOfBorrowed {
         name: &'static str,
         inputs_debug: String,
-        pat_index: usize,
+        pat_index: PatIndex,
     },
     CannotBorrowValueStatically {
         name: &'static str,
         inputs_debug: String,
-        pat_index: usize,
+        pat_index: PatIndex,
     },
     CannotBorrowValueProducedByClosure {
         name: &'static str,
         inputs_debug: String,
-        pat_index: usize,
+        pat_index: PatIndex,
     },
     FailedVerification(String),
     CannotUnmock {
@@ -52,7 +54,7 @@ pub enum MockError {
     ExplicitPanic {
         name: &'static str,
         inputs_debug: String,
-        pat_index: usize,
+        pat_index: PatIndex,
         msg: String,
     },
 }
@@ -74,7 +76,7 @@ impl MockError {
                 inputs_debug,
                 pat_index,
             } => {
-                format!("{name}{inputs_debug}: No output available for matching call pattern #{pat_index}.")
+                format!("{name}{inputs_debug}: No output available for matching call pattern {pat_index}.")
             }
             MockError::MockNeverCalled { name } => {
                 format!("Mock for {name} was never called. Dead mocks should be removed.")
@@ -94,28 +96,28 @@ impl MockError {
                 actual_call_order,
                 pat_index,
             } => {
-                format!("{name}{inputs_debug}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern #{pat_index}.")
+                format!("{name}{inputs_debug}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern {pat_index}.")
             }
             MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
                 name,
                 inputs_debug,
                 pat_index,
-            } => format!("{name}{inputs_debug}: Type mismatch: Expected an owned return value, but found a borrow for call pattern #{pat_index}. Try using Match::returns() or Match::answers()."),
+            } => format!("{name}{inputs_debug}: Type mismatch: Expected an owned return value, but found a borrow for call pattern {pat_index}. Try using Match::returns() or Match::answers()."),
             MockError::CannotBorrowValueStatically {
                 name,
                 inputs_debug,
                 pat_index,
-            } => format!("{name}{inputs_debug}: Cannot borrow output value statically for call pattern ({pat_index}). Consider using Match::returns_static()."),
+            } => format!("{name}{inputs_debug}: Cannot borrow output value statically for call pattern {pat_index}. Consider using Match::returns_static()."),
             MockError::CannotBorrowValueProducedByClosure {
                 name,
                 inputs_debug,
                 pat_index,
-            } => format!("{name}{inputs_debug}: Cannot borrow the value returned by the answering closure for pattern ({pat_index}). Consider using Match::returns_ref()."),
+            } => format!("{name}{inputs_debug}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. Consider using Match::returns_ref()."),
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")
             },
-            MockError::ExplicitPanic { name, inputs_debug, pat_index, msg } => format!("{name}{inputs_debug}: Explicit panic for call pattern ({pat_index}): {msg}")
+            MockError::ExplicitPanic { name, inputs_debug, pat_index, msg } => format!("{name}{inputs_debug}: Explicit panic for call pattern {pat_index}: {msg}")
         }
     }
 }

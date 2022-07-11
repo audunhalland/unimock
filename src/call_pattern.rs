@@ -4,6 +4,15 @@ use crate::*;
 use std::any::Any;
 use std::borrow::Borrow;
 
+#[derive(Clone, Copy)]
+pub(crate) struct PatIndex(pub usize);
+
+impl std::fmt::Display for PatIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
+
 pub(crate) struct DynCallPatternBuilder {
     pub call_counter: counter::CallCounter,
     pub match_and_respond: Box<dyn TypeErasedMatchAndRespond + Send + Sync + 'static>,

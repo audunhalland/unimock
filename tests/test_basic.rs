@@ -485,7 +485,7 @@ trait BorrowStatic {
 
 #[test]
 #[should_panic(
-    expected = "BorrowStatic::static_str(33): Cannot borrow output value statically for call pattern (0). Consider using Match::returns_static()."
+    expected = "BorrowStatic::static_str(33): Cannot borrow output value statically for call pattern #0. Consider using Match::returns_static()."
 )]
 fn borrow_static_should_not_work_with_returns_ref() {
     assert_eq!(
