@@ -586,7 +586,7 @@ pub trait MockInputs<'i> {
 /// // The method can be referred to via the following empty surrogate struct:
 /// struct ILoveToMock__method;
 ///
-/// /* impl MockFn for Mockable_method ... */
+/// /* impl MockFn for ILoveToMock__method ... */
 /// ```
 ///
 pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
