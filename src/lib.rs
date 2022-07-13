@@ -354,6 +354,7 @@ use std::sync::{Arc, Mutex};
 ///   The functions are assigned to the methods in the same order as the methods are listed in the trait.
 ///   A value of `_` means _no unmock support_ for that method.
 ///   See [Unmock](crate::Unmock) for more information.
+/// * `#[unimock(prefix=path)]`: Makes unimock use a different path prefix than `::unimock`, in case the crate has been re-exported through another crate.
 pub use unimock_macros::unimock;
 
 ///

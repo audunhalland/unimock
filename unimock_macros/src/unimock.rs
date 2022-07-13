@@ -3,6 +3,9 @@ use quote::quote;
 mod method;
 
 pub struct Cfg {
+    /// Unimock's prefix, e.g. `::unimock`
+    prefix: syn::Path,
+    /// Module to put the MockFn in
     module: Option<syn::Ident>,
     mock_fn_idents: Option<WithSpan<Vec<syn::Ident>>>,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
@@ -49,6 +52,7 @@ impl Cfg {
 
 impl syn::parse::Parse for Cfg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut prefix: Option<syn::Path> = None;
         let mut module = None;
         let mut mock_fn_idents = None;
         let mut unmocks = None;
@@ -75,6 +79,9 @@ impl syn::parse::Parse for Cfg {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
                 match keyword.to_string().as_str() {
+                    "prefix" => {
+                        prefix = Some(input.parse()?);
+                    }
                     "unmocked" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
@@ -99,6 +106,7 @@ impl syn::parse::Parse for Cfg {
         }
 
         Ok(Self {
+            prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
             module,
             unmocks,
             mock_fn_idents,
@@ -180,6 +188,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
     let methods = method::extract_methods(&item_trait, &cfg)?;
     cfg.validate(&methods)?;
 
+    let prefix = &cfg.prefix;
     let trait_ident = &item_trait.ident;
     let impl_attributes = item_trait
         .attrs
@@ -238,7 +247,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
         #(#mock_fn_impls)*
 
         #(#impl_attributes)*
-        impl #trait_ident for ::unimock::Unimock {
+        impl #trait_ident for #prefix::Unimock {
             #(#associated_futures)*
             #(#method_impls)*
         }
@@ -256,6 +265,7 @@ fn def_mock_fn(
     item_trait: &syn::ItemTrait,
     cfg: &Cfg,
 ) -> MockFnDef {
+    let prefix = &cfg.prefix;
     let mock_fn_ident = &method.mock_fn_ident;
     let mock_fn_path = method.mock_fn_path(cfg);
     let mock_fn_name = &method.mock_fn_name;
@@ -286,7 +296,7 @@ fn def_mock_fn(
 
     let unmock_impl = cfg.get_unmock_fn(index).map(|_| {
         quote! {
-            impl ::unimock::Unmock for #mock_fn_path {}
+            impl #prefix::Unmock for #mock_fn_path {}
         }
     });
 
@@ -307,17 +317,17 @@ fn def_mock_fn(
             #mock_visibility struct #mock_fn_ident;
         },
         impls: quote! {
-            impl<#input_lifetime> ::unimock::MockInputs<#input_lifetime> for #mock_fn_path {
+            impl<#input_lifetime> #prefix::MockInputs<#input_lifetime> for #mock_fn_path {
                 type Inputs = (#(#inputs_tuple),*);
             }
 
-            impl ::unimock::MockFn for #mock_fn_path {
+            impl #prefix::MockFn for #mock_fn_path {
                 type Output = #output;
                 const NAME: &'static str = #mock_fn_name;
 
-                fn debug_inputs<'i>((#(#inputs_destructuring),*): &<Self as ::unimock::MockInputs<'i>>::Inputs) -> String {
-                    use ::unimock::macro_api::{ProperDebug, NoDebug};
-                    ::unimock::macro_api::format_inputs(&[#(#inputs_try_debug_exprs),*])
+                fn debug_inputs<'i>((#(#inputs_destructuring),*): &<Self as #prefix::MockInputs<'i>>::Inputs) -> String {
+                    use #prefix::macro_api::{ProperDebug, NoDebug};
+                    #prefix::macro_api::format_inputs(&[#(#inputs_try_debug_exprs),*])
                 }
             }
 
@@ -353,6 +363,7 @@ fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
 }
 
 fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_macro2::TokenStream {
+    let prefix = &cfg.prefix;
     let method_sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(cfg);
 
@@ -392,8 +403,8 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
 
         quote! {
             match self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)) {
-                ::unimock::macro_api::Evaluation::Evaluated(output) => output,
-                ::unimock::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
+                #prefix::macro_api::Evaluation::Evaluated(output) => output,
+                #prefix::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
             }
         }
     } else {
