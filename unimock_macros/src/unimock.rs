@@ -197,7 +197,7 @@ pub fn generate(cfg: Cfg, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2
             syn::AttrStyle::Outer => {
                 if let Some(last_segment) = attribute.path.segments.last() {
                     if last_segment.ident == "async_trait" {
-                        Some(quote! { #[async_trait::async_trait ]})
+                        Some(quote! { #attribute })
                     } else {
                         None
                     }
