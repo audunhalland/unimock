@@ -180,8 +180,18 @@
 //!
 //! With exact quantification in place, we can produce output sequences by chaining output definitions:
 //!
-//! ```no_compile
+//! ```rust
+//! # use unimock::*;
+//! # #[unimock]
+//! # trait Hidden { fn hidden(&self, arg: i32) -> i32; }
+//! # let deps = mock([
+//! # Hidden__hidden.stub(|each| {
 //! each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
+//! # })
+//! # ]);
+//! # assert_eq!(1, deps.hidden(42));
+//! # assert_eq!(1, deps.hidden(42));
+//! # assert_eq!(2, deps.hidden(42));
 //! ```
 //!
 //! The output sequence will be `[1, 1, 2, 2, 2, ..]`.
@@ -192,11 +202,20 @@
 //! Exact call sequences may be expressed using _strictly ordered clauses_.
 //! Use [`next_call`](MockFn::next_call) to define a call pattern, and [`in_order`](build::QuantifiedResponse::in_order) to make it into a clause.
 //!
-//! ```no_compile
+//! ```rust
+//! # use unimock::*;
+//! # #[unimock]
+//! # trait Foo { fn foo(&self, arg: i32) -> i32; }
+//! # #[unimock]
+//! # trait Bar { fn bar(&self, arg: i32) -> i32; }
+//! # let deps =
 //! mock([
-//!     Foo_foo.next_call(matching!(3)).returns(5).once().in_order(),
-//!     Bar_bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
+//!     Foo__foo.next_call(matching!(3)).returns(5).once().in_order(),
+//!     Bar__bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
 //! ]);
+//! # assert_eq!(5, deps.foo(3));
+//! # assert_eq!(7, deps.bar(8));
+//! # assert_eq!(7, deps.bar(8));
 //! ```
 //!
 //! Order-sensitive clauses and order-insensitive clauses (like [`stub`](MockFn::stub)) do not interfere with each other.
