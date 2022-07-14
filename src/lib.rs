@@ -466,59 +466,6 @@ struct SharedState {
 }
 
 impl Unimock {
-    /// Evaluate a [MockFn] given some inputs, to produce its output.
-    pub fn eval<'i, F>(
-        &self,
-        inputs: <F as MockInputs<'i>>::Inputs,
-    ) -> macro_api::Evaluation<'i, F::Output, F>
-    where
-        F: MockFn + 'static,
-        F::Output: Sized,
-    {
-        self.handle_error(eval::EvalCtx::new::<F>(&self.shared_state).eval_sized(inputs))
-    }
-
-    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
-    pub fn eval_borrowed<'u, 'i, F>(
-        &'u self,
-        inputs: <F as MockInputs<'i>>::Inputs,
-    ) -> macro_api::Evaluation<'i, &'u F::Output, F>
-    where
-        F: MockFn + 'static,
-    {
-        self.handle_error(
-            eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_self_borrowed(inputs),
-        )
-    }
-
-    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from a parameter that is not self.
-    pub fn eval_borrowed_param<'u, 'i, F>(
-        &'u self,
-        inputs: <F as MockInputs<'i>>::Inputs,
-    ) -> macro_api::Evaluation<'i, &'i F::Output, F>
-    where
-        F: MockFn + 'static,
-    {
-        self.handle_error(
-            eval::EvalCtx::new::<F>(&self.shared_state)
-                .eval_unsized_static_ref(inputs, error::Lender::Param),
-        )
-    }
-
-    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
-    pub fn eval_static_ref<'i, F>(
-        &self,
-        inputs: <F as MockInputs<'i>>::Inputs,
-    ) -> macro_api::Evaluation<'i, &'static F::Output, F>
-    where
-        F: MockFn + 'static,
-    {
-        self.handle_error(
-            eval::EvalCtx::new::<F>(&self.shared_state)
-                .eval_unsized_static_ref(inputs, error::Lender::Static),
-        )
-    }
-
     fn handle_error<T>(&self, result: Result<T, error::MockError>) -> T {
         match result {
             Ok(value) => value,

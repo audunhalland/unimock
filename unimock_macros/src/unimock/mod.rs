@@ -223,14 +223,15 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
         };
 
         quote! {
-            match self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)) {
-                #prefix::macro_api::Evaluation::Evaluated(output) => output,
-                #prefix::macro_api::Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
+            use #prefix::macro_api::*;
+            match #eval_fn::<#mock_fn_path>(self, (#(#inputs_destructuring),*)) {
+                Evaluation::Evaluated(output) => output,
+                Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            self.#eval_fn::<#mock_fn_path>((#(#inputs_destructuring),*)).unwrap(self)
+            #prefix::macro_api::#eval_fn::<#mock_fn_path>(self, (#(#inputs_destructuring),*)).unwrap(self)
         }
     };
 

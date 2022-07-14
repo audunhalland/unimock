@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Changed
+- Moved eval methods from Unimock into macro_api. Technically breaking, but these APIs were never supposed to be used directly in applications.
+  It will be clearer that these are internal implementation details when part of macro_api rather than public methods on Unimock.
 
 ## [0.3.10] - 2022-07-15
 ### Added
