@@ -515,3 +515,13 @@ fn borrow_static_should_work_with_returns_static() {
         .static_str(33)
     );
 }
+
+mod async_argument_borrowing {
+    use super::*;
+
+    #[unimock]
+    #[async_trait]
+    trait BorrowArg {
+        async fn borrow_arg<'a, 's: 'a>(&'s self, arg: &'a i32) -> &'a i32;
+    }
+}

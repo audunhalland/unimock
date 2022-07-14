@@ -463,7 +463,7 @@ impl Unimock {
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
-    pub fn eval_borrowed<'u, 'i, F>(
+    pub fn eval_borrowed<'i, 'u: 'i, F>(
         &'u self,
         inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, &'u F::Output, F>
