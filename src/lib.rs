@@ -463,7 +463,7 @@ impl Unimock {
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
-    pub fn eval_borrowed<'i, 'u: 'i, F>(
+    pub fn eval_borrowed<'u, 'i, F>(
         &'u self,
         inputs: <F as MockInputs<'i>>::Inputs,
     ) -> macro_api::Evaluation<'i, &'u F::Output, F>
@@ -474,6 +474,23 @@ impl Unimock {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
+    }
+
+    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from an argument that is not self.
+    pub fn eval_borrowed_param<'u, 'i, F>(
+        &'u self,
+        inputs: <F as MockInputs<'i>>::Inputs,
+    ) -> macro_api::Evaluation<'i, &'i F::Output, F>
+    where
+        F: MockFn + 'static,
+    {
+        panic!()
+        /*
+        match eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_self_borrowed(inputs) {
+            Ok(eval) => eval,
+            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
+        }
+        */
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.

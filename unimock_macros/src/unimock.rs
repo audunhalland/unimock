@@ -376,6 +376,7 @@ fn def_method_impl(index: usize, method: &method::Method, cfg: &Cfg) -> proc_mac
     let eval_fn = match method.output_structure.ownership {
         method::OutputOwnership::Owned => quote::format_ident!("eval"),
         method::OutputOwnership::SelfReference => quote::format_ident!("eval_borrowed"),
+        method::OutputOwnership::ParamReference => quote::format_ident!("eval_borrowed_param"),
         method::OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
     };
 

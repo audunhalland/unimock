@@ -521,7 +521,7 @@ mod async_argument_borrowing {
 
     #[unimock]
     #[async_trait]
-    trait BorrowArg {
-        async fn borrow_arg<'a, 's: 'a>(&'s self, arg: &'a i32) -> &'a i32;
+    trait BorrowParam {
+        async fn borrow_param<'a>(&self, arg: &'a i32) -> &'a i32;
     }
 }

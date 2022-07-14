@@ -24,6 +24,7 @@ pub enum OutputWrapping<'t> {
 pub enum OutputOwnership {
     Owned,
     SelfReference,
+    ParamReference,
     StaticReference,
 }
 
@@ -128,7 +129,9 @@ pub fn extract_methods<'s>(
                     ownership: OutputOwnership::Owned,
                     ty: None,
                 },
-                syn::ReturnType::Type(_, ty) => determine_output_structure(ty, item_trait),
+                syn::ReturnType::Type(_, ty) => {
+                    determine_output_structure(item_trait, &method.sig, ty)
+                }
             };
 
             Ok(Method {
@@ -142,13 +145,14 @@ pub fn extract_methods<'s>(
 }
 
 fn determine_output_structure<'t>(
-    ty: &'t syn::Type,
     item_trait: &'t syn::ItemTrait,
+    sig: &'t syn::Signature,
+    ty: &'t syn::Type,
 ) -> OutputStructure<'t> {
     match ty {
         syn::Type::Reference(type_reference) => OutputStructure {
             wrapping: OutputWrapping::None,
-            ownership: determine_reference_ownership(type_reference),
+            ownership: determine_reference_ownership(sig, type_reference),
             ty: Some(&type_reference.elem),
         },
         syn::Type::Path(path)
@@ -156,13 +160,13 @@ fn determine_output_structure<'t>(
                 && is_self_segment(path.path.segments.first())
                 && (path.path.segments.len() == 2) =>
         {
-            determine_associated_future_structure(&path.path, item_trait).unwrap_or_else(|| {
-                OutputStructure {
+            determine_associated_future_structure(item_trait, sig, &path.path).unwrap_or_else(
+                || OutputStructure {
                     wrapping: OutputWrapping::None,
                     ownership: OutputOwnership::Owned,
                     ty: Some(ty),
-                }
-            })
+                },
+            )
         }
         _ => OutputStructure {
             wrapping: OutputWrapping::None,
@@ -180,8 +184,9 @@ fn is_self_segment(segment: Option<&syn::PathSegment>) -> bool {
 }
 
 fn determine_associated_future_structure<'t>(
-    path: &'t syn::Path,
     item_trait: &'t syn::ItemTrait,
+    sig: &'t syn::Signature,
+    path: &'t syn::Path,
 ) -> Option<OutputStructure<'t>> {
     let assoc_ident = &path.segments[1].ident;
 
@@ -238,21 +243,57 @@ fn determine_associated_future_structure<'t>(
         })
         .next()?;
 
-    let mut future_output_structure = determine_output_structure(&output_binding.ty, item_trait);
+    let mut future_output_structure =
+        determine_output_structure(item_trait, sig, &output_binding.ty);
     future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty);
 
     Some(future_output_structure)
 }
 
-fn determine_reference_ownership(type_reference: &syn::TypeReference) -> OutputOwnership {
+fn determine_reference_ownership(
+    sig: &syn::Signature,
+    type_reference: &syn::TypeReference,
+) -> OutputOwnership {
     if let Some(lifetime) = type_reference.lifetime.as_ref() {
         match lifetime.ident.to_string().as_ref() {
             "static" => OutputOwnership::StaticReference,
-            _ => OutputOwnership::SelfReference,
+            _ => match find_param_lifetime(sig, &lifetime.ident) {
+                Some(index) => match index {
+                    0 => OutputOwnership::SelfReference,
+                    _ => OutputOwnership::ParamReference,
+                },
+                None => OutputOwnership::SelfReference,
+            },
         }
     } else {
         OutputOwnership::SelfReference
     }
+}
+
+fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Option<usize> {
+    for (index, fn_arg) in sig.inputs.iter().enumerate() {
+        match fn_arg {
+            syn::FnArg::Receiver(receiver) => {
+                if let Some((_, Some(lifetime))) = &receiver.reference {
+                    if lifetime.ident == *lifetime_ident {
+                        return Some(index);
+                    }
+                }
+            }
+            syn::FnArg::Typed(pat_type) => match pat_type.ty.as_ref() {
+                syn::Type::Reference(reference) => {
+                    if let Some(lifetime) = &reference.lifetime {
+                        if lifetime.ident == *lifetime_ident {
+                            return Some(index);
+                        }
+                    }
+                }
+                _ => {}
+            },
+        }
+    }
+
+    None
 }
 
 fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::TokenStream {
