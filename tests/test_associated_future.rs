@@ -63,7 +63,7 @@ mod reference_argument_works_with_explicit_lifetime {
 
     struct Error;
 
-    #[unimock(debug = true)]
+    #[unimock]
     trait GetUsername {
         type Fut<'entrait, 'i1>: ::core::future::Future<Output = Result<String, Error>> + Send
         where
