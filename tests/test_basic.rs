@@ -563,42 +563,24 @@ mod lifetime_constrained_output_type {
     struct Borrowing2<'a, 'b>(&'a str, &'b str);
 
     #[unimock]
-    trait BorrowSyncElided {
+    trait BorrowSync {
         fn borrow_sync_elided(&self) -> Borrowing1<'_>;
-    }
-
-    #[unimock]
-    trait BorrowSyncExplicit {
         fn borrow_sync_explicit<'a>(&'a self) -> Borrowing1<'a>;
-    }
-
-    #[unimock]
-    trait BorrowSyncExplicit2 {
         fn borrow_sync_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
     }
 
     #[unimock]
     #[async_trait]
-    trait BorrowAsyncElided {
+    trait BorrowAsync {
         async fn borrow_async_elided(&self) -> Borrowing1<'_>;
-    }
-
-    #[unimock]
-    #[async_trait]
-    trait BorrowAsyncExplicit {
         async fn borrow_async_explicit<'a>(&'a self) -> Borrowing1<'a>;
-    }
-
-    #[unimock]
-    #[async_trait]
-    trait BorrowAsyncExplicit2 {
         async fn borrow_async_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
     }
 
     #[test]
     fn test_borrow() {
         let deps = mock(Some(
-            BorrowSyncExplicit2__borrow_sync_explicit2
+            BorrowSync__borrow_sync_explicit2
                 .each_call(matching!("foobar"))
                 .returns(Borrowing2("a", "b"))
                 .in_any_order(),
