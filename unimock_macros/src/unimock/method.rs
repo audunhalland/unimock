@@ -1,7 +1,8 @@
 use quote::quote;
 use syn::spanned::Spanned;
 
-use super::Cfg;
+use super::doc;
+use super::Attr;
 
 pub struct Method<'t> {
     pub method: &'t syn::TraitItemMethod,
@@ -29,9 +30,9 @@ pub enum OutputOwnership {
 }
 
 impl<'s> Method<'s> {
-    pub fn mock_fn_path(&self, cfg: &Cfg) -> proc_macro2::TokenStream {
+    pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
-        if let Some(module) = &cfg.module {
+        if let Some(module) = &attr.module {
             quote! { #module::#mock_fn_ident }
         } else {
             quote! { #mock_fn_ident }
@@ -77,8 +78,7 @@ impl<'s> Method<'s> {
         trait_ident: &syn::Ident,
         unmock_impl: &Option<proc_macro2::TokenStream>,
     ) -> Vec<proc_macro2::TokenStream> {
-        let sig_string =
-            crate::doc::signature_documentation(&self.method.sig, crate::doc::SkipReceiver(true));
+        let sig_string = doc::signature_documentation(&self.method.sig, doc::SkipReceiver(true));
         let mut doc_string = format!("MockFn for `{trait_ident}::{sig_string}`.");
 
         if unmock_impl.is_some() {
@@ -95,7 +95,7 @@ impl<'s> Method<'s> {
 
 pub fn extract_methods<'s>(
     item_trait: &'s syn::ItemTrait,
-    cfg: &Cfg,
+    attr: &Attr,
 ) -> syn::Result<Vec<Method<'s>>> {
     item_trait
         .items
@@ -111,13 +111,13 @@ pub fn extract_methods<'s>(
                 item_trait.ident.span(),
             );
 
-            let mock_fn_ident_method_part = cfg
+            let mock_fn_ident_method_part = attr
                 .mock_fn_idents
                 .as_ref()
                 .and_then(|idents| idents.0.get(index))
                 .unwrap_or(&method.sig.ident);
 
-            let mock_fn_ident = if cfg.module.is_some() {
+            let mock_fn_ident = if attr.module.is_some() {
                 mock_fn_ident_method_part.clone()
             } else {
                 quote::format_ident!("{}__{}", item_trait.ident, mock_fn_ident_method_part)

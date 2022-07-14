@@ -2,7 +2,6 @@
 
 #![forbid(unsafe_code)]
 
-mod doc;
 mod matching;
 mod unimock;
 
@@ -13,7 +12,7 @@ pub fn unimock(
     attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    let attrs = syn::parse_macro_input!(attr as unimock::Cfg);
+    let attrs = syn::parse_macro_input!(attr as unimock::Attr);
     let item_trait = syn::parse_macro_input!(input as syn::ItemTrait);
 
     let debug = attrs.debug;
