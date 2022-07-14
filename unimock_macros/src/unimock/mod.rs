@@ -131,8 +131,7 @@ fn def_mock_fn(
         None => quote! { () },
     };
 
-    let inputs_destructuring = method.inputs_destructuring();
-    let inputs_try_debug_exprs = method.inputs_try_debug_exprs();
+    let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
     MockFnDef {
         struct_def: quote! {
@@ -149,10 +148,7 @@ fn def_mock_fn(
                 type Output = #output;
                 const NAME: &'static str = #mock_fn_name;
 
-                fn debug_inputs<'i>((#(#inputs_destructuring),*): &<Self as #prefix::MockInputs<'i>>::Inputs) -> String {
-                    use #prefix::macro_api::{ProperDebug, NoDebug};
-                    #prefix::macro_api::format_inputs(&[#(#inputs_try_debug_exprs),*])
-                }
+                #debug_inputs_fn
             }
 
             #unmock_impl

@@ -56,6 +56,34 @@ impl<'s> Method<'s> {
             })
     }
 
+    pub fn generate_debug_inputs_fn(&self, attr: &Attr) -> proc_macro2::TokenStream {
+        let prefix = &attr.prefix;
+        let first_param = self.method.sig.inputs.iter().find(|fn_arg| match fn_arg {
+            syn::FnArg::Typed(_) => true,
+            _ => false,
+        });
+
+        let body = if first_param.is_some() {
+            let inputs_try_debug_exprs = self.inputs_try_debug_exprs();
+            quote! {
+                use #prefix::macro_api::{ProperDebug, NoDebug};
+                #prefix::macro_api::format_inputs(&[#(#inputs_try_debug_exprs),*])
+            }
+        } else {
+            quote! {
+                #prefix::macro_api::format_inputs(&[])
+            }
+        };
+
+        let inputs_destructuring = self.inputs_destructuring();
+
+        quote! {
+            fn debug_inputs<'i>((#(#inputs_destructuring),*): &<Self as #prefix::MockInputs<'i>>::Inputs) -> String {
+                #body
+            }
+        }
+    }
+
     pub fn inputs_try_debug_exprs(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
         self.method
             .sig
