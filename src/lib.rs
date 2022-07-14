@@ -456,10 +456,7 @@ impl Unimock {
         F: MockFn + 'static,
         F::Output: Sized,
     {
-        match eval::EvalCtx::new::<F>(&self.shared_state).eval_sized(inputs) {
-            Ok(eval) => eval,
-            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
-        }
+        self.handle_error(eval::EvalCtx::new::<F>(&self.shared_state).eval_sized(inputs))
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
@@ -470,10 +467,9 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_self_borrowed(inputs) {
-            Ok(eval) => eval,
-            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
-        }
+        self.handle_error(
+            eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_self_borrowed(inputs),
+        )
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from a parameter that is not self.
@@ -484,12 +480,10 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::EvalCtx::new::<F>(&self.shared_state)
-            .eval_unsized_static_ref(inputs, error::Lender::Param)
-        {
-            Ok(eval) => eval,
-            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
-        }
+        self.handle_error(
+            eval::EvalCtx::new::<F>(&self.shared_state)
+                .eval_unsized_static_ref(inputs, error::Lender::Param),
+        )
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
@@ -500,11 +494,16 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::EvalCtx::new::<F>(&self.shared_state)
-            .eval_unsized_static_ref(inputs, error::Lender::Static)
-        {
-            Ok(eval) => eval,
-            Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
+        self.handle_error(
+            eval::EvalCtx::new::<F>(&self.shared_state)
+                .eval_unsized_static_ref(inputs, error::Lender::Static),
+        )
+    }
+
+    fn handle_error<T>(&self, result: Result<T, error::MockError>) -> T {
+        match result {
+            Ok(value) => value,
+            Err(error) => panic!("{}", self.prepare_panic(error)),
         }
     }
 
