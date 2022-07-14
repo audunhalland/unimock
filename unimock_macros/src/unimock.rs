@@ -10,6 +10,7 @@ pub struct Cfg {
     mock_fn_idents: Option<WithSpan<Vec<syn::Ident>>>,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
     input_lifetime: syn::Lifetime,
+    pub debug: bool,
 }
 
 struct WithSpan<T>(T, proc_macro2::Span);
@@ -56,6 +57,7 @@ impl syn::parse::Parse for Cfg {
         let mut module = None;
         let mut mock_fn_idents = None;
         let mut unmocks = None;
+        let mut debug = false;
 
         while !input.is_empty() {
             if input.peek(syn::token::Mod) {
@@ -94,6 +96,9 @@ impl syn::parse::Parse for Cfg {
                         }
                         unmocks = Some(WithSpan(unmocked, content.span()));
                     }
+                    "debug" => {
+                        debug = input.parse::<syn::LitBool>()?.value;
+                    }
                     _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
                 };
             }
@@ -111,6 +116,7 @@ impl syn::parse::Parse for Cfg {
             unmocks,
             mock_fn_idents,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
+            debug,
         })
     }
 }

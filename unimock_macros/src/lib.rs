@@ -16,12 +16,16 @@ pub fn unimock(
     let attrs = syn::parse_macro_input!(attr as unimock::Cfg);
     let item_trait = syn::parse_macro_input!(input as syn::ItemTrait);
 
+    let debug = attrs.debug;
+
     let output = match unimock::generate(attrs, item_trait) {
         Ok(stream) => stream,
         Err(err) => err.to_compile_error(),
     };
 
-    // println!("{output}");
+    if debug {
+        println!("{output}");
+    }
 
     proc_macro::TokenStream::from(output)
 }
