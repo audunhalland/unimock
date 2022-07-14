@@ -13,7 +13,7 @@ pub struct Method<'t> {
 pub struct OutputStructure<'t> {
     pub wrapping: OutputWrapping<'t>,
     pub ownership: OutputOwnership,
-    pub ty: Option<&'t syn::Type>,
+    pub ty: Option<syn::Type>,
 }
 
 pub enum OutputWrapping<'t> {
@@ -153,7 +153,7 @@ fn determine_output_structure<'t>(
         syn::Type::Reference(type_reference) => OutputStructure {
             wrapping: OutputWrapping::None,
             ownership: determine_reference_ownership(sig, type_reference),
-            ty: Some(&type_reference.elem),
+            ty: Some(make_lifetimes_params_static(*type_reference.elem.clone())),
         },
         syn::Type::Path(path)
             if path.qself.is_none()
@@ -164,14 +164,14 @@ fn determine_output_structure<'t>(
                 || OutputStructure {
                     wrapping: OutputWrapping::None,
                     ownership: OutputOwnership::Owned,
-                    ty: Some(ty),
+                    ty: Some(make_lifetimes_params_static(ty.clone())),
                 },
             )
         }
         _ => OutputStructure {
             wrapping: OutputWrapping::None,
             ownership: OutputOwnership::Owned,
-            ty: Some(ty),
+            ty: Some(make_lifetimes_params_static(ty.clone())),
         },
     }
 }
@@ -319,4 +319,30 @@ fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::Tok
             #ident.unimock_try_debug()
         }
     }
+}
+
+fn make_lifetimes_params_static(mut ty: syn::Type) -> syn::Type {
+    match &mut ty {
+        syn::Type::Path(type_path) => {
+            for segment in type_path.path.segments.iter_mut() {
+                match &mut segment.arguments {
+                    syn::PathArguments::AngleBracketed(generic_arguments) => {
+                        for arg in generic_arguments.args.iter_mut() {
+                            match arg {
+                                syn::GenericArgument::Lifetime(lifetime) => {
+                                    lifetime.ident =
+                                        syn::Ident::new("static", proc_macro2::Span::call_site());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+
+    ty
 }

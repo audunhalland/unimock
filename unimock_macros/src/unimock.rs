@@ -308,7 +308,7 @@ fn def_mock_fn(
 
     let doc_attrs = method.mockfn_doc_attrs(&item_trait.ident, &unmock_impl);
 
-    let output = match method.output_structure.ty {
+    let output = match &method.output_structure.ty {
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
