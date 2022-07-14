@@ -1,6 +1,6 @@
 [package]
 name = "unimock"
-version = "0.3.9"
+version = "0.3.10"
 authors = ["Audun Halland <audun.halland@pm.me>"]
 edition = "2021"
 license = "MIT"
@@ -16,7 +16,7 @@ default = []
 nightly-tests = []
 
 [dependencies]
-unimock_macros = { path = "unimock_macros", version = "0.3.5" }
+unimock_macros = { path = "unimock_macros", version = "0.3.6" }
 
 [dev-dependencies]
 async-trait = "0.1"
