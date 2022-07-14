@@ -15,6 +15,24 @@ impl std::fmt::Display for FnCall {
 }
 
 #[derive(Clone)]
+pub(crate) enum Lender {
+    Unimock,
+    Param,
+    Static,
+}
+
+impl Lender {
+    fn suggest(&self) -> &'static str {
+        match self {
+            Self::Unimock => "Consider using Match::returns_ref().",
+            Self::Param | Self::Static => {
+                "Consider using Match::returns_static() or Match::answers_leaked_ref()."
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) enum MockError {
     Downcast {
         name: &'static str,
@@ -46,13 +64,15 @@ pub(crate) enum MockError {
         fn_call: FnCall,
         pat_index: PatIndex,
     },
-    CannotBorrowValueStatically {
-        fn_call: FnCall,
-        pat_index: PatIndex,
-    },
     CannotBorrowValueProducedByClosure {
         fn_call: FnCall,
         pat_index: PatIndex,
+        lender: Lender,
+    },
+    CannotBorrowInvalidLifetime {
+        fn_call: FnCall,
+        pat_index: PatIndex,
+        lender: Lender,
     },
     FailedVerification(String),
     CannotUnmock {
@@ -105,14 +125,20 @@ impl MockError {
                 fn_call,
                 pat_index,
             } => format!("{fn_call}: Type mismatch: Expected an owned return value, but found a borrow for call pattern {pat_index}. Try using Match::returns() or Match::answers()."),
-            MockError::CannotBorrowValueStatically {
-                fn_call,
-                pat_index,
-            } => format!("{fn_call}: Cannot borrow output value statically for call pattern {pat_index}. Consider using Match::returns_static()."),
             MockError::CannotBorrowValueProducedByClosure {
                 fn_call,
                 pat_index,
-            } => format!("{fn_call}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. Consider using Match::returns_ref()."),
+                lender,
+            } => format!("{fn_call}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. {}", lender.suggest()),
+            MockError::CannotBorrowInvalidLifetime {
+                fn_call,
+                pat_index,
+                lender,
+            } => match lender {
+                Lender::Unimock => format!("{fn_call}: Cannot borrow output value from unimock for call pattern {pat_index}. {}", lender.suggest()),
+                Lender::Param =>format!("{fn_call}: Cannot borrow output value from a parameter for call pattern {pat_index}. {}", lender.suggest()),
+                Lender::Static => format!("{fn_call}: Cannot borrow output value statically for call pattern {pat_index}. {}", lender.suggest()),
+            },
             MockError::FailedVerification(message) => message.clone(),
             MockError::CannotUnmock { name } => {
                 format!("{name} cannot be unmocked as there is no function available to call.")

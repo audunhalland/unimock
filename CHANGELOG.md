@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Fixed
-- Ability to return a borrowed argument from async fn, as long as that argument outlives self.
+- Ability to return references borrowed from arguments instead of self.
 
 ## [0.3.8] - 2022-07-13
 ### Fixed

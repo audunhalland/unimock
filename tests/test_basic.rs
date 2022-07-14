@@ -485,7 +485,7 @@ trait BorrowStatic {
 
 #[test]
 #[should_panic(
-    expected = "BorrowStatic::static_str(33): Cannot borrow output value statically for call pattern #0. Consider using Match::returns_static()."
+    expected = "BorrowStatic::static_str(33): Cannot borrow output value statically for call pattern #0. Consider using Match::returns_static() or Match::answers_leaked_ref()."
 )]
 fn borrow_static_should_not_work_with_returns_ref() {
     assert_eq!(
@@ -522,6 +522,33 @@ mod async_argument_borrowing {
     #[unimock]
     #[async_trait]
     trait BorrowParam {
-        async fn borrow_param<'a>(&self, arg: &'a i32) -> &'a i32;
+        async fn borrow_param<'a>(&self, arg: &'a str) -> &'a str;
+    }
+
+    #[tokio::test]
+    async fn test_argument_borrowing() {
+        let unimock = mock(Some(
+            BorrowParam__borrow_param
+                .each_call(matching!(_))
+                .returns_static("foobar")
+                .in_any_order(),
+        ));
+
+        assert_eq!("foobar", unimock.borrow_param("input").await);
+    }
+
+    #[tokio::test]
+    #[should_panic(
+        expected = "BorrowParam::borrow_param(\"input\"): Cannot borrow output value from a parameter for call pattern #0. Consider using Match::returns_static() or Match::answers_leaked_ref()."
+    )]
+    async fn test_argument_borrowing_error() {
+        let unimock = mock(Some(
+            BorrowParam__borrow_param
+                .each_call(matching!(_))
+                .returns_ref("foobar")
+                .in_any_order(),
+        ));
+
+        unimock.borrow_param("input").await;
     }
 }

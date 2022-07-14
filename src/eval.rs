@@ -1,6 +1,6 @@
 use crate::call_pattern::{CallPattern, DynResponder, PatIndex};
 use crate::error;
-use crate::error::{MockError, MockResult};
+use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::Evaluation;
 use crate::{DynMockFn, SharedState};
@@ -83,6 +83,7 @@ impl<'u> EvalCtx<'u> {
     pub fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
         self,
         inputs: <F as MockInputs<'i>>::Inputs,
+        lender: Lender,
     ) -> MockResult<Evaluation<'i, &'static F::Output, F>> {
         let input_debugger = &|| F::debug_inputs(&inputs);
         let ctx = self.into_dyn_ctx(input_debugger);
@@ -93,7 +94,7 @@ impl<'u> EvalCtx<'u> {
                     Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
                 }
                 DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
-                responder => Err(ctx.unsized_static_ref_error(pat_index, responder)),
+                responder => Err(ctx.unsized_static_borrow_error(pat_index, responder, lender)),
             },
             Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
         }
@@ -144,37 +145,49 @@ impl<'u, 's> DynCtx<'u, 's> {
             DynResponder::Closure(_) => MockError::CannotBorrowValueProducedByClosure {
                 fn_call: self.fn_call(),
                 pat_index,
+                lender: Lender::Unimock,
             },
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
                 fn_call: self.fn_call(),
                 pat_index,
                 msg: msg.clone(),
             },
-            _ => panic!("Responder error not handled"),
+            DynResponder::Unmock
+            | DynResponder::Borrowable(_)
+            | DynResponder::StaticRefClosure(_)
+            | DynResponder::Value(_) => panic!("not an error"),
         }
     }
 
     #[inline(never)]
-    fn unsized_static_ref_error(&self, pat_index: PatIndex, responder: &DynResponder) -> MockError {
+    fn unsized_static_borrow_error(
+        &self,
+        pat_index: PatIndex,
+        responder: &DynResponder,
+        lender: Lender,
+    ) -> MockError {
         match responder {
-            DynResponder::Value(_) => MockError::CannotBorrowValueStatically {
+            DynResponder::Value(_) => MockError::CannotBorrowInvalidLifetime {
                 fn_call: self.fn_call(),
                 pat_index,
+                lender,
             },
             DynResponder::Closure(_) => MockError::CannotBorrowValueProducedByClosure {
                 fn_call: self.fn_call(),
                 pat_index,
+                lender,
             },
-            DynResponder::Borrowable(_) => MockError::CannotBorrowValueStatically {
+            DynResponder::Borrowable(_) => MockError::CannotBorrowInvalidLifetime {
                 fn_call: self.fn_call(),
                 pat_index,
+                lender,
             },
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
                 fn_call: self.fn_call(),
                 pat_index,
                 msg: msg.clone(),
             },
-            _ => panic!("Responder error not handled"),
+            DynResponder::StaticRefClosure(_) | DynResponder::Unmock => panic!("not an error"),
         }
     }
 

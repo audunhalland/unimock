@@ -476,7 +476,7 @@ impl Unimock {
         }
     }
 
-    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from an argument that is not self.
+    /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from a parameter that is not self.
     pub fn eval_borrowed_param<'u, 'i, F>(
         &'u self,
         inputs: <F as MockInputs<'i>>::Inputs,
@@ -484,13 +484,12 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        panic!()
-        /*
-        match eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_self_borrowed(inputs) {
+        match eval::EvalCtx::new::<F>(&self.shared_state)
+            .eval_unsized_static_ref(inputs, error::Lender::Param)
+        {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
-        */
     }
 
     /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
@@ -501,7 +500,9 @@ impl Unimock {
     where
         F: MockFn + 'static,
     {
-        match eval::EvalCtx::new::<F>(&self.shared_state).eval_unsized_static_ref(inputs) {
+        match eval::EvalCtx::new::<F>(&self.shared_state)
+            .eval_unsized_static_ref(inputs, error::Lender::Static)
+        {
             Ok(eval) => eval,
             Err(mock_error) => panic!("{}", self.prepare_panic(mock_error)),
         }
