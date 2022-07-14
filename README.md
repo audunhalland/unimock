@@ -185,7 +185,7 @@ To make a call count expectation for a specific call pattern,
 
 With exact quantification in place, we can produce output sequences by chaining output definitions:
 
-```no_compile
+```rust
 each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
 ```
 
@@ -197,10 +197,10 @@ A call pattern like this is _expected_ to be called at least 3 times.
 Exact call sequences may be expressed using _strictly ordered clauses_.
 Use [`next_call`](MockFn::next_call) to define a call pattern, and [`in_order`](build::QuantifiedResponse::in_order) to make it into a clause.
 
-```no_compile
+```rust
 mock([
-    Foo_foo.next_call(matching!(3)).returns(5).once().in_order(),
-    Bar_bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
+    Foo__foo.next_call(matching!(3)).returns(5).once().in_order(),
+    Bar__bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
 ]);
 ```
 
