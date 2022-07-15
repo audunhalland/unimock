@@ -52,11 +52,11 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .map(|(index, method)| def_method_impl(index, method, &attr));
 
     let item_trait = &parsed_trait.item_trait;
-    let struct_defs = mock_fn_defs.iter().map(|def| &def.struct_defs);
-    let mock_fn_impls = mock_fn_defs.iter().map(|def| &def.impls);
+    let mock_fns_public = mock_fn_defs.iter().map(|def| &def.public);
+    let mock_fns_private = mock_fn_defs.iter().map(|def| &def.private);
     let mock_fn_generics = util::Generics::from_trait(&parsed_trait);
 
-    let mock_fn_structs = if let Some(module) = &attr.module {
+    let mock_fns_public = if let Some(module) = &attr.module {
         let doc_string = format!("Unimock module for `{}`", parsed_trait.item_trait.ident);
         let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
@@ -64,31 +64,35 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         quote! {
             #[doc = #doc_lit_str]
             #vis mod #module {
-                #(#struct_defs)*
+                #(#mock_fns_public)*
             }
         }
     } else {
         quote! {
-            #(#struct_defs)*
+            #(#mock_fns_public)*
         }
     };
 
     Ok(quote! {
         #item_trait
-        #mock_fn_structs
-        #(#mock_fn_impls)*
+        #mock_fns_public
 
-        #(#impl_attributes)*
-        impl #mock_fn_generics #trait_ident #mock_fn_generics for #prefix::Unimock {
-            #(#associated_futures)*
-            #(#method_impls)*
-        }
+        // private part:
+        const _: () = {
+            #(#mock_fns_private)*
+
+            #(#impl_attributes)*
+            impl #mock_fn_generics #trait_ident #mock_fn_generics for #prefix::Unimock {
+                #(#associated_futures)*
+                #(#method_impls)*
+            }
+        };
     })
 }
 
 struct MockFnDef {
-    struct_defs: proc_macro2::TokenStream,
-    impls: proc_macro2::TokenStream,
+    public: proc_macro2::TokenStream,
+    private: proc_macro2::TokenStream,
 }
 
 fn def_mock_fn(
@@ -141,17 +145,34 @@ fn def_mock_fn(
     let mock_inputs_generics = mock_fn_generics.with_input_lifetime(attr);
     let phantoms_tuple = util::MockFnPhantomsTuple(parsed_trait);
 
-    MockFnDef {
-        struct_defs: if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
-            let untyped_phantoms = parsed_trait
-                .generic_type_params()
-                .map(|_| util::UntypedPhantomData);
+    let impl_blocks = quote! {
+        impl #mock_inputs_generics #prefix::MockInputs<#input_lifetime> for #mock_fn_path #mock_fn_generics {
+            type Inputs = (#(#inputs_tuple),*);
+        }
 
-            quote! {
+        impl #mock_fn_generics #prefix::MockFn for #mock_fn_path #mock_fn_generics {
+            type Output = #output;
+            const NAME: &'static str = #mock_fn_name;
+
+            #debug_inputs_fn
+        }
+
+        #unmock_impl
+    };
+
+    if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
+        // the trait is generic
+        let untyped_phantoms = parsed_trait
+            .generic_type_params()
+            .map(|_| util::UntypedPhantomData);
+
+        MockFnDef {
+            public: quote! {
                 #[allow(non_camel_case_types)]
                 #(#doc_attrs)*
                 #mock_visibility struct #non_generic_ident;
-
+            },
+            private: quote! {
                 impl #non_generic_ident {
                     pub fn generic #mock_fn_generics(self) -> #mock_fn_ident #mock_fn_generics {
                         #mock_fn_ident(#(#untyped_phantoms),*)
@@ -160,28 +181,19 @@ fn def_mock_fn(
 
                 #[allow(non_camel_case_types)]
                 struct #mock_fn_ident #mock_fn_generics #phantoms_tuple;
-            }
-        } else {
-            quote! {
+
+                #impl_blocks
+            },
+        }
+    } else {
+        MockFnDef {
+            public: quote! {
                 #[allow(non_camel_case_types)]
                 #(#doc_attrs)*
                 #mock_visibility struct #mock_fn_ident #mock_fn_generics;
-            }
-        },
-        impls: quote! {
-            impl #mock_inputs_generics #prefix::MockInputs<#input_lifetime> for #mock_fn_path #mock_fn_generics {
-                type Inputs = (#(#inputs_tuple),*);
-            }
-
-            impl #mock_fn_generics #prefix::MockFn for #mock_fn_path #mock_fn_generics {
-                type Output = #output;
-                const NAME: &'static str = #mock_fn_name;
-
-                #debug_inputs_fn
-            }
-
-            #unmock_impl
-        },
+            },
+            private: impl_blocks,
+        }
     }
 }
 
