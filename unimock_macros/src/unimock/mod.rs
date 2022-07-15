@@ -49,12 +49,13 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
     let method_impls = methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_method_impl(index, method, &attr));
+        .map(|(index, method)| def_method_impl(index, method, &parsed_trait, &attr));
 
     let item_trait = &parsed_trait.item_trait;
     let mock_fns_public = mock_fn_defs.iter().map(|def| &def.public);
     let mock_fns_private = mock_fn_defs.iter().map(|def| &def.private);
-    let mock_fn_generics = util::Generics::from_trait(&parsed_trait);
+    let generic_params = util::Generics::params(&parsed_trait);
+    let generic_args = util::Generics::args(&parsed_trait);
 
     let mock_fns_public = if let Some(module) = &attr.module {
         let doc_string = format!("Unimock module for `{}`", parsed_trait.item_trait.ident);
@@ -82,7 +83,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #(#mock_fns_private)*
 
             #(#impl_attributes)*
-            impl #mock_fn_generics #trait_ident #mock_fn_generics for #prefix::Unimock {
+            impl #generic_params #trait_ident #generic_args for #prefix::Unimock {
                 #(#associated_futures)*
                 #(#method_impls)*
             }
@@ -141,16 +142,16 @@ fn def_mock_fn(
     };
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
-    let mock_fn_generics = util::Generics::from_trait(parsed_trait);
-    let mock_inputs_generics = mock_fn_generics.with_input_lifetime(attr);
-    let phantoms_tuple = util::MockFnPhantomsTuple(parsed_trait);
+    let generic_params = util::Generics::params(parsed_trait);
+    let inputs_generic_params = generic_params.input_params(attr);
+    let generic_args = util::Generics::args(parsed_trait);
 
     let impl_blocks = quote! {
-        impl #mock_inputs_generics #prefix::MockInputs<#input_lifetime> for #mock_fn_path #mock_fn_generics {
+        impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args {
             type Inputs = (#(#inputs_tuple),*);
         }
 
-        impl #mock_fn_generics #prefix::MockFn for #mock_fn_path #mock_fn_generics {
+        impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args {
             type Output = #output;
             const NAME: &'static str = #mock_fn_name;
 
@@ -162,6 +163,7 @@ fn def_mock_fn(
 
     if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
         // the trait is generic
+        let phantoms_tuple = util::MockFnPhantomsTuple(parsed_trait);
         let untyped_phantoms = parsed_trait
             .generic_type_params()
             .map(|_| util::UntypedPhantomData);
@@ -174,13 +176,13 @@ fn def_mock_fn(
             },
             private: quote! {
                 impl #non_generic_ident {
-                    pub fn generic #mock_fn_generics(self) -> #mock_fn_ident #mock_fn_generics {
+                    pub fn with_types #generic_args(self) -> #mock_fn_ident #generic_args {
                         #mock_fn_ident(#(#untyped_phantoms),*)
                     }
                 }
 
                 #[allow(non_camel_case_types)]
-                struct #mock_fn_ident #mock_fn_generics #phantoms_tuple;
+                struct #mock_fn_ident #generic_args #phantoms_tuple;
 
                 #impl_blocks
             },
@@ -190,14 +192,19 @@ fn def_mock_fn(
             public: quote! {
                 #[allow(non_camel_case_types)]
                 #(#doc_attrs)*
-                #mock_visibility struct #mock_fn_ident #mock_fn_generics;
+                #mock_visibility struct #mock_fn_ident;
             },
             private: impl_blocks,
         }
     }
 }
 
-fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_macro2::TokenStream {
+fn def_method_impl(
+    index: usize,
+    method: &method::Method,
+    parsed_trait: &ParsedTrait,
+    attr: &Attr,
+) -> proc_macro2::TokenStream {
     let prefix = &attr.prefix;
     let method_sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(attr);
@@ -208,6 +215,7 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
     );
 
     let inputs_destructuring = method.inputs_destructuring();
+    let generic_args = util::Generics::args(parsed_trait);
 
     let has_impl_trait_future = match method.output_structure.wrapping {
         output::OutputWrapping::ImplTraitFuture(_) => true,
@@ -236,14 +244,14 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
 
         quote! {
             use #prefix::macro_api::*;
-            match #eval_fn::<#mock_fn_path>(self, (#inputs_destructuring)) {
+            match #eval_fn::<#mock_fn_path #generic_args>(self, (#inputs_destructuring)) {
                 Evaluation::Evaluated(output) => output,
                 Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #prefix::macro_api::#eval_fn::<#mock_fn_path>(self, (#inputs_destructuring)).unwrap(self)
+            #prefix::macro_api::#eval_fn::<#mock_fn_path #generic_args>(self, (#inputs_destructuring)).unwrap(self)
         }
     };
 

@@ -5,49 +5,128 @@ use quote::*;
 
 pub struct Generics<'t, 'a> {
     parsed_trait: &'t ParsedTrait,
-    input_lifetime: Option<&'a syn::Lifetime>,
+    kind: GenericsKind<'a>,
+}
+
+enum GenericsKind<'a> {
+    None,
+    GenericParams,
+    InputParam(&'a syn::Lifetime),
+    GenericInputParams(&'a syn::Lifetime),
+    Args,
 }
 
 impl<'t, 'a> Generics<'t, 'a> {
-    pub fn from_trait(parsed_trait: &'t ParsedTrait) -> Self {
+    // Params: e.g. impl<A, B>
+    pub fn params(parsed_trait: &'t ParsedTrait) -> Self {
         Self {
             parsed_trait,
-            input_lifetime: None,
+            kind: if parsed_trait.is_type_generic {
+                GenericsKind::GenericParams
+            } else {
+                GenericsKind::None
+            },
         }
     }
 
-    pub fn with_input_lifetime(&self, attr: &'a Attr) -> Self {
+    // Args: e.g. SomeType<A, B>
+    pub fn args(parsed_trait: &'t ParsedTrait) -> Self {
+        Self {
+            parsed_trait,
+            kind: if parsed_trait.is_type_generic {
+                GenericsKind::Args
+            } else {
+                GenericsKind::None
+            },
+        }
+    }
+
+    pub fn input_params(&self, attr: &'a Attr) -> Self {
         Self {
             parsed_trait: self.parsed_trait,
-            input_lifetime: Some(&attr.input_lifetime),
+            kind: if self.parsed_trait.is_type_generic {
+                GenericsKind::GenericInputParams(&attr.input_lifetime)
+            } else {
+                GenericsKind::InputParam(&attr.input_lifetime)
+            },
         }
+    }
+
+    fn args_iterator<'s>(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
+        self.parsed_trait
+            .item_trait
+            .generics
+            .params
+            .iter()
+            .map(|generic_param| match generic_param {
+                syn::GenericParam::Lifetime(lifetime) => {
+                    quote! { #lifetime }
+                }
+                syn::GenericParam::Type(type_param) => {
+                    let ident = &type_param.ident;
+                    quote! { #ident }
+                }
+                syn::GenericParam::Const(const_param) => {
+                    let ident = &const_param.ident;
+                    quote! { #ident }
+                }
+            })
     }
 }
 
 impl<'t, 'a> quote::ToTokens for Generics<'t, 'a> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let has_input_lifetime = self.input_lifetime.is_some();
-        let has_generics = !self.parsed_trait.item_trait.generics.params.is_empty();
+        if let GenericsKind::None = &self.kind {
+            return;
+        }
 
-        if has_input_lifetime || has_generics {
-            syn::token::Lt::default().to_tokens(tokens);
-
-            self.input_lifetime.to_tokens(tokens);
-
-            if has_generics {
-                if has_input_lifetime {
-                    syn::token::Comma::default().to_tokens(tokens);
-                }
-
+        syn::token::Lt::default().to_tokens(tokens);
+        match &self.kind {
+            GenericsKind::None => {}
+            GenericsKind::GenericParams => {
                 self.parsed_trait
-                    .item_trait
-                    .generics
-                    .params
+                    .generic_params_with_bounds
                     .to_tokens(tokens);
             }
-
-            syn::token::Gt::default().to_tokens(tokens);
+            GenericsKind::GenericInputParams(lifetime) => {
+                lifetime.to_tokens(tokens);
+                syn::token::Comma::default().to_tokens(tokens);
+                self.parsed_trait
+                    .generic_params_with_bounds
+                    .to_tokens(tokens);
+            }
+            GenericsKind::InputParam(lifetime) => {
+                lifetime.to_tokens(tokens);
+            }
+            GenericsKind::Args => {
+                let args = self.args_iterator();
+                quote! {
+                    #(#args),*
+                }
+                .to_tokens(tokens);
+            }
         }
+        syn::token::Gt::default().to_tokens(tokens);
+    }
+}
+
+pub struct Turbofish<'t>(pub &'t ParsedTrait);
+
+impl<'t> quote::ToTokens for Turbofish<'t> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        if !self.0.is_type_generic {
+            return;
+        }
+
+        let type_params = self
+            .0
+            .generic_type_params()
+            .map(|type_param| &type_param.ident);
+
+        quote! {
+            ::<#(#type_params),*>
+        }
+        .to_tokens(tokens);
     }
 }
 
@@ -126,7 +205,6 @@ pub struct DotAwait;
 impl quote::ToTokens for DotAwait {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         use proc_macro2::*;
-        use quote::TokenStreamExt;
         tokens.append(Punct::new('.', Spacing::Alone));
         tokens.append(quote::format_ident!("await"));
     }
