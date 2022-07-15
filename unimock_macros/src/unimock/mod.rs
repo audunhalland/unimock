@@ -3,6 +3,7 @@ use quote::quote;
 mod attr;
 mod doc;
 mod method;
+mod output;
 
 pub use attr::Attr;
 
@@ -188,16 +189,16 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
     let mock_fn_path = method.mock_fn_path(attr);
 
     let eval_fn = match method.output_structure.ownership {
-        method::OutputOwnership::Owned => quote::format_ident!("eval"),
-        method::OutputOwnership::SelfReference => quote::format_ident!("eval_borrowed"),
-        method::OutputOwnership::ParamReference => quote::format_ident!("eval_borrowed_param"),
-        method::OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
+        output::OutputOwnership::Owned => quote::format_ident!("eval"),
+        output::OutputOwnership::SelfReference => quote::format_ident!("eval_borrowed"),
+        output::OutputOwnership::ParamReference => quote::format_ident!("eval_borrowed_param"),
+        output::OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
     };
 
     let inputs_destructuring = method.inputs_destructuring();
 
     let has_impl_trait_future = match method.output_structure.wrapping {
-        method::OutputWrapping::ImplTraitFuture(_) => true,
+        output::OutputWrapping::ImplTraitFuture(_) => true,
         _ => false,
     };
 
@@ -252,7 +253,7 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
 
 fn def_associated_future(method: &method::Method) -> Option<proc_macro2::TokenStream> {
     match method.output_structure.wrapping {
-        method::OutputWrapping::ImplTraitFuture(trait_item_type) => {
+        output::OutputWrapping::ImplTraitFuture(trait_item_type) => {
             let ident = &trait_item_type.ident;
             let generics = &trait_item_type.generics;
             let bounds = &trait_item_type.bounds;
