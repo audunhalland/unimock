@@ -1,10 +1,10 @@
 use super::attr::Attr;
-use super::parsed_trait::ParsedTrait;
+use super::trait_info::TraitInfo;
 
 use quote::*;
 
 pub struct Generics<'t, 'a> {
-    parsed_trait: &'t ParsedTrait,
+    trait_info: &'t TraitInfo<'t>,
     kind: GenericsKind<'a>,
 }
 
@@ -18,10 +18,10 @@ enum GenericsKind<'a> {
 
 impl<'t, 'a> Generics<'t, 'a> {
     // Params: e.g. impl<A, B>
-    pub fn params(parsed_trait: &'t ParsedTrait) -> Self {
+    pub fn params(trait_info: &'t TraitInfo) -> Self {
         Self {
-            parsed_trait,
-            kind: if parsed_trait.is_type_generic {
+            trait_info,
+            kind: if trait_info.is_type_generic {
                 GenericsKind::GenericParams
             } else {
                 GenericsKind::None
@@ -30,10 +30,10 @@ impl<'t, 'a> Generics<'t, 'a> {
     }
 
     // Args: e.g. SomeType<A, B>
-    pub fn args(parsed_trait: &'t ParsedTrait) -> Self {
+    pub fn args(trait_info: &'t TraitInfo) -> Self {
         Self {
-            parsed_trait,
-            kind: if parsed_trait.is_type_generic {
+            trait_info,
+            kind: if trait_info.is_type_generic {
                 GenericsKind::Args
             } else {
                 GenericsKind::None
@@ -43,8 +43,8 @@ impl<'t, 'a> Generics<'t, 'a> {
 
     pub fn input_params(&self, attr: &'a Attr) -> Self {
         Self {
-            parsed_trait: self.parsed_trait,
-            kind: if self.parsed_trait.is_type_generic {
+            trait_info: self.trait_info,
+            kind: if self.trait_info.is_type_generic {
                 GenericsKind::GenericInputParams(&attr.input_lifetime)
             } else {
                 GenericsKind::InputParam(&attr.input_lifetime)
@@ -53,8 +53,8 @@ impl<'t, 'a> Generics<'t, 'a> {
     }
 
     fn args_iterator<'s>(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
-        self.parsed_trait
-            .item_trait
+        self.trait_info
+            .item
             .generics
             .params
             .iter()
@@ -84,16 +84,12 @@ impl<'t, 'a> quote::ToTokens for Generics<'t, 'a> {
         match &self.kind {
             GenericsKind::None => {}
             GenericsKind::GenericParams => {
-                self.parsed_trait
-                    .generic_params_with_bounds
-                    .to_tokens(tokens);
+                self.trait_info.generic_params_with_bounds.to_tokens(tokens);
             }
             GenericsKind::GenericInputParams(lifetime) => {
                 lifetime.to_tokens(tokens);
                 syn::token::Comma::default().to_tokens(tokens);
-                self.parsed_trait
-                    .generic_params_with_bounds
-                    .to_tokens(tokens);
+                self.trait_info.generic_params_with_bounds.to_tokens(tokens);
             }
             GenericsKind::InputParam(lifetime) => {
                 lifetime.to_tokens(tokens);
@@ -110,7 +106,7 @@ impl<'t, 'a> quote::ToTokens for Generics<'t, 'a> {
     }
 }
 
-pub struct Turbofish<'t>(pub &'t ParsedTrait);
+pub struct Turbofish<'t>(pub &'t TraitInfo<'t>);
 
 impl<'t> quote::ToTokens for Turbofish<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
@@ -130,7 +126,7 @@ impl<'t> quote::ToTokens for Turbofish<'t> {
     }
 }
 
-pub struct MockFnPhantomsTuple<'t>(pub &'t ParsedTrait);
+pub struct MockFnPhantomsTuple<'t>(pub &'t TraitInfo<'t>);
 
 impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {

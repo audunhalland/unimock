@@ -3,7 +3,6 @@ use syn::spanned::Spanned;
 
 use super::doc;
 use super::output;
-use super::parsed_trait::ParsedTrait;
 use super::Attr;
 
 pub struct Method<'t> {
@@ -94,11 +93,11 @@ impl<'s> Method<'s> {
 }
 
 pub fn extract_methods<'s>(
-    parsed_trait: &'s ParsedTrait,
+    item_trait: &'s syn::ItemTrait,
+    is_type_generic: bool,
     attr: &Attr,
 ) -> syn::Result<Vec<Method<'s>>> {
-    parsed_trait
-        .item_trait
+    item_trait
         .items
         .iter()
         .filter_map(|item| match item {
@@ -108,8 +107,8 @@ pub fn extract_methods<'s>(
         .enumerate()
         .map(|(index, method)| {
             let mock_fn_name = syn::LitStr::new(
-                &format!("{}::{}", parsed_trait.ident(), method.sig.ident),
-                parsed_trait.ident().span(),
+                &format!("{}::{}", &item_trait.ident, method.sig.ident),
+                item_trait.ident.span(),
             );
 
             let output_structure = match &method.sig.output {
@@ -119,28 +118,24 @@ pub fn extract_methods<'s>(
                     ty: None,
                 },
                 syn::ReturnType::Type(_, ty) => {
-                    output::determine_output_structure(parsed_trait, &method.sig, ty)
+                    output::determine_output_structure(item_trait, &method.sig, ty)
                 }
             };
 
             Ok(Method {
                 method,
-                non_generic_mock_entry_ident: if parsed_trait.is_type_generic {
+                non_generic_mock_entry_ident: if is_type_generic {
                     Some(generate_mock_fn_ident(
-                        parsed_trait,
-                        method,
-                        index,
-                        false,
-                        attr,
+                        item_trait, method, index, false, attr,
                     ))
                 } else {
                     None
                 },
                 mock_fn_ident: generate_mock_fn_ident(
-                    parsed_trait,
+                    item_trait,
                     method,
                     index,
-                    parsed_trait.is_type_generic,
+                    is_type_generic,
                     attr,
                 ),
                 mock_fn_name,
@@ -151,7 +146,7 @@ pub fn extract_methods<'s>(
 }
 
 fn generate_mock_fn_ident(
-    parsed_trait: &ParsedTrait,
+    item_trait: &syn::ItemTrait,
     method: &syn::TraitItemMethod,
     method_index: usize,
     generic: bool,
@@ -169,7 +164,7 @@ fn generate_mock_fn_ident(
         } else {
             quote::format_ident!(
                 "__Generic{}__{}",
-                parsed_trait.ident(),
+                &item_trait.ident,
                 mock_fn_ident_method_part
             )
         }
@@ -177,7 +172,7 @@ fn generate_mock_fn_ident(
         if attr.module.is_some() {
             mock_fn_ident_method_part.clone()
         } else {
-            quote::format_ident!("{}__{}", parsed_trait.ident(), mock_fn_ident_method_part)
+            quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part)
         }
     }
 }

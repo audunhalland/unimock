@@ -4,65 +4,68 @@ mod attr;
 mod doc;
 mod method;
 mod output;
-mod parsed_trait;
+mod trait_info;
 mod util;
 
 pub use attr::Attr;
-use parsed_trait::ParsedTrait;
+use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
-    let parsed_trait = parsed_trait::ParsedTrait::new(item_trait);
-    let methods = method::extract_methods(&parsed_trait, &attr)?;
-    attr.validate(&methods)?;
+    let trait_info = trait_info::TraitInfo::analyze(&item_trait, &attr)?;
+    attr.validate(&trait_info)?;
 
     let prefix = &attr.prefix;
-    let trait_ident = &parsed_trait.item_trait.ident;
-    let impl_attributes = parsed_trait
-        .item_trait
-        .attrs
-        .iter()
-        .filter_map(|attribute| match attribute.style {
-            syn::AttrStyle::Outer => {
-                if let Some(last_segment) = attribute.path.segments.last() {
-                    if last_segment.ident == "async_trait" {
-                        Some(attribute)
+    let trait_ident = &trait_info.item.ident;
+    let impl_attributes =
+        trait_info
+            .item
+            .attrs
+            .iter()
+            .filter_map(|attribute| match attribute.style {
+                syn::AttrStyle::Outer => {
+                    if let Some(last_segment) = attribute.path.segments.last() {
+                        if last_segment.ident == "async_trait" {
+                            Some(attribute)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
-                } else {
-                    None
                 }
-            }
-            syn::AttrStyle::Inner(_) => None,
-        });
+                syn::AttrStyle::Inner(_) => None,
+            });
 
-    let mock_fn_defs: Vec<MockFnDef> = methods
+    let mock_fn_defs: Vec<MockFnDef> = trait_info
+        .methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_mock_fn(index, method, &parsed_trait, &attr))
+        .map(|(index, method)| def_mock_fn(index, method, &trait_info, &attr))
         .collect();
-    let associated_futures = methods
+    let associated_futures = trait_info
+        .methods
         .iter()
         .filter_map(|method| def_associated_future(method));
-    let method_impls = methods
+    let method_impls = trait_info
+        .methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_method_impl(index, method, &parsed_trait, &attr));
+        .map(|(index, method)| def_method_impl(index, method, &trait_info, &attr));
 
-    let item_trait = &parsed_trait.item_trait;
-    let where_clause = &parsed_trait.item_trait.generics.where_clause;
+    let item_trait = &trait_info.item;
+    let where_clause = &trait_info.item.generics.where_clause;
     let mock_fns_public = mock_fn_defs.iter().map(|def| &def.public);
     let mock_fns_private = mock_fn_defs.iter().map(|def| &def.private);
-    let generic_params = util::Generics::params(&parsed_trait);
-    let generic_args = util::Generics::args(&parsed_trait);
+    let generic_params = util::Generics::params(&trait_info);
+    let generic_args = util::Generics::args(&trait_info);
 
     let mock_fns_public = if let Some(module) = &attr.module {
-        let doc_string = format!("Unimock module for `{}`", parsed_trait.item_trait.ident);
+        let doc_string = format!("Unimock module for `{}`", trait_info.item.ident);
         let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
-        let vis = &parsed_trait.item_trait.vis;
+        let vis = &trait_info.item.vis;
         quote! {
             #[doc = #doc_lit_str]
             #vis mod #module {
@@ -100,7 +103,7 @@ struct MockFnDef {
 fn def_mock_fn(
     index: usize,
     method: &method::Method,
-    parsed_trait: &ParsedTrait,
+    trait_info: &TraitInfo,
     attr: &Attr,
 ) -> MockFnDef {
     let prefix = &attr.prefix;
@@ -113,7 +116,7 @@ fn def_mock_fn(
             pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
         })
     } else {
-        parsed_trait.item_trait.vis.clone()
+        trait_info.item.vis.clone()
     };
 
     let input_lifetime = &attr.input_lifetime;
@@ -135,18 +138,18 @@ fn def_mock_fn(
         }
     });
 
-    let doc_attrs = method.mockfn_doc_attrs(parsed_trait.ident(), &unmock_impl);
+    let doc_attrs = method.mockfn_doc_attrs(trait_info.ident(), &unmock_impl);
 
     let output = match &method.output_structure.ty {
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
 
-    let where_clause = &parsed_trait.item_trait.generics.where_clause;
+    let where_clause = &trait_info.item.generics.where_clause;
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
-    let generic_params = util::Generics::params(parsed_trait);
+    let generic_params = util::Generics::params(trait_info);
     let inputs_generic_params = generic_params.input_params(attr);
-    let generic_args = util::Generics::args(parsed_trait);
+    let generic_args = util::Generics::args(trait_info);
 
     let impl_blocks = quote! {
         impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args #where_clause {
@@ -165,8 +168,8 @@ fn def_mock_fn(
 
     if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
         // the trait is generic
-        let phantoms_tuple = util::MockFnPhantomsTuple(parsed_trait);
-        let untyped_phantoms = parsed_trait
+        let phantoms_tuple = util::MockFnPhantomsTuple(trait_info);
+        let untyped_phantoms = trait_info
             .generic_type_params()
             .map(|_| util::UntypedPhantomData);
 
@@ -204,7 +207,7 @@ fn def_mock_fn(
 fn def_method_impl(
     index: usize,
     method: &method::Method,
-    parsed_trait: &ParsedTrait,
+    trait_info: &TraitInfo,
     attr: &Attr,
 ) -> proc_macro2::TokenStream {
     let prefix = &attr.prefix;
@@ -217,7 +220,7 @@ fn def_method_impl(
     );
 
     let inputs_destructuring = method.inputs_destructuring();
-    let generic_args = util::Generics::args(parsed_trait);
+    let generic_args = util::Generics::args(trait_info);
 
     let has_impl_trait_future = match method.output_structure.wrapping {
         output::OutputWrapping::ImplTraitFuture(_) => true,

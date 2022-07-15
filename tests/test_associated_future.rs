@@ -65,13 +65,22 @@ mod reference_argument_works_with_explicit_lifetime {
 
     #[unimock]
     trait GetUsername {
-        type Fut<'entrait, 'i1>: ::core::future::Future<Output = Result<String, Error>> + Send
+        type Fut<'s, 'i1>: ::core::future::Future<Output = Result<String, Error>> + Send
         where
-            Self: 'entrait;
-        fn get_username<'entrait, 'i1>(
-            &'entrait self,
-            id: u32,
-            password: &'i1 str,
-        ) -> Self::Fut<'entrait, 'i1>;
+            Self: 's;
+        fn get_username<'s, 'i1>(&'s self, id: u32, password: &'i1 str) -> Self::Fut<'s, 'i1>;
+    }
+}
+
+mod generic {
+    use super::*;
+
+    #[unimock]
+    trait AsyncGenericBounds<I, O> {
+        type Fut<'s>: ::core::future::Future<Output = O> + Send
+        where
+            Self: 's;
+
+        fn generic_bounds<'s>(&'s self, param: I) -> Self::Fut<'s>;
     }
 }

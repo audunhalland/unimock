@@ -1,4 +1,4 @@
-use super::method;
+use super::trait_info::TraitInfo;
 
 /// Parsed unimock attribute
 pub struct Attr {
@@ -25,9 +25,9 @@ impl Attr {
         })
     }
 
-    pub fn validate(&self, methods: &[method::Method]) -> syn::Result<()> {
+    pub fn validate(&self, trait_info: &TraitInfo) -> syn::Result<()> {
         match &self.mock_fn_idents {
-            Some(idents) if idents.0.len() != methods.len() => {
+            Some(idents) if idents.0.len() != trait_info.methods.len() => {
                 return Err(syn::Error::new(
                     idents.1,
                     "Length must equal the number of trait methods",
@@ -37,7 +37,7 @@ impl Attr {
         }
 
         match &self.unmocks {
-            Some(unmocked) if unmocked.0.len() != methods.len() => {
+            Some(unmocked) if unmocked.0.len() != trait_info.methods.len() => {
                 return Err(syn::Error::new(
                     unmocked.1,
                     "Length must equal the number of trait methods",

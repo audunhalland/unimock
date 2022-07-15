@@ -117,3 +117,13 @@ mod combined {
         fn generic_where_bounds(&self, param: I) -> O;
     }
 }
+
+mod async_generic {
+    use super::*;
+
+    #[unimock]
+    #[async_trait::async_trait]
+    trait AsyncTraitGenericBounds<I: Debug, O: Clone> {
+        async fn generic_bounds(&self, param: I) -> O;
+    }
+}

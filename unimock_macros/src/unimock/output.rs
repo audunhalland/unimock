@@ -1,5 +1,3 @@
-use super::parsed_trait::ParsedTrait;
-
 pub struct OutputStructure<'t> {
     pub wrapping: OutputWrapping<'t>,
     pub ownership: OutputOwnership,
@@ -30,7 +28,7 @@ impl OutputOwnership {
 }
 
 pub fn determine_output_structure<'t>(
-    parsed_trait: &'t ParsedTrait,
+    item_trait: &'t syn::ItemTrait,
     sig: &'t syn::Signature,
     ty: &'t syn::Type,
 ) -> OutputStructure<'t> {
@@ -45,7 +43,7 @@ pub fn determine_output_structure<'t>(
                 && is_self_segment(path.path.segments.first())
                 && (path.path.segments.len() == 2) =>
         {
-            determine_associated_future_structure(parsed_trait, sig, &path.path).unwrap_or_else(
+            determine_associated_future_structure(item_trait, sig, &path.path).unwrap_or_else(
                 || OutputStructure {
                     wrapping: OutputWrapping::None,
                     ownership: OutputOwnership::Owned,
@@ -69,14 +67,13 @@ fn is_self_segment(segment: Option<&syn::PathSegment>) -> bool {
 }
 
 fn determine_associated_future_structure<'t>(
-    parsed_trait: &'t ParsedTrait,
+    item_trait: &'t syn::ItemTrait,
     sig: &'t syn::Signature,
     path: &'t syn::Path,
 ) -> Option<OutputStructure<'t>> {
     let assoc_ident = &path.segments[1].ident;
 
-    let assoc_ty = parsed_trait
-        .item_trait
+    let assoc_ty = item_trait
         .items
         .iter()
         .filter_map(|item| match item {
@@ -130,7 +127,7 @@ fn determine_associated_future_structure<'t>(
         .next()?;
 
     let mut future_output_structure =
-        determine_output_structure(parsed_trait, sig, &output_binding.ty);
+        determine_output_structure(item_trait, sig, &output_binding.ty);
     future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty);
 
     Some(future_output_structure)
