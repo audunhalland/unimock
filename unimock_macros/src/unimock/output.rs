@@ -16,6 +16,17 @@ pub enum OutputOwnership {
     StaticReference,
 }
 
+impl OutputOwnership {
+    pub fn eval_fn(&self) -> &'static str {
+        match self {
+            Self::Owned => "eval",
+            Self::SelfReference => "eval_borrowed",
+            Self::ParamReference => "eval_borrowed_param",
+            Self::StaticReference => "eval_static_ref",
+        }
+    }
+}
+
 pub fn determine_output_structure<'t>(
     item_trait: &'t syn::ItemTrait,
     sig: &'t syn::Signature,

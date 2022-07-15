@@ -22,7 +22,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             syn::AttrStyle::Outer => {
                 if let Some(last_segment) = attribute.path.segments.last() {
                     if last_segment.ident == "async_trait" {
-                        Some(quote! { #attribute })
+                        Some(attribute)
                     } else {
                         None
                     }
@@ -114,10 +114,7 @@ fn def_mock_fn(
             syn::FnArg::Receiver(_) => None,
             syn::FnArg::Typed(pat_type) => Some(pat_type.ty.as_ref()),
         })
-        .map(|ty| {
-            let ty = substitute_lifetimes(ty, input_lifetime);
-            quote! { #ty }
-        });
+        .map(|ty| substitute_lifetimes(ty, input_lifetime));
 
     let unmock_impl = attr.get_unmock_fn(index).map(|_| {
         quote! {
@@ -188,12 +185,10 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
     let method_sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(attr);
 
-    let eval_fn = match method.output_structure.ownership {
-        output::OutputOwnership::Owned => quote::format_ident!("eval"),
-        output::OutputOwnership::SelfReference => quote::format_ident!("eval_borrowed"),
-        output::OutputOwnership::ParamReference => quote::format_ident!("eval_borrowed_param"),
-        output::OutputOwnership::StaticReference => quote::format_ident!("eval_static_ref"),
-    };
+    let eval_fn = syn::Ident::new(
+        method.output_structure.ownership.eval_fn(),
+        proc_macro2::Span::call_site(),
+    );
 
     let inputs_destructuring = method.inputs_destructuring();
 
@@ -208,7 +203,7 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
     }) = attr.get_unmock_fn(index)
     {
         let opt_dot_await = if method_sig.asyncness.is_some() || has_impl_trait_future {
-            Some(quote! { .await })
+            Some(DotAwait)
         } else {
             None
         };
@@ -261,5 +256,16 @@ fn def_associated_future(method: &method::Method) -> Option<proc_macro2::TokenSt
             })
         }
         _ => None,
+    }
+}
+
+pub struct DotAwait;
+
+impl quote::ToTokens for DotAwait {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        use proc_macro2::*;
+        use quote::TokenStreamExt;
+        tokens.append(Punct::new('.', Spacing::Alone));
+        tokens.append(quote::format_ident!("await"));
     }
 }
