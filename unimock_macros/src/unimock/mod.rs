@@ -207,7 +207,6 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
         params: unmock_params,
     }) = attr.get_unmock_fn(index)
     {
-        let inputs_destructuring = inputs_destructuring.collect::<Vec<_>>();
         let opt_dot_await = if method_sig.asyncness.is_some() || has_impl_trait_future {
             Some(quote! { .await })
         } else {
@@ -216,7 +215,7 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
 
         let unmock_expr = match unmock_params {
             None => quote! {
-                #unmock_path(self, #(#inputs_destructuring),*) #opt_dot_await
+                #unmock_path(self, #inputs_destructuring) #opt_dot_await
             },
             Some(UnmockFnParams { params }) => quote! {
                 #unmock_path(#params) #opt_dot_await
@@ -225,14 +224,14 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
 
         quote! {
             use #prefix::macro_api::*;
-            match #eval_fn::<#mock_fn_path>(self, (#(#inputs_destructuring),*)) {
+            match #eval_fn::<#mock_fn_path>(self, (#inputs_destructuring)) {
                 Evaluation::Evaluated(output) => output,
-                Evaluation::Skipped((#(#inputs_destructuring),*)) => #unmock_expr
+                Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #prefix::macro_api::#eval_fn::<#mock_fn_path>(self, (#(#inputs_destructuring),*)).unwrap(self)
+            #prefix::macro_api::#eval_fn::<#mock_fn_path>(self, (#inputs_destructuring)).unwrap(self)
         }
     };
 

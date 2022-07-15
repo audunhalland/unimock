@@ -22,21 +22,8 @@ impl<'s> Method<'s> {
         }
     }
 
-    pub fn inputs_destructuring(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
-        self.method
-            .sig
-            .inputs
-            .iter()
-            .filter_map(|fn_arg| match fn_arg {
-                syn::FnArg::Receiver(_) => None,
-                syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-                    syn::Pat::Ident(pat_ident) => Some(quote! { #pat_ident }),
-                    _ => Some(
-                        syn::Error::new(pat_type.span(), "Unprocessable argument")
-                            .to_compile_error(),
-                    ),
-                },
-            })
+    pub fn inputs_destructuring(&self) -> InputsDestructuring {
+        InputsDestructuring { method: self }
     }
 
     pub fn generate_debug_inputs_fn(&self, attr: &Attr) -> proc_macro2::TokenStream {
@@ -61,7 +48,7 @@ impl<'s> Method<'s> {
         let inputs_destructuring = self.inputs_destructuring();
 
         quote! {
-            fn debug_inputs<'i>((#(#inputs_destructuring),*): &<Self as #prefix::MockInputs<'i>>::Inputs) -> String {
+            fn debug_inputs<'i>((#inputs_destructuring): &<Self as #prefix::MockInputs<'i>>::Inputs) -> String {
                 #body
             }
         }
@@ -176,6 +163,30 @@ fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::Tok
     } else {
         quote! {
             #ident.unimock_try_debug()
+        }
+    }
+}
+
+pub struct InputsDestructuring<'t> {
+    method: &'t Method<'t>,
+}
+
+impl<'t> quote::ToTokens for InputsDestructuring<'t> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        for pair in self.method.method.sig.inputs.pairs() {
+            if let syn::FnArg::Typed(pat_type) = pair.value() {
+                match pat_type.pat.as_ref() {
+                    syn::Pat::Ident(pat_ident) => {
+                        pat_ident.to_tokens(tokens);
+                    }
+                    _ => {
+                        syn::Error::new(pat_type.span(), "Unprocessable argument")
+                            .to_compile_error()
+                            .to_tokens(tokens);
+                    }
+                };
+                pair.punct().to_tokens(tokens);
+            }
         }
     }
 }
