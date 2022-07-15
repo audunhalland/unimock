@@ -52,6 +52,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .map(|(index, method)| def_method_impl(index, method, &parsed_trait, &attr));
 
     let item_trait = &parsed_trait.item_trait;
+    let where_clause = &parsed_trait.item_trait.generics.where_clause;
     let mock_fns_public = mock_fn_defs.iter().map(|def| &def.public);
     let mock_fns_private = mock_fn_defs.iter().map(|def| &def.private);
     let generic_params = util::Generics::params(&parsed_trait);
@@ -83,7 +84,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #(#mock_fns_private)*
 
             #(#impl_attributes)*
-            impl #generic_params #trait_ident #generic_args for #prefix::Unimock {
+            impl #generic_params #trait_ident #generic_args for #prefix::Unimock #where_clause {
                 #(#associated_futures)*
                 #(#method_impls)*
             }
@@ -141,17 +142,18 @@ fn def_mock_fn(
         None => quote! { () },
     };
 
+    let where_clause = &parsed_trait.item_trait.generics.where_clause;
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
     let generic_params = util::Generics::params(parsed_trait);
     let inputs_generic_params = generic_params.input_params(attr);
     let generic_args = util::Generics::args(parsed_trait);
 
     let impl_blocks = quote! {
-        impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args {
+        impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args #where_clause {
             type Inputs = (#(#inputs_tuple),*);
         }
 
-        impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args {
+        impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Output = #output;
             const NAME: &'static str = #mock_fn_name;
 
