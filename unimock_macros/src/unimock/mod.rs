@@ -4,18 +4,23 @@ mod attr;
 mod doc;
 mod method;
 mod output;
+mod parsed_trait;
+mod util;
 
 pub use attr::Attr;
+use parsed_trait::ParsedTrait;
 
 use attr::{UnmockFn, UnmockFnParams};
 
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
-    let methods = method::extract_methods(&item_trait, &attr)?;
+    let parsed_trait = parsed_trait::ParsedTrait::new(item_trait);
+    let methods = method::extract_methods(&parsed_trait, &attr)?;
     attr.validate(&methods)?;
 
     let prefix = &attr.prefix;
-    let trait_ident = &item_trait.ident;
-    let impl_attributes = item_trait
+    let trait_ident = &parsed_trait.item_trait.ident;
+    let impl_attributes = parsed_trait
+        .item_trait
         .attrs
         .iter()
         .filter_map(|attribute| match attribute.style {
@@ -36,7 +41,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
     let mock_fn_defs: Vec<MockFnDef> = methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_mock_fn(index, method, &item_trait, &attr))
+        .map(|(index, method)| def_mock_fn(index, method, &parsed_trait, &attr))
         .collect();
     let associated_futures = methods
         .iter()
@@ -46,14 +51,16 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .enumerate()
         .map(|(index, method)| def_method_impl(index, method, &attr));
 
-    let struct_defs = mock_fn_defs.iter().map(|def| &def.struct_def);
+    let item_trait = &parsed_trait.item_trait;
+    let struct_defs = mock_fn_defs.iter().map(|def| &def.struct_defs);
     let mock_fn_impls = mock_fn_defs.iter().map(|def| &def.impls);
+    let mock_fn_generics = util::Generics::from_trait(&parsed_trait);
 
     let mock_fn_structs = if let Some(module) = &attr.module {
-        let doc_string = format!("Unimock module for `{}`", item_trait.ident);
+        let doc_string = format!("Unimock module for `{}`", parsed_trait.item_trait.ident);
         let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
-        let vis = &item_trait.vis;
+        let vis = &parsed_trait.item_trait.vis;
         quote! {
             #[doc = #doc_lit_str]
             #vis mod #module {
@@ -72,7 +79,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         #(#mock_fn_impls)*
 
         #(#impl_attributes)*
-        impl #trait_ident for #prefix::Unimock {
+        impl #mock_fn_generics #trait_ident #mock_fn_generics for #prefix::Unimock {
             #(#associated_futures)*
             #(#method_impls)*
         }
@@ -80,14 +87,14 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
 }
 
 struct MockFnDef {
-    struct_def: proc_macro2::TokenStream,
+    struct_defs: proc_macro2::TokenStream,
     impls: proc_macro2::TokenStream,
 }
 
 fn def_mock_fn(
     index: usize,
     method: &method::Method,
-    item_trait: &syn::ItemTrait,
+    parsed_trait: &ParsedTrait,
     attr: &Attr,
 ) -> MockFnDef {
     let prefix = &attr.prefix;
@@ -100,7 +107,7 @@ fn def_mock_fn(
             pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
         })
     } else {
-        item_trait.vis.clone()
+        parsed_trait.item_trait.vis.clone()
     };
 
     let input_lifetime = &attr.input_lifetime;
@@ -114,7 +121,7 @@ fn def_mock_fn(
             syn::FnArg::Receiver(_) => None,
             syn::FnArg::Typed(pat_type) => Some(pat_type.ty.as_ref()),
         })
-        .map(|ty| substitute_lifetimes(ty, input_lifetime));
+        .map(|ty| util::substitute_lifetimes(ty, input_lifetime));
 
     let unmock_impl = attr.get_unmock_fn(index).map(|_| {
         quote! {
@@ -122,7 +129,7 @@ fn def_mock_fn(
         }
     });
 
-    let doc_attrs = method.mockfn_doc_attrs(&item_trait.ident, &unmock_impl);
+    let doc_attrs = method.mockfn_doc_attrs(parsed_trait.ident(), &unmock_impl);
 
     let output = match &method.output_structure.ty {
         Some(ty) => quote! { #ty },
@@ -130,19 +137,43 @@ fn def_mock_fn(
     };
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
+    let mock_fn_generics = util::Generics::from_trait(parsed_trait);
+    let mock_inputs_generics = mock_fn_generics.with_input_lifetime(attr);
+    let phantoms_tuple = util::MockFnPhantomsTuple(parsed_trait);
 
     MockFnDef {
-        struct_def: quote! {
-            #[allow(non_camel_case_types)]
-            #(#doc_attrs)*
-            #mock_visibility struct #mock_fn_ident;
+        struct_defs: if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
+            let untyped_phantoms = parsed_trait
+                .generic_type_params()
+                .map(|_| util::UntypedPhantomData);
+
+            quote! {
+                #[allow(non_camel_case_types)]
+                #(#doc_attrs)*
+                #mock_visibility struct #non_generic_ident;
+
+                impl #non_generic_ident {
+                    pub fn generic #mock_fn_generics(self) -> #mock_fn_ident #mock_fn_generics {
+                        #mock_fn_ident(#(#untyped_phantoms),*)
+                    }
+                }
+
+                #[allow(non_camel_case_types)]
+                struct #mock_fn_ident #mock_fn_generics #phantoms_tuple;
+            }
+        } else {
+            quote! {
+                #[allow(non_camel_case_types)]
+                #(#doc_attrs)*
+                #mock_visibility struct #mock_fn_ident #mock_fn_generics;
+            }
         },
         impls: quote! {
-            impl<#input_lifetime> #prefix::MockInputs<#input_lifetime> for #mock_fn_path {
+            impl #mock_inputs_generics #prefix::MockInputs<#input_lifetime> for #mock_fn_path #mock_fn_generics {
                 type Inputs = (#(#inputs_tuple),*);
             }
 
-            impl #prefix::MockFn for #mock_fn_path {
+            impl #mock_fn_generics #prefix::MockFn for #mock_fn_path #mock_fn_generics {
                 type Output = #output;
                 const NAME: &'static str = #mock_fn_name;
 
@@ -152,32 +183,6 @@ fn def_mock_fn(
             #unmock_impl
         },
     }
-}
-
-fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
-    let mut ty = ty.clone();
-
-    struct LifetimeReplace<'s> {
-        lifetime: &'s syn::Lifetime,
-    }
-
-    impl<'s> syn::visit_mut::VisitMut for LifetimeReplace<'s> {
-        fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
-            reference.lifetime = Some(self.lifetime.clone());
-            syn::visit_mut::visit_type_reference_mut(self, reference);
-        }
-
-        fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
-            *lifetime = self.lifetime.clone();
-            syn::visit_mut::visit_lifetime_mut(self, lifetime);
-        }
-    }
-
-    let mut replace = LifetimeReplace { lifetime };
-    use syn::visit_mut::VisitMut;
-    replace.visit_type_mut(&mut ty);
-
-    ty
 }
 
 fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_macro2::TokenStream {
@@ -203,7 +208,7 @@ fn def_method_impl(index: usize, method: &method::Method, attr: &Attr) -> proc_m
     }) = attr.get_unmock_fn(index)
     {
         let opt_dot_await = if method_sig.asyncness.is_some() || has_impl_trait_future {
-            Some(DotAwait)
+            Some(util::DotAwait)
         } else {
             None
         };
@@ -256,16 +261,5 @@ fn def_associated_future(method: &method::Method) -> Option<proc_macro2::TokenSt
             })
         }
         _ => None,
-    }
-}
-
-pub struct DotAwait;
-
-impl quote::ToTokens for DotAwait {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        use proc_macro2::*;
-        use quote::TokenStreamExt;
-        tokens.append(Punct::new('.', Spacing::Alone));
-        tokens.append(quote::format_ident!("await"));
     }
 }

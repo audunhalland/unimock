@@ -3,10 +3,12 @@ use syn::spanned::Spanned;
 
 use super::doc;
 use super::output;
+use super::parsed_trait::ParsedTrait;
 use super::Attr;
 
 pub struct Method<'t> {
     pub method: &'t syn::TraitItemMethod,
+    pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
     pub mock_fn_name: syn::LitStr,
     pub output_structure: output::OutputStructure<'t>,
@@ -92,10 +94,11 @@ impl<'s> Method<'s> {
 }
 
 pub fn extract_methods<'s>(
-    item_trait: &'s syn::ItemTrait,
+    parsed_trait: &'s ParsedTrait,
     attr: &Attr,
 ) -> syn::Result<Vec<Method<'s>>> {
-    item_trait
+    parsed_trait
+        .item_trait
         .items
         .iter()
         .filter_map(|item| match item {
@@ -105,21 +108,9 @@ pub fn extract_methods<'s>(
         .enumerate()
         .map(|(index, method)| {
             let mock_fn_name = syn::LitStr::new(
-                &format!("{}::{}", item_trait.ident, method.sig.ident),
-                item_trait.ident.span(),
+                &format!("{}::{}", parsed_trait.ident(), method.sig.ident),
+                parsed_trait.ident().span(),
             );
-
-            let mock_fn_ident_method_part = attr
-                .mock_fn_idents
-                .as_ref()
-                .and_then(|idents| idents.0.get(index))
-                .unwrap_or(&method.sig.ident);
-
-            let mock_fn_ident = if attr.module.is_some() {
-                mock_fn_ident_method_part.clone()
-            } else {
-                quote::format_ident!("{}__{}", item_trait.ident, mock_fn_ident_method_part)
-            };
 
             let output_structure = match &method.sig.output {
                 syn::ReturnType::Default => output::OutputStructure {
@@ -128,18 +119,67 @@ pub fn extract_methods<'s>(
                     ty: None,
                 },
                 syn::ReturnType::Type(_, ty) => {
-                    output::determine_output_structure(item_trait, &method.sig, ty)
+                    output::determine_output_structure(parsed_trait, &method.sig, ty)
                 }
             };
 
             Ok(Method {
                 method,
-                mock_fn_ident,
+                non_generic_mock_entry_ident: if parsed_trait.is_type_generic {
+                    Some(generate_mock_fn_ident(
+                        parsed_trait,
+                        method,
+                        index,
+                        false,
+                        attr,
+                    ))
+                } else {
+                    None
+                },
+                mock_fn_ident: generate_mock_fn_ident(
+                    parsed_trait,
+                    method,
+                    index,
+                    parsed_trait.is_type_generic,
+                    attr,
+                ),
                 mock_fn_name,
                 output_structure,
             })
         })
         .collect()
+}
+
+fn generate_mock_fn_ident(
+    parsed_trait: &ParsedTrait,
+    method: &syn::TraitItemMethod,
+    method_index: usize,
+    generic: bool,
+    attr: &Attr,
+) -> syn::Ident {
+    let mock_fn_ident_method_part = attr
+        .mock_fn_idents
+        .as_ref()
+        .and_then(|idents| idents.0.get(method_index))
+        .unwrap_or(&method.sig.ident);
+
+    if generic {
+        if attr.module.is_some() {
+            quote::format_ident!("__Generic{}", mock_fn_ident_method_part)
+        } else {
+            quote::format_ident!(
+                "__Generic{}__{}",
+                parsed_trait.ident(),
+                mock_fn_ident_method_part
+            )
+        }
+    } else {
+        if attr.module.is_some() {
+            mock_fn_ident_method_part.clone()
+        } else {
+            quote::format_ident!("{}__{}", parsed_trait.ident(), mock_fn_ident_method_part)
+        }
+    }
 }
 
 fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::TokenStream {
