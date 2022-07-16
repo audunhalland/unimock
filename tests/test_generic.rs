@@ -127,3 +127,20 @@ mod async_generic {
         async fn generic_bounds(&self, param: I) -> O;
     }
 }
+
+mod generic_with_module {
+    use super::*;
+
+    #[unimock(mod=with_module, as=[Funk])]
+    trait WithModule<T: Debug> {
+        fn func(&self) -> T;
+    }
+
+    #[test]
+    fn mock() {
+        with_module::Funk
+            .with_types::<String>()
+            .each_call(matching!())
+            .returns("".to_string());
+    }
+}

@@ -16,10 +16,10 @@ pub struct MockMethod<'t> {
 impl<'s> MockMethod<'s> {
     pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
-        if let Some(module) = &attr.module {
-            quote! { #module::#mock_fn_ident }
-        } else {
-            quote! { #mock_fn_ident }
+
+        match (&attr.module, &self.non_generic_mock_entry_ident) {
+            (Some(module), None) => quote! { #module::#mock_fn_ident },
+            _ => quote! { #mock_fn_ident },
         }
     }
 
@@ -82,11 +82,23 @@ impl<'s> MockMethod<'s> {
         unmock_impl: &Option<proc_macro2::TokenStream>,
     ) -> Vec<proc_macro2::TokenStream> {
         let sig_string = doc::signature_documentation(&self.method.sig, doc::SkipReceiver(true));
-        let mut doc_string = format!("MockFn for `{trait_ident}::{sig_string}`.");
 
-        if unmock_impl.is_some() {
-            doc_string.push_str(" Implements `Unmock`.");
-        }
+        let doc_string = if self.non_generic_mock_entry_ident.is_some() {
+            let mut doc_string =
+                format!("Generic mock interface for `{trait_ident}::{sig_string}`. Get a MockFn instance by calling `with_types()`.");
+
+            if unmock_impl.is_some() {
+                doc_string.push_str(" The resulting type will implement Unmock`.");
+            }
+            doc_string
+        } else {
+            let mut doc_string = format!("MockFn for `{trait_ident}::{sig_string}`.");
+
+            if unmock_impl.is_some() {
+                doc_string.push_str(" Implements `Unmock`.");
+            }
+            doc_string
+        };
 
         let doc_lit = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 

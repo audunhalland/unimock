@@ -141,7 +141,8 @@ fn def_mock_fn(
                 _ => Some(pat_type.ty.as_ref()),
             },
         })
-        .map(|ty| util::substitute_lifetimes(ty, input_lifetime));
+        .map(|ty| util::substitute_lifetimes(ty, input_lifetime))
+        .collect::<Vec<_>>();
 
     let unmock_impl = attr.get_unmock_fn(index).map(|_| {
         quote! {
@@ -183,6 +184,7 @@ fn def_mock_fn(
         let untyped_phantoms = trait_info
             .generic_type_params()
             .map(|_| util::UntypedPhantomData);
+        let module_scope = attr.module.as_ref().map(|module| quote! { #module:: });
 
         MockFnDef {
             public: quote! {
@@ -191,8 +193,13 @@ fn def_mock_fn(
                 #mock_visibility struct #non_generic_ident;
             },
             private: quote! {
-                impl #non_generic_ident {
-                    pub fn with_types #generic_args(self) -> #mock_fn_ident #generic_args {
+                impl #module_scope #non_generic_ident {
+                    pub fn with_types #generic_params(
+                        self
+                    ) -> impl #prefix::MockFn<Output = #output>
+                            + for<#input_lifetime> #prefix::MockInputs<#input_lifetime, Inputs = (#(#inputs_tuple),*)>
+                        #where_clause
+                    {
                         #mock_fn_ident(#(#untyped_phantoms),*)
                     }
                 }
