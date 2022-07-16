@@ -277,7 +277,21 @@
 //! Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 //!
 //! ### Misc
-//! Unimock works best with high-level abstractions over function calls. It does not work that well with generic traits nor traits with associated types.
+//!
+//! #### What kinds of things can be mocked with unimock?
+//! * Traits with any number of methods
+//! * Traits with generic parameters, although these cannot be lifetime constrained (i.e. need to satisfy `T: 'static`).
+//! * Methods with any self receiver (`self`, `&self`, `&mut self` or arbitrary (e.g. `self: Rc<Self>`)).
+//! * Methods that take reference inputs.
+//! * Methods returning references to self.
+//! * Methods returning references to arguments.
+//! * Methods returning a type containing lifetime parameters. For a mocked return they will have to be `'static`.
+//! * Async methods when the trait is annotaed with `#[async_trait]`.
+//! * Methods that return a future that is an associated type. Requires nightly.
+//!
+//! #### What kinds of traits or methods cannot be mocked?
+//! * Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
+//! * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
 //!
 //! ## Project goals
 //! #### Use only safe Rust
