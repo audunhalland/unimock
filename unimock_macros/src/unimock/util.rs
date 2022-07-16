@@ -106,26 +106,6 @@ impl<'t, 'a> quote::ToTokens for Generics<'t, 'a> {
     }
 }
 
-pub struct Turbofish<'t>(pub &'t TraitInfo<'t>);
-
-impl<'t> quote::ToTokens for Turbofish<'t> {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        if !self.0.is_type_generic {
-            return;
-        }
-
-        let type_params = self
-            .0
-            .generic_type_params()
-            .map(|type_param| &type_param.ident);
-
-        quote! {
-            ::<#(#type_params),*>
-        }
-        .to_tokens(tokens);
-    }
-}
-
 pub struct MockFnPhantomsTuple<'t>(pub &'t TraitInfo<'t>);
 
 impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {

@@ -126,9 +126,13 @@ fn def_mock_fn(
         .sig
         .inputs
         .iter()
-        .filter_map(|input| match input {
+        .enumerate()
+        .filter_map(|(index, input)| match input {
             syn::FnArg::Receiver(_) => None,
-            syn::FnArg::Typed(pat_type) => Some(pat_type.ty.as_ref()),
+            syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
+                (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => None,
+                _ => Some(pat_type.ty.as_ref()),
+            },
         })
         .map(|ty| util::substitute_lifetimes(ty, input_lifetime));
 
@@ -249,14 +253,14 @@ fn def_method_impl(
 
         quote! {
             use #prefix::macro_api::*;
-            match #eval_fn::<#mock_fn_path #generic_args>(self, (#inputs_destructuring)) {
+            match #eval_fn::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
                 Evaluation::Evaluated(output) => output,
                 Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #prefix::macro_api::#eval_fn::<#mock_fn_path #generic_args>(self, (#inputs_destructuring)).unwrap(self)
+            #prefix::macro_api::#eval_fn::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)).unwrap(&self)
         }
     };
 

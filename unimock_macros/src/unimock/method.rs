@@ -60,10 +60,14 @@ impl<'s> Method<'s> {
             .sig
             .inputs
             .iter()
-            .filter_map(|fn_arg| match fn_arg {
+            .enumerate()
+            .filter_map(|(index, fn_arg)| match fn_arg {
                 syn::FnArg::Receiver(_) => None,
-                syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
-                    syn::Pat::Ident(pat_ident) => Some(try_debug_expr(pat_ident, &pat_type.ty)),
+                syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
+                    (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => None,
+                    (_, syn::Pat::Ident(pat_ident)) => {
+                        Some(try_debug_expr(pat_ident, &pat_type.ty))
+                    }
                     _ => Some(
                         syn::Error::new(pat_type.span(), "Unprocessable argument")
                             .to_compile_error(),
@@ -208,10 +212,11 @@ pub struct InputsDestructuring<'t> {
 
 impl<'t> quote::ToTokens for InputsDestructuring<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        for pair in self.method.method.sig.inputs.pairs() {
+        for (index, pair) in self.method.method.sig.inputs.pairs().enumerate() {
             if let syn::FnArg::Typed(pat_type) = pair.value() {
-                match pat_type.pat.as_ref() {
-                    syn::Pat::Ident(pat_ident) => {
+                match (index, pat_type.pat.as_ref()) {
+                    (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => {}
+                    (_, syn::Pat::Ident(pat_ident)) => {
                         pat_ident.to_tokens(tokens);
                     }
                     _ => {

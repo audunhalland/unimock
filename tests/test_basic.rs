@@ -21,7 +21,7 @@ fn noarg_works() {
 }
 
 #[test]
-fn owned_works() {
+fn owned_output_works() {
     #[unimock]
     trait Owned {
         fn foo(&self, a: String, b: String) -> String;
@@ -65,6 +65,38 @@ fn owned_works() {
             "b",
         )
     );
+}
+
+mod exotic_self_types {
+    use super::*;
+    use std::rc::Rc;
+
+    #[unimock]
+    trait OwnedSelf {
+        fn foo(self);
+    }
+
+    #[unimock]
+    trait MutSelf {
+        fn foo(&mut self);
+    }
+
+    #[unimock]
+    trait RcSelf {
+        fn rc_self(self: Rc<Self>);
+    }
+
+    #[test]
+    fn rc_self() {
+        let deps = Rc::new(mock(Some(
+            RcSelf__rc_self
+                .each_call(matching!())
+                .returns(())
+                .in_any_order(),
+        )));
+
+        deps.rc_self();
+    }
 }
 
 mod referenced {
