@@ -269,7 +269,7 @@ Although this can be implemented with unimock directly, it works best with a hig
 * Methods returning references to self.
 * Methods returning references to arguments.
 * Methods returning a type containing lifetime parameters. For a mocked return they will have to be `'static`.
-* Async methods when the trait is annotaed with `#[async_trait]`.
+* Async methods when the trait is annotated with `#[async_trait]`.
 * Methods that return a future that is an associated type. Requires nightly.
 
 #### What kinds of traits or methods cannot be mocked?
