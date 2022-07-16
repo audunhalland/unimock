@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixed
 - Using generics when the MockFn is put in a separate module.
+- Generic unmockable functions.
 ### Changed
 - Some more internal refactoring to keep more functions non-generic.
 

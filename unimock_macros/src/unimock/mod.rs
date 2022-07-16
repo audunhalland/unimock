@@ -144,9 +144,13 @@ fn def_mock_fn(
         .map(|ty| util::substitute_lifetimes(ty, input_lifetime))
         .collect::<Vec<_>>();
 
+    let generic_params = util::Generics::params(trait_info);
+    let inputs_generic_params = generic_params.input_params(attr);
+    let generic_args = util::Generics::args(trait_info);
+
     let unmock_impl = attr.get_unmock_fn(index).map(|_| {
         quote! {
-            impl #prefix::Unmock for #mock_fn_path {}
+            impl #generic_params #prefix::Unmock for #mock_fn_path #generic_args {}
         }
     });
 
@@ -159,9 +163,6 @@ fn def_mock_fn(
 
     let where_clause = &trait_info.item.generics.where_clause;
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
-    let generic_params = util::Generics::params(trait_info);
-    let inputs_generic_params = generic_params.input_params(attr);
-    let generic_args = util::Generics::args(trait_info);
 
     let impl_blocks = quote! {
         impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args #where_clause {

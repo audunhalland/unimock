@@ -144,3 +144,16 @@ mod generic_with_module {
             .returns("".to_string());
     }
 }
+
+mod generic_with_unmock {
+    use super::*;
+
+    #[unimock(unmocked=[gen_default])]
+    trait UnmockMe<T: Default> {
+        fn unmock_me(&self) -> T;
+    }
+
+    fn gen_default<D, T: Default>(_: &D) -> T {
+        T::default()
+    }
+}
