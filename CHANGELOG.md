@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Moved eval methods from Unimock into macro_api. Technically breaking, but these APIs were never supposed to be used directly from applications.
   It will be clearer that these are internal implementation details when part of macro_api rather than public methods on Unimock.
+### Fixed
+- Now supports skipping methods without a self receiver, but with a default body
 
 ## [0.3.10] - 2022-07-15
 ### Added

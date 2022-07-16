@@ -99,6 +99,37 @@ mod exotic_self_types {
     }
 }
 
+mod exotic_methods {
+    use super::*;
+
+    #[unimock]
+    trait Provided {
+        fn not_provided(&self);
+        fn provided(&self) -> i32 {
+            1337
+        }
+    }
+
+    #[test]
+    fn test_provided() {
+        let deps = mock(Some(
+            Provided__provided
+                .each_call(matching!())
+                .returns(42)
+                .in_any_order(),
+        ));
+        assert_eq!(42, deps.provided());
+    }
+
+    #[unimock]
+    trait SkipStaticProvided {
+        fn skip1() {}
+        fn skip2(arg: i32) -> i32 {
+            arg
+        }
+    }
+}
+
 mod referenced {
     use super::*;
 

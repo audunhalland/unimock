@@ -5,7 +5,7 @@ use super::doc;
 use super::output;
 use super::Attr;
 
-pub struct Method<'t> {
+pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemMethod,
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
@@ -13,7 +13,7 @@ pub struct Method<'t> {
     pub output_structure: output::OutputStructure<'t>,
 }
 
-impl<'s> Method<'s> {
+impl<'s> MockMethod<'s> {
     pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
         if let Some(module) = &attr.module {
@@ -100,7 +100,7 @@ pub fn extract_methods<'s>(
     item_trait: &'s syn::ItemTrait,
     is_type_generic: bool,
     attr: &Attr,
-) -> syn::Result<Vec<Method<'s>>> {
+) -> syn::Result<Vec<Option<MockMethod<'s>>>> {
     item_trait
         .items
         .iter()
@@ -110,6 +110,12 @@ pub fn extract_methods<'s>(
         })
         .enumerate()
         .map(|(index, method)| {
+            match determine_mockable(method) {
+                Mockable::Yes => {}
+                Mockable::Skip => return Ok(None),
+                Mockable::Err(err) => return Err(err),
+            };
+
             let mock_fn_name = syn::LitStr::new(
                 &format!("{}::{}", &item_trait.ident, method.sig.ident),
                 item_trait.ident.span(),
@@ -126,7 +132,7 @@ pub fn extract_methods<'s>(
                 }
             };
 
-            Ok(Method {
+            Ok(Some(MockMethod {
                 method,
                 non_generic_mock_entry_ident: if is_type_generic {
                     Some(generate_mock_fn_ident(
@@ -144,9 +150,45 @@ pub fn extract_methods<'s>(
                 ),
                 mock_fn_name,
                 output_structure,
-            })
+            }))
         })
         .collect()
+}
+
+enum Mockable {
+    Yes,
+    Skip,
+    Err(syn::Error),
+}
+
+fn determine_mockable(method: &syn::TraitItemMethod) -> Mockable {
+    fn is_receiver(first_fn_arg: Option<&syn::FnArg>) -> bool {
+        match first_fn_arg {
+            None => false,
+            Some(syn::FnArg::Receiver(_)) => true,
+            Some(syn::FnArg::Typed(pat_type)) => match pat_type.pat.as_ref() {
+                syn::Pat::Ident(pat_ident) => pat_ident.ident == "self",
+                // Probably not mockable, but try, then generate compile error later:
+                _ => true,
+            },
+        }
+    }
+
+    let first_fn_arg = method.sig.inputs.first();
+
+    if is_receiver(first_fn_arg) {
+        Mockable::Yes
+    } else {
+        if method.default.is_some() {
+            // method is provided, skip
+            Mockable::Skip
+        } else {
+            Mockable::Err(syn::Error::new(
+                method.sig.ident.span(),
+                "Method has no self receiver and no default body. Mocking will not work.",
+            ))
+        }
+    }
 }
 
 fn generate_mock_fn_ident(
@@ -207,7 +249,7 @@ fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::Tok
 }
 
 pub struct InputsDestructuring<'t> {
-    method: &'t Method<'t>,
+    method: &'t MockMethod<'t>,
 }
 
 impl<'t> quote::ToTokens for InputsDestructuring<'t> {

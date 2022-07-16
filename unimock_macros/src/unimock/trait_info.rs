@@ -5,7 +5,7 @@ use super::output::OutputWrapping;
 pub struct TraitInfo<'t> {
     pub item: &'t syn::ItemTrait,
     pub generic_params_with_bounds: syn::punctuated::Punctuated<syn::TypeParam, syn::token::Comma>,
-    pub methods: Vec<method::Method<'t>>,
+    pub methods: Vec<Option<method::MockMethod<'t>>>,
     pub is_type_generic: bool,
 }
 
@@ -19,7 +19,7 @@ impl<'t> TraitInfo<'t> {
 
         let methods = method::extract_methods(item_trait, is_type_generic, attr)?;
 
-        let contains_async = methods.iter().any(|method| {
+        let contains_async = methods.iter().filter_map(Option::as_ref).any(|method| {
             if method.method.sig.asyncness.is_some() {
                 return true;
             }

@@ -38,26 +38,32 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
                 syn::AttrStyle::Inner(_) => None,
             });
 
-    let mock_fn_defs: Vec<MockFnDef> = trait_info
+    let mock_fn_defs: Vec<Option<MockFnDef>> = trait_info
         .methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_mock_fn(index, method, &trait_info, &attr))
+        .map(|(index, method)| def_mock_fn(index, method.as_ref(), &trait_info, &attr))
         .collect();
     let associated_futures = trait_info
         .methods
         .iter()
-        .filter_map(|method| def_associated_future(method));
+        .filter_map(|method| def_associated_future(method.as_ref()));
     let method_impls = trait_info
         .methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_method_impl(index, method, &trait_info, &attr));
+        .map(|(index, method)| def_method_impl(index, method.as_ref(), &trait_info, &attr));
 
     let item_trait = &trait_info.item;
     let where_clause = &trait_info.item.generics.where_clause;
-    let mock_fns_public = mock_fn_defs.iter().map(|def| &def.public);
-    let mock_fns_private = mock_fn_defs.iter().map(|def| &def.private);
+    let mock_fns_public = mock_fn_defs
+        .iter()
+        .filter_map(Option::as_ref)
+        .map(|def| &def.public);
+    let mock_fns_private = mock_fn_defs
+        .iter()
+        .filter_map(Option::as_ref)
+        .map(|def| &def.private);
     let generic_params = util::Generics::params(&trait_info);
     let generic_args = util::Generics::args(&trait_info);
 
@@ -102,10 +108,11 @@ struct MockFnDef {
 
 fn def_mock_fn(
     index: usize,
-    method: &method::Method,
+    method: Option<&method::MockMethod>,
     trait_info: &TraitInfo,
     attr: &Attr,
-) -> MockFnDef {
+) -> Option<MockFnDef> {
+    let method = method?;
     let prefix = &attr.prefix;
     let mock_fn_ident = &method.mock_fn_ident;
     let mock_fn_path = method.mock_fn_path(attr);
@@ -170,7 +177,7 @@ fn def_mock_fn(
         #unmock_impl
     };
 
-    if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
+    let mock_fn_def = if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
         // the trait is generic
         let phantoms_tuple = util::MockFnPhantomsTuple(trait_info);
         let untyped_phantoms = trait_info
@@ -205,15 +212,22 @@ fn def_mock_fn(
             },
             private: impl_blocks,
         }
-    }
+    };
+
+    Some(mock_fn_def)
 }
 
 fn def_method_impl(
     index: usize,
-    method: &method::Method,
+    method: Option<&method::MockMethod>,
     trait_info: &TraitInfo,
     attr: &Attr,
 ) -> proc_macro2::TokenStream {
+    let method = match method {
+        Some(method) => method,
+        None => return quote! {},
+    };
+
     let prefix = &attr.prefix;
     let method_sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(attr);
@@ -279,8 +293,8 @@ fn def_method_impl(
     }
 }
 
-fn def_associated_future(method: &method::Method) -> Option<proc_macro2::TokenStream> {
-    match method.output_structure.wrapping {
+fn def_associated_future(method: Option<&method::MockMethod>) -> Option<proc_macro2::TokenStream> {
+    match method?.output_structure.wrapping {
         output::OutputWrapping::ImplTraitFuture(trait_item_type) => {
             let ident = &trait_item_type.ident;
             let generics = &trait_item_type.generics;
