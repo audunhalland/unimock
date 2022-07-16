@@ -1,3 +1,4 @@
+use crate::build::DynCallPatternBuilder;
 use crate::*;
 
 impl<I: IntoIterator<Item = Clause>> From<I> for Clause {
@@ -23,9 +24,9 @@ pub(crate) struct ClauseLeaf {
 }
 
 pub(crate) enum ClauseLeafKind {
-    Stub(Vec<call_pattern::DynCallPatternBuilder>),
-    InAnyOrder(call_pattern::DynCallPatternBuilder),
-    InOrder(call_pattern::DynCallPatternBuilder),
+    Stub(Vec<DynCallPatternBuilder>),
+    InAnyOrder(DynCallPatternBuilder),
+    InOrder(DynCallPatternBuilder),
 }
 
 impl ClauseLeafKind {
@@ -36,7 +37,7 @@ impl ClauseLeafKind {
         }
     }
 
-    pub fn into_pattern_builders(self) -> Vec<call_pattern::DynCallPatternBuilder> {
+    pub fn into_pattern_builders(self) -> Vec<DynCallPatternBuilder> {
         match self {
             Self::Stub(builders) => builders,
             Self::InAnyOrder(builder) => vec![builder],

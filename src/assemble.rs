@@ -1,4 +1,5 @@
-use crate::call_pattern::{CallPattern, DynCallPatternBuilder};
+use crate::build::DynCallPatternBuilder;
+use crate::call_pattern::CallPattern;
 use crate::clause::{ClauseLeaf, ClausePrivate};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::DynMockFn;
@@ -84,7 +85,12 @@ impl MockAssembler {
             _ => {}
         };
 
-        Ok(builder.build(ordered_call_index_range))
+        Ok(CallPattern {
+            input_matcher: builder.input_matcher,
+            responders: builder.responders,
+            ordered_call_index_range,
+            call_counter: builder.count_expectation.into_counter(),
+        })
     }
 }
 

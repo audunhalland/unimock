@@ -3,41 +3,32 @@ use crate::clause;
 use crate::property::*;
 use crate::*;
 
+use std::marker::PhantomData;
 use std::panic;
 
-pub(crate) struct CallPatternBuilder<F: MockFn> {
-    input_matcher: InputMatcher<F>,
-    responders: Vec<DynCallOrderResponder>,
-    count_expectation: counter::CallCountExpectation,
+pub(crate) struct DynCallPatternBuilder {
+    pub input_matcher: DynInputMatcher,
+    pub responders: Vec<DynCallOrderResponder>,
+    pub count_expectation: counter::CallCountExpectation,
 }
 
-impl<F: MockFn> From<InputMatcher<F>> for CallPatternBuilder<F> {
-    fn from(input_matcher: InputMatcher<F>) -> Self {
+impl DynCallPatternBuilder {
+    pub fn new(input_matcher: DynInputMatcher) -> Self {
         Self {
             input_matcher,
-            responders: Default::default(),
+            responders: vec![],
             count_expectation: Default::default(),
         }
     }
 }
 
-impl<F: MockFn> From<CallPatternBuilder<F>> for DynCallPatternBuilder {
-    fn from(builder: CallPatternBuilder<F>) -> Self {
-        Self {
-            input_matcher: builder.input_matcher.into_dyn(),
-            responders: builder.responders,
-            count_expectation: builder.count_expectation,
-        }
-    }
+pub(crate) enum BuilderWrapper<'p> {
+    Borrowed(&'p mut DynCallPatternBuilder),
+    Owned(DynCallPatternBuilder),
 }
 
-pub(crate) enum BuilderWrapper<'p, F: MockFn> {
-    Borrowed(&'p mut CallPatternBuilder<F>),
-    Owned(CallPatternBuilder<F>),
-}
-
-impl<'p, F: MockFn> BuilderWrapper<'p, F> {
-    fn get_mut(&mut self) -> &mut CallPatternBuilder<F> {
+impl<'p> BuilderWrapper<'p> {
+    fn get_mut(&mut self) -> &mut DynCallPatternBuilder {
         match self {
             Self::Borrowed(builder) => *builder,
             Self::Owned(builder) => builder,
@@ -47,7 +38,8 @@ impl<'p, F: MockFn> BuilderWrapper<'p, F> {
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
 pub struct Each<F: MockFn> {
-    patterns: Vec<CallPatternBuilder<F>>,
+    patterns: Vec<DynCallPatternBuilder>,
+    mock_fn: PhantomData<F>,
 }
 
 impl<F> Each<F>
@@ -63,21 +55,23 @@ where
     where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        self.patterns.push(CallPatternBuilder {
-            input_matcher: InputMatcher(Box::new(matching)),
-            responders: Default::default(),
-            count_expectation: counter::CallCountExpectation::new(0, counter::Exactness::AtLeast),
-        });
+        self.patterns.push(DynCallPatternBuilder::new(
+            InputMatcher(Box::new(matching)).into_dyn(),
+        ));
 
         Match {
             builder: BuilderWrapper::Borrowed(self.patterns.last_mut().unwrap()),
+            mock_fn: PhantomData,
             response_index: 0,
             ordering: InAnyOrder,
         }
     }
 
     pub(crate) fn new() -> Self {
-        Self { patterns: vec![] }
+        Self {
+            patterns: vec![],
+            mock_fn: PhantomData,
+        }
     }
 
     pub(crate) fn to_clause(self) -> Clause {
@@ -87,19 +81,15 @@ where
 
         Clause(clause::ClausePrivate::Leaf(clause::ClauseLeaf {
             dyn_mock_fn: DynMockFn::new::<F>(),
-            kind: clause::ClauseLeafKind::Stub(
-                self.patterns
-                    .into_iter()
-                    .map(|builder| builder.into())
-                    .collect(),
-            ),
+            kind: clause::ClauseLeafKind::Stub(self.patterns),
         }))
     }
 }
 
 /// A matched call pattern, ready for setting up a response.
 pub struct Match<'p, F: MockFn, O: Ordering> {
-    builder: BuilderWrapper<'p, F>,
+    builder: BuilderWrapper<'p>,
+    mock_fn: PhantomData<F>,
     response_index: usize,
     ordering: O,
 }
@@ -110,9 +100,10 @@ where
     O: Ordering,
 {
     /// Create a new owned call pattern match.
-    pub(crate) fn with_owned_builder(pattern_builder: CallPatternBuilder<F>, ordering: O) -> Self {
+    pub(crate) fn with_owned_builder(input_matcher: DynInputMatcher, ordering: O) -> Self {
         Match {
-            builder: BuilderWrapper::Owned(pattern_builder),
+            builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(input_matcher)),
+            mock_fn: PhantomData,
             response_index: 0,
             ordering,
         }
@@ -240,6 +231,7 @@ where
             });
         QuantifyResponse {
             builder: self.builder,
+            mock_fn: PhantomData,
             response_index: self.response_index,
             ordering: self.ordering,
         }
@@ -248,7 +240,8 @@ where
 
 /// Builder for defining how a call pattern gets verified.
 pub struct QuantifyResponse<'p, F: MockFn, O> {
-    builder: BuilderWrapper<'p, F>,
+    builder: BuilderWrapper<'p>,
+    mock_fn: PhantomData<F>,
     response_index: usize,
     ordering: O,
 }
@@ -278,6 +271,7 @@ where
             .add_to_minimum(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
             builder: self.builder,
+            mock_fn: self.mock_fn,
             response_index: self.response_index + times,
             ordering: self.ordering,
             _repetition: AtLeast,
@@ -292,7 +286,7 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InAnyOrder(builder.into()),
+                kind: clause::ClauseLeafKind::InAnyOrder(builder),
             }
             .into(),
             _ => panic!("Cannot expect a next call among group of call patterns"),
@@ -306,6 +300,7 @@ where
     fn into_exact(self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
         QuantifiedResponse {
             builder: self.builder,
+            mock_fn: PhantomData,
             response_index: self.response_index + times,
             ordering: self.ordering,
             _repetition: Exact,
@@ -315,7 +310,8 @@ where
 
 /// An exactly quantified response, i.e. the number of times it is expected to respond is an exact number.
 pub struct QuantifiedResponse<'p, F: MockFn, O, R> {
-    builder: BuilderWrapper<'p, F>,
+    builder: BuilderWrapper<'p>,
+    mock_fn: PhantomData<F>,
     response_index: usize,
     ordering: O,
     _repetition: R,
@@ -344,6 +340,7 @@ where
 
         Match {
             builder: self.builder,
+            mock_fn: PhantomData,
             response_index: self.response_index,
             ordering: self.ordering,
         }
@@ -380,7 +377,7 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InOrder(builder.into()),
+                kind: clause::ClauseLeafKind::InOrder(builder),
             }
             .into(),
             _ => panic!(),
@@ -395,7 +392,7 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InAnyOrder(builder.into()),
+                kind: clause::ClauseLeafKind::InAnyOrder(builder),
             }
             .into(),
             _ => panic!(),

@@ -21,26 +21,9 @@ fn downcast_box<F: MockFn, T: 'static>(any_box: &AnyBox) -> MockResult<&T> {
         .ok_or(MockError::Downcast { name: F::NAME })
 }
 
-pub(crate) struct DynCallPatternBuilder {
+pub(crate) struct CallPattern {
     pub input_matcher: DynInputMatcher,
     pub responders: Vec<DynCallOrderResponder>,
-    pub count_expectation: counter::CallCountExpectation,
-}
-
-impl DynCallPatternBuilder {
-    pub fn build(self, ordered_call_index_range: std::ops::Range<usize>) -> CallPattern {
-        CallPattern {
-            input_matcher: self.input_matcher,
-            responders: self.responders,
-            ordered_call_index_range,
-            call_counter: self.count_expectation.into_counter(),
-        }
-    }
-}
-
-pub(crate) struct CallPattern {
-    input_matcher: DynInputMatcher,
-    responders: Vec<DynCallOrderResponder>,
     pub ordered_call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
 }
