@@ -147,10 +147,11 @@ fn def_mock_fn(
     let generic_params = util::Generics::params(trait_info);
     let inputs_generic_params = generic_params.input_params(attr);
     let generic_args = util::Generics::args(trait_info);
+    let where_clause = &trait_info.item.generics.where_clause;
 
     let unmock_impl = attr.get_unmock_fn(index).map(|_| {
         quote! {
-            impl #generic_params #prefix::Unmock for #mock_fn_path #generic_args {}
+            impl #generic_params #prefix::Unmock for #mock_fn_path #generic_args #where_clause {}
         }
     });
 
@@ -161,7 +162,6 @@ fn def_mock_fn(
         None => quote! { () },
     };
 
-    let where_clause = &trait_info.item.generics.where_clause;
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
     let impl_blocks = quote! {

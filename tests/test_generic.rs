@@ -148,9 +148,17 @@ mod generic_with_module {
 mod generic_with_unmock {
     use super::*;
 
-    #[unimock(unmocked=[gen_default])]
+    #[unimock(unmocked=[gen_default(self)])]
     trait UnmockMe<T: Default> {
         fn unmock_me(&self) -> T;
+    }
+
+    #[unimock(unmocked=[gen_default(self)])]
+    trait UnmockMeWhere<T>
+    where
+        T: Default,
+    {
+        fn unmock_me_where(&self) -> T;
     }
 
     fn gen_default<D, T: Default>(_: &D) -> T {
