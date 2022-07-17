@@ -20,6 +20,20 @@ fn noarg_works() {
     );
 }
 
+mod trailing_comma_in_args {
+    use super::*;
+    type EnourmoslyLongTypeThatCausesRustfmtToBreakFnArgsIntoMultipleLines = i32;
+
+    // Regression test: trailing comma after single argument (tupling problems)
+    #[unimock]
+    trait NoArg {
+        fn trailing_comma(
+            &self,
+            arg: i32,
+        ) -> EnourmoslyLongTypeThatCausesRustfmtToBreakFnArgsIntoMultipleLines;
+    }
+}
+
 #[test]
 fn owned_output_works() {
     #[unimock]

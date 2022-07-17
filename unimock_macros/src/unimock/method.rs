@@ -266,6 +266,12 @@ pub struct InputsDestructuring<'t> {
 
 impl<'t> quote::ToTokens for InputsDestructuring<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let inputs = &self.method.method.sig.inputs;
+        if inputs.is_empty() {
+            return;
+        }
+
+        let last_index = self.method.method.sig.inputs.len() - 1;
         for (index, pair) in self.method.method.sig.inputs.pairs().enumerate() {
             if let syn::FnArg::Typed(pat_type) = pair.value() {
                 match (index, pat_type.pat.as_ref()) {
@@ -279,7 +285,9 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
                             .to_tokens(tokens);
                     }
                 };
-                pair.punct().to_tokens(tokens);
+                if index < last_index {
+                    syn::token::Comma::default().to_tokens(tokens);
+                }
             }
         }
     }
