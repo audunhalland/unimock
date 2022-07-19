@@ -163,7 +163,7 @@ mod referenced {
             "answer",
             takes_referenced(
                 &mock(vec![Referenced__foo.stub(|each| {
-                    each.call(matching!("a")).returns_ref(format!("answer"));
+                    each.call(matching!("a")).returns_ref("answer".to_string());
                 })]),
                 "a",
             )
@@ -177,7 +177,7 @@ mod referenced {
             takes_referenced(
                 &mock([Referenced__foo.stub(|each| {
                     each.call(matching!("Æ")).panics("Should not be called");
-                    each.call(matching!("a")).returns_ref(format!(""));
+                    each.call(matching!("a")).returns_ref(String::new());
                 }),]),
                 "a",
             )
@@ -219,12 +219,14 @@ fn test_multiple() {
         "success",
         takes_single_multi(&mock([
             SingleArg__method1.stub(|each| {
-                each.call(matching!("b")).returns_ref(format!("B")).once();
+                each.call(matching!("b"))
+                    .returns_ref("B".to_string())
+                    .once();
             }),
             MultiArg__method2.stub(|each| {
                 each.call(matching!("a", _)).panics("should not call this");
                 each.call(matching!("B", "B"))
-                    .returns_ref(format!("success"))
+                    .returns_ref("success".to_string())
                     .once();
             })
         ]))
@@ -315,7 +317,7 @@ fn should_be_able_to_borrow_a_returns_value() {
 fn borrowing_with_memory_leak() {
     #[unimock]
     trait Borrowing {
-        fn borrow<'s>(&'s self, input: String) -> &'s String;
+        fn borrow(&self, input: String) -> &String;
     }
     fn get_str<'s>(t: &'s impl Borrowing, input: &str) -> &'s str {
         t.borrow(input.to_string()).as_str()
@@ -327,7 +329,7 @@ fn borrowing_with_memory_leak() {
             &mock(Some(
                 Borrowing__borrow
                     .next_call(matching!(_))
-                    .returns_ref(format!("foo"))
+                    .returns_ref("foo".to_string())
                     .once()
                     .in_order()
             )),
@@ -353,7 +355,7 @@ pub struct MyType;
 
 #[unimock(mod=with_module, as=[Funk])]
 trait WithModule {
-    fn func<'s>(&'s self, input: String) -> &'s MyType;
+    fn func(&self, input: String) -> &MyType;
 }
 
 #[test]
@@ -642,7 +644,7 @@ mod lifetime_constrained_output_type {
     #[unimock]
     trait BorrowSync {
         fn borrow_sync_elided(&self) -> Borrowing1<'_>;
-        fn borrow_sync_explicit<'a>(&'a self) -> Borrowing1<'a>;
+        fn borrow_sync_explicit(&self) -> Borrowing1<'_>;
         fn borrow_sync_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
     }
 

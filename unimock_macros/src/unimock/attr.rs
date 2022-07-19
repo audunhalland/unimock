@@ -69,8 +69,7 @@ impl syn::parse::Parse for Attr {
                 let content;
                 let _ = syn::bracketed!(content in input);
 
-                let mut idents: Vec<syn::Ident> = vec![];
-                idents.push(content.parse()?);
+                let mut idents: Vec<syn::Ident> = vec![content.parse()?];
                 while content.peek(syn::token::Comma) {
                     let _: syn::token::Comma = content.parse()?;
                     idents.push(content.parse()?);
@@ -86,9 +85,8 @@ impl syn::parse::Parse for Attr {
                     "unmocked" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
-                        let mut unmocked: Vec<Unmock> = vec![];
+                        let mut unmocked: Vec<Unmock> = vec![content.parse()?];
 
-                        unmocked.push(content.parse()?);
                         while content.peek(syn::token::Comma) {
                             let _: syn::token::Comma = content.parse()?;
                             unmocked.push(content.parse()?);

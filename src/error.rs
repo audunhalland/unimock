@@ -85,26 +85,26 @@ pub(crate) enum MockError {
     },
 }
 
-impl MockError {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for MockError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MockError::Downcast { name } => {
-                format!("Fatal: Failed to downcast for {name}.")
+                write!(f, "Fatal: Failed to downcast for {name}.")
             }
             MockError::NoMockImplementation { name } => {
-                format!("No mock implementation found for {name}.")
+                write!(f, "No mock implementation found for {name}.")
             }
             MockError::NoMatchingCallPatterns { fn_call } => {
-                format!("{fn_call}: No matching call patterns.")
+                write!(f, "{fn_call}: No matching call patterns.")
             }
             MockError::NoOutputAvailableForCallPattern {
                 fn_call,
                 pat_index,
             } => {
-                format!("{fn_call}: No output available for matching call pattern {pat_index}.")
+                write!(f, "{fn_call}: No output available for matching call pattern {pat_index}.")
             }
             MockError::MockNeverCalled { name } => {
-                format!("Mock for {name} was never called. Dead mocks should be removed.")
+                write!(f, "Mock for {name} was never called. Dead mocks should be removed.")
             }
             MockError::CallOrderNotMatchedForMockFn {
                 fn_call,
@@ -112,38 +112,38 @@ impl MockError {
                 expected_ranges,
             } => {
                 let ranges_dbg = expected_ranges.iter().map(format_call_range).collect::<Vec<_>>().join(", ");
-                format!("{fn_call}: Matched in wrong order. It supported the call order ranges [{ranges_dbg}], but actual call order was {actual_call_order}.")
+                write!(f, "{fn_call}: Matched in wrong order. It supported the call order ranges [{ranges_dbg}], but actual call order was {actual_call_order}.")
             }
             MockError::InputsNotMatchedInCallOrder {
                 fn_call,
                 actual_call_order,
                 pat_index,
             } => {
-                format!("{fn_call}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern {pat_index}.")
+                write!(f, "{fn_call}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern {pat_index}.")
             }
             MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
                 fn_call,
                 pat_index,
-            } => format!("{fn_call}: Type mismatch: Expected an owned return value, but found a borrow for call pattern {pat_index}. Try using Match::returns() or Match::answers()."),
+            } => write!(f, "{fn_call}: Type mismatch: Expected an owned return value, but found a borrow for call pattern {pat_index}. Try using Match::returns() or Match::answers()."),
             MockError::CannotBorrowValueProducedByClosure {
                 fn_call,
                 pat_index,
                 lender,
-            } => format!("{fn_call}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. {}", lender.suggest()),
+            } => write!(f, "{fn_call}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. {}", lender.suggest()),
             MockError::CannotBorrowInvalidLifetime {
                 fn_call,
                 pat_index,
                 lender,
             } => match lender {
-                Lender::Unimock => format!("{fn_call}: Cannot borrow output value from unimock for call pattern {pat_index}. {}", lender.suggest()),
-                Lender::Param =>format!("{fn_call}: Cannot borrow output value from a parameter for call pattern {pat_index}. {}", lender.suggest()),
-                Lender::Static => format!("{fn_call}: Cannot borrow output value statically for call pattern {pat_index}. {}", lender.suggest()),
+                Lender::Unimock => write!(f, "{fn_call}: Cannot borrow output value from unimock for call pattern {pat_index}. {}", lender.suggest()),
+                Lender::Param =>write!(f, "{fn_call}: Cannot borrow output value from a parameter for call pattern {pat_index}. {}", lender.suggest()),
+                Lender::Static => write!(f, "{fn_call}: Cannot borrow output value statically for call pattern {pat_index}. {}", lender.suggest()),
             },
-            MockError::FailedVerification(message) => message.clone(),
+            MockError::FailedVerification(message) => write!(f, "{message}"),
             MockError::CannotUnmock { name } => {
-                format!("{name} cannot be unmocked as there is no function available to call.")
+                write!(f, "{name} cannot be unmocked as there is no function available to call.")
             },
-            MockError::ExplicitPanic { fn_call, pat_index, msg } => format!("{fn_call}: Explicit panic for call pattern {pat_index}: {msg}")
+            MockError::ExplicitPanic { fn_call, pat_index, msg } => write!(f, "{fn_call}: Explicit panic for call pattern {pat_index}: {msg}")
         }
     }
 }

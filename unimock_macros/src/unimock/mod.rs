@@ -18,25 +18,20 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
 
     let prefix = &attr.prefix;
     let trait_ident = &trait_info.item.ident;
-    let impl_attributes =
-        trait_info
-            .item
-            .attrs
-            .iter()
-            .filter_map(|attribute| match attribute.style {
-                syn::AttrStyle::Outer => {
-                    if let Some(last_segment) = attribute.path.segments.last() {
-                        if last_segment.ident == "async_trait" {
-                            Some(attribute)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
+    let impl_attributes = trait_info
+        .item
+        .attrs
+        .iter()
+        .filter(|attribute| match attribute.style {
+            syn::AttrStyle::Outer => {
+                if let Some(last_segment) = attribute.path.segments.last() {
+                    last_segment.ident == "async_trait"
+                } else {
+                    false
                 }
-                syn::AttrStyle::Inner(_) => None,
-            });
+            }
+            syn::AttrStyle::Inner(_) => false,
+        });
 
     let mock_fn_defs: Vec<Option<MockFnDef>> = trait_info
         .methods
@@ -118,7 +113,7 @@ fn def_mock_fn(
     let mock_fn_path = method.mock_fn_path(attr);
     let mock_fn_name = &method.mock_fn_name;
 
-    let mock_visibility = if let Some(_) = &attr.module {
+    let mock_visibility = if attr.module.is_some() {
         syn::Visibility::Public(syn::VisPublic {
             pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
         })
@@ -248,10 +243,10 @@ fn def_method_impl(
     let inputs_destructuring = method.inputs_destructuring();
     let generic_args = util::Generics::args(trait_info);
 
-    let has_impl_trait_future = match method.output_structure.wrapping {
-        output::OutputWrapping::ImplTraitFuture(_) => true,
-        _ => false,
-    };
+    let has_impl_trait_future = matches!(
+        method.output_structure.wrapping,
+        output::OutputWrapping::ImplTraitFuture(_)
+    );
 
     let body = if let Some(UnmockFn {
         path: unmock_path,

@@ -12,10 +12,9 @@ pub struct TraitInfo<'t> {
 impl<'t> TraitInfo<'t> {
     pub fn analyze(item_trait: &'t syn::ItemTrait, attr: &Attr) -> syn::Result<Self> {
         let generic_params = &item_trait.generics.params;
-        let is_type_generic = generic_params.iter().any(|param| match param {
-            syn::GenericParam::Type(_) => true,
-            _ => false,
-        });
+        let is_type_generic = generic_params
+            .iter()
+            .any(|param| matches!(param, syn::GenericParam::Type(_)));
 
         let methods = method::extract_methods(item_trait, is_type_generic, attr)?;
 
@@ -23,10 +22,10 @@ impl<'t> TraitInfo<'t> {
             if method.method.sig.asyncness.is_some() {
                 return true;
             }
-            match method.output_structure.wrapping {
-                OutputWrapping::ImplTraitFuture(_) => true,
-                _ => false,
-            }
+            matches!(
+                method.output_structure.wrapping,
+                OutputWrapping::ImplTraitFuture(_)
+            )
         });
 
         let mut generic_params_with_bounds: syn::punctuated::Punctuated<
@@ -38,18 +37,15 @@ impl<'t> TraitInfo<'t> {
         // TODO(perhaps): should only be needed for generic params which are used as function outputs?
         if is_type_generic {
             for generic_param in generic_params.iter() {
-                match generic_param {
-                    syn::GenericParam::Type(type_param) => {
-                        let mut bounded_param = type_param.clone();
+                if let syn::GenericParam::Type(type_param) = generic_param {
+                    let mut bounded_param = type_param.clone();
 
-                        add_static_bound_if_not_present(&mut bounded_param);
-                        if contains_async {
-                            add_send_bound_if_not_present(&mut bounded_param);
-                        }
-
-                        generic_params_with_bounds.push(bounded_param);
+                    add_static_bound_if_not_present(&mut bounded_param);
+                    if contains_async {
+                        add_send_bound_if_not_present(&mut bounded_param);
                     }
-                    _ => {}
+
+                    generic_params_with_bounds.push(bounded_param);
                 }
             }
         }

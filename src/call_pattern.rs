@@ -51,14 +51,15 @@ impl CallPattern {
             responder = Some(&call_index_responder.responder);
         }
 
-        return responder;
+        responder
     }
 }
 
 pub(crate) struct DynInputMatcher(AnyBox);
 
 pub(crate) struct InputMatcher<F: MockFn>(
-    pub Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
+    #[allow(clippy::type_complexity)]
+    pub  Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
 );
 
 impl<F: MockFn> InputMatcher<F> {
@@ -121,9 +122,11 @@ pub(crate) struct BorrowableResponder<F: MockFn> {
     pub borrowable: Box<dyn Borrow<F::Output> + Send + Sync>,
 }
 pub(crate) struct ClosureResponder<F: MockFn> {
+    #[allow(clippy::type_complexity)]
     pub func: Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> F::Output) + Send + Sync>,
 }
 pub(crate) struct StaticRefClosureResponder<F: MockFn> {
+    #[allow(clippy::type_complexity)]
     pub func:
         Box<dyn (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> &'static F::Output) + Send + Sync>,
 }

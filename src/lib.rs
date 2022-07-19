@@ -488,10 +488,10 @@ impl Unimock {
     }
 
     fn prepare_panic(&self, error: error::MockError) -> String {
-        let msg = error.to_string();
+        let msg = format!("{}", error);
 
         let mut panic_reasons = self.shared_state.panic_reasons.lock().unwrap();
-        panic_reasons.push(error.clone());
+        panic_reasons.push(error);
 
         msg
     }
@@ -529,10 +529,7 @@ impl Drop for Unimock {
                 return;
             }
 
-            let error_strings = errors
-                .into_iter()
-                .map(|err| err.to_string())
-                .collect::<Vec<_>>();
+            let error_strings = errors.iter().map(|err| err.to_string()).collect::<Vec<_>>();
             panic!("{}", error_strings.join("\n"));
         }
 
@@ -595,7 +592,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     const NAME: &'static str;
 
     /// Compute some debug representation of the inputs.
-    fn debug_inputs<'i>(inputs: &<Self as MockInputs<'i>>::Inputs) -> String;
+    fn debug_inputs(inputs: &<Self as MockInputs<'_>>::Inputs) -> String;
 
     /// Create a stubbing clause by grouping calls.
     ///
@@ -608,7 +605,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     {
         let mut each = build::Each::new();
         each_fn(&mut each);
-        each.to_clause()
+        each.into_clause()
     }
 
     /// Define a stub-like call pattern directly on the [MockFn].
@@ -752,7 +749,7 @@ fn mock_from_iterator(
     for clause in clause_iterator {
         match assembler.append_clause(clause) {
             Ok(_) => {}
-            Err(error) => panic!("{}", error.to_string()),
+            Err(error) => panic!("{}", error),
         }
     }
 

@@ -52,7 +52,7 @@ impl<'t, 'a> Generics<'t, 'a> {
         }
     }
 
-    fn args_iterator<'s>(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
+    fn args_iterator(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
         self.trait_info
             .item
             .generics
@@ -114,7 +114,7 @@ impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
             let phantom_data = self
                 .0
                 .generic_type_params()
-                .map(|type_param| TypedPhantomData(type_param))
+                .map(TypedPhantomData)
                 .collect::<Vec<_>>();
 
             if !phantom_data.is_empty() {

@@ -142,7 +142,7 @@ fn analyze_args(patterns: &Vec<syn::PatTuple>) -> Vec<Arg> {
     args
 }
 
-fn guess_arg_kind(index: usize, patterns: &Vec<syn::PatTuple>) -> ArgKind {
+fn guess_arg_kind(index: usize, patterns: &[syn::PatTuple]) -> ArgKind {
     fn guess_from_pattern(index: usize, pattern: &syn::PatTuple) -> ArgKind {
         if index >= pattern.elems.len() {
             return ArgKind::Unknown;

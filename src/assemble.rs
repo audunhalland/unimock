@@ -69,21 +69,18 @@ impl MockAssembler {
     ) -> Result<CallPattern, AssembleError> {
         let mut ordered_call_index_range: std::ops::Range<usize> = Default::default();
 
-        match pattern_match_mode {
-            PatternMatchMode::InOrder => {
-                let exact_calls = builder.count_expectation.exact_calls().ok_or(
-                    AssembleError::MockHasNoExactExpectation {
-                        name: dyn_mock_fn.name,
-                    },
-                )?;
+        if pattern_match_mode == PatternMatchMode::InOrder {
+            let exact_calls = builder.count_expectation.exact_calls().ok_or(
+                AssembleError::MockHasNoExactExpectation {
+                    name: dyn_mock_fn.name,
+                },
+            )?;
 
-                ordered_call_index_range.start = self.current_call_index;
-                ordered_call_index_range.end = self.current_call_index + exact_calls.0;
+            ordered_call_index_range.start = self.current_call_index;
+            ordered_call_index_range.end = self.current_call_index + exact_calls.0;
 
-                self.current_call_index = ordered_call_index_range.end;
-            }
-            _ => {}
-        };
+            self.current_call_index = ordered_call_index_range.end;
+        }
 
         Ok(CallPattern {
             input_matcher: builder.input_matcher,
@@ -105,18 +102,21 @@ pub(crate) enum AssembleError {
     },
 }
 
-impl AssembleError {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for AssembleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AssembleError::IncompatiblePatternMatchMode {
                 name,
                 old_mode,
                 new_mode,
             } => {
-                format!("A clause for {name} has already been registered as {old_mode:?}, but got re-registered as {new_mode:?}. They cannot be mixed for the same MockFn.")
+                write!(f, "A clause for {name} has already been registered as {old_mode:?}, but got re-registered as {new_mode:?}. They cannot be mixed for the same MockFn.")
             }
             AssembleError::MockHasNoExactExpectation { name } => {
-                format!("{name} mock has no exact count expectation, which is needed for a mock.")
+                write!(
+                    f,
+                    "{name} mock has no exact count expectation, which is needed for a mock."
+                )
             }
         }
     }

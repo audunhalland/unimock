@@ -27,7 +27,8 @@ impl<'u> EvalCtx<'u> {
         }
     }
 
-    pub fn eval_sized<'i, F: MockFn + 'static>(
+    #[allow(clippy::needless_lifetimes)]
+    pub fn eval_sized<'i, F: MockFn>(
         self,
         inputs: <F as MockInputs<'i>>::Inputs,
     ) -> MockResult<Evaluation<'i, F::Output, F>>
@@ -52,7 +53,7 @@ impl<'u> EvalCtx<'u> {
         }
     }
 
-    pub fn eval_unsized_self_borrowed<'i, F: MockFn + 'static>(
+    pub fn eval_unsized_self_borrowed<'i, F: MockFn>(
         self,
         inputs: <F as MockInputs<'i>>::Inputs,
     ) -> MockResult<Evaluation<'i, &'u F::Output, F>> {
@@ -80,7 +81,7 @@ impl<'u> EvalCtx<'u> {
         }
     }
 
-    pub fn eval_unsized_static_ref<'i, F: MockFn + 'static>(
+    pub fn eval_unsized_static_ref<'i, F: MockFn>(
         self,
         inputs: <F as MockInputs<'i>>::Inputs,
         lender: Lender,

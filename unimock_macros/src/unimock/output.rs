@@ -163,16 +163,15 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
                     }
                 }
             }
-            syn::FnArg::Typed(pat_type) => match pat_type.ty.as_ref() {
-                syn::Type::Reference(reference) => {
+            syn::FnArg::Typed(pat_type) => {
+                if let syn::Type::Reference(reference) = pat_type.ty.as_ref() {
                     if let Some(lifetime) = &reference.lifetime {
                         if lifetime.ident == *lifetime_ident {
                             return Some(index);
                         }
                     }
                 }
-                _ => {}
-            },
+            }
         }
     }
 
@@ -180,26 +179,16 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
 }
 
 fn make_lifetimes_params_static(mut ty: syn::Type) -> syn::Type {
-    match &mut ty {
-        syn::Type::Path(type_path) => {
-            for segment in type_path.path.segments.iter_mut() {
-                match &mut segment.arguments {
-                    syn::PathArguments::AngleBracketed(generic_arguments) => {
-                        for arg in generic_arguments.args.iter_mut() {
-                            match arg {
-                                syn::GenericArgument::Lifetime(lifetime) => {
-                                    lifetime.ident =
-                                        syn::Ident::new("static", proc_macro2::Span::call_site());
-                                }
-                                _ => {}
-                            }
-                        }
+    if let syn::Type::Path(type_path) = &mut ty {
+        for segment in type_path.path.segments.iter_mut() {
+            if let syn::PathArguments::AngleBracketed(generic_arguments) = &mut segment.arguments {
+                for arg in generic_arguments.args.iter_mut() {
+                    if let syn::GenericArgument::Lifetime(lifetime) = arg {
+                        lifetime.ident = syn::Ident::new("static", proc_macro2::Span::call_site());
                     }
-                    _ => {}
                 }
             }
         }
-        _ => {}
     }
 
     ty

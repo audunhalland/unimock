@@ -29,10 +29,12 @@ impl<'s> MockMethod<'s> {
 
     pub fn generate_debug_inputs_fn(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let prefix = &attr.prefix;
-        let first_param = self.method.sig.inputs.iter().find(|fn_arg| match fn_arg {
-            syn::FnArg::Typed(_) => true,
-            _ => false,
-        });
+        let first_param = self
+            .method
+            .sig
+            .inputs
+            .iter()
+            .find(|fn_arg| matches!(fn_arg, syn::FnArg::Typed(_)));
 
         let body = if first_param.is_some() {
             let inputs_try_debug_exprs = self.inputs_try_debug_exprs();
@@ -190,16 +192,14 @@ fn determine_mockable(method: &syn::TraitItemMethod) -> Mockable {
 
     if is_receiver(first_fn_arg) {
         Mockable::Yes
+    } else if method.default.is_some() {
+        // method is provided, skip
+        Mockable::Skip
     } else {
-        if method.default.is_some() {
-            // method is provided, skip
-            Mockable::Skip
-        } else {
-            Mockable::Err(syn::Error::new(
-                method.sig.ident.span(),
-                "Method has no self receiver and no default body. Mocking will not work.",
-            ))
-        }
+        Mockable::Err(syn::Error::new(
+            method.sig.ident.span(),
+            "Method has no self receiver and no default body. Mocking will not work.",
+        ))
     }
 }
 
@@ -226,12 +226,10 @@ fn generate_mock_fn_ident(
                 mock_fn_ident_method_part
             )
         }
+    } else if attr.module.is_some() {
+        mock_fn_ident_method_part.clone()
     } else {
-        if attr.module.is_some() {
-            mock_fn_ident_method_part.clone()
-        } else {
-            quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part)
-        }
+        quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part)
     }
 }
 

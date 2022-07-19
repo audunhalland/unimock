@@ -71,8 +71,8 @@ fn should_panic_if_no_call_patterns_in_stub_are_matched() {
 )]
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     mock([SingleArg__method1.stub(|each| {
-        each.call(matching!("a")).returns_ref(format!("")).once();
-        each.call(matching!(_)).returns_ref(format!(""));
+        each.call(matching!("a")).returns_ref(String::new()).once();
+        each.call(matching!(_)).returns_ref(String::new());
     })])
     .method1("b");
 }
@@ -103,6 +103,8 @@ fn should_crash_when_the_original_instance_disappears_before_the_clone() {
 #[should_panic(expected = "No mock implementation found for SingleArg::method1")]
 fn multithread_error_reporting_works() {
     let unimock = mock(None);
+
+    #[allow(clippy::redundant_clone)]
     let clone = unimock.clone();
 
     std::thread::spawn(move || {
