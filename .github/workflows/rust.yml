@@ -17,6 +17,8 @@ jobs:
       - uses: actions/checkout@v3
       - name: Test
         run: cargo test --all
+      - name: Clippy
+        run: cargo clippy -- -D warnings
 
   test-nightly:
     runs-on: ubuntu-latest
