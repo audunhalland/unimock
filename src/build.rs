@@ -24,7 +24,7 @@ impl DynCallPatternBuilder {
     }
 }
 
-pub(crate) enum BuilderWrapper<'p> {
+enum BuilderWrapper<'p> {
     Borrowed(&'p mut DynCallPatternBuilder),
     Owned(DynCallPatternBuilder),
 }
