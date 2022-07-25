@@ -10,6 +10,7 @@ pub(crate) struct DynCallPatternBuilder {
     pub input_matcher: DynInputMatcher,
     pub responders: Vec<DynCallOrderResponder>,
     pub count_expectation: counter::CallCountExpectation,
+    pub current_response_index: usize,
 }
 
 impl DynCallPatternBuilder {
@@ -18,6 +19,7 @@ impl DynCallPatternBuilder {
             input_matcher,
             responders: vec![],
             count_expectation: Default::default(),
+            current_response_index: 0,
         }
     }
 }
@@ -33,6 +35,18 @@ impl<'p> BuilderWrapper<'p> {
             Self::Borrowed(builder) => *builder,
             Self::Owned(builder) => builder,
         }
+    }
+
+    fn increase_response_index(&mut self, delta: usize) {
+        self.get_mut().current_response_index += delta;
+    }
+
+    fn push_responder(&mut self, responder: DynResponder) {
+        let pattern_builder = self.get_mut();
+        pattern_builder.responders.push(DynCallOrderResponder {
+            response_index: pattern_builder.current_response_index,
+            responder,
+        });
     }
 }
 
@@ -62,7 +76,6 @@ where
         Match {
             builder: BuilderWrapper::Borrowed(self.patterns.last_mut().unwrap()),
             mock_fn: PhantomData,
-            response_index: 0,
             ordering: InAnyOrder,
         }
     }
@@ -90,7 +103,6 @@ where
 pub struct Match<'p, F: MockFn, O: Ordering> {
     builder: BuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
-    response_index: usize,
     ordering: O,
 }
 
@@ -104,7 +116,6 @@ where
         Match {
             builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(input_matcher)),
             mock_fn: PhantomData,
-            response_index: 0,
             ordering,
         }
     }
@@ -112,74 +123,78 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type must implement [Clone] and cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
-    pub fn returns(self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F, O>
+    pub fn returns(mut self, value: impl Into<F::Output>) -> QuantifyResponse<'p, F, O>
     where
         F::Output: Send + Sync + Clone + 'static,
     {
-        let value = value.into();
-        self.responder(
+        self.builder.push_responder(
             ValueResponder::<F> {
-                stored_value: Box::new(StoredValueSlot(value)),
+                stored_value: Box::new(StoredValueSlot(value.into())),
             }
             .into_dyn_responder(),
-        )
+        );
+        self.quantify()
     }
 
     /// Specify the output of the call pattern by calling `Default::default()`.
-    pub fn returns_default(self) -> QuantifyResponse<'p, F, O>
+    pub fn returns_default(mut self) -> QuantifyResponse<'p, F, O>
     where
         F::Output: Default,
     {
-        self.responder(
+        self.builder.push_responder(
             ClosureResponder::<F> {
                 func: Box::new(|_| Default::default()),
             }
             .into_dyn_responder(),
-        )
+        );
+        self.quantify()
     }
 
     /// Specify the output of the call to be a borrow of the provided value.
     /// This works well when the lifetime of the returned reference is the same as `self`.
     /// Using this for `'static` references will produce a runtime error. For static references, use [Match::returns_static].
-    pub fn returns_ref<T>(self, value: T) -> QuantifyResponse<'p, F, O>
+    pub fn returns_ref<T>(mut self, value: T) -> QuantifyResponse<'p, F, O>
     where
         T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
     {
-        self.responder(
+        self.builder.push_responder(
             BorrowableResponder::<F> {
                 borrowable: Box::new(value),
             }
             .into_dyn_responder(),
-        )
+        );
+        self.quantify()
     }
 
     /// Specify the output of the call to be a reference to static value.
     /// This must be used when the returned reference in the mocked trait is `'static`.
-    pub fn returns_static(self, value: &'static F::Output) -> QuantifyResponse<'p, F, O>
+    pub fn returns_static(mut self, value: &'static F::Output) -> QuantifyResponse<'p, F, O>
     where
         F::Output: Send + Sync + 'static,
     {
-        self.responder(
+        self.builder.push_responder(
             StaticRefClosureResponder::<F> {
                 func: Box::new(move |_| value),
             }
             .into_dyn_responder(),
-        )
+        );
+        self.quantify()
     }
 
     /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
-    pub fn answers<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
+    pub fn answers<A, R>(mut self, func: A) -> QuantifyResponse<'p, F, O>
     where
         A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
         R: Into<F::Output>,
         F::Output: Sized,
     {
-        self.responder(
+        self.builder.push_responder(
             ClosureResponder::<F> {
                 func: Box::new(move |inputs| func(inputs).into()),
             }
             .into_dyn_responder(),
-        )
+        );
+        self.quantify()
     }
 
     /// Specify the output of the call pattern to be a static reference to leaked memory.
@@ -190,13 +205,13 @@ where
     ///
     /// This method should only be used when computing a reference based
     /// on input parameters is necessary, which should not be a common use case.
-    pub fn answers_leaked_ref<A, R>(self, func: A) -> QuantifyResponse<'p, F, O>
+    pub fn answers_leaked_ref<A, R>(mut self, func: A) -> QuantifyResponse<'p, F, O>
     where
         A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
         R: std::borrow::Borrow<F::Output> + 'static,
         F::Output: Sized,
     {
-        self.responder(
+        self.builder.push_responder(
             StaticRefClosureResponder::<F> {
                 func: Box::new(move |inputs| {
                     let value = func(inputs);
@@ -205,34 +220,30 @@ where
                 }),
             }
             .into_dyn_responder(),
-        )
+        );
+        self.quantify()
     }
 
     /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
-    pub fn panics(self, message: impl Into<String>) -> QuantifyResponse<'p, F, O> {
-        self.responder(DynResponder::Panic(message.into()))
+    pub fn panics(mut self, message: impl Into<String>) -> QuantifyResponse<'p, F, O> {
+        self.builder
+            .push_responder(DynResponder::Panic(message.into()));
+        self.quantify()
     }
 
     /// Instruct this call pattern to invoke the [Unmock]ed function.
-    pub fn unmocked(self) -> QuantifyResponse<'p, F, O>
+    pub fn unmocked(mut self) -> QuantifyResponse<'p, F, O>
     where
         F: Unmock,
     {
-        self.responder(DynResponder::Unmock)
+        self.builder.push_responder(DynResponder::Unmock);
+        self.quantify()
     }
 
-    fn responder(mut self, responder: DynResponder) -> QuantifyResponse<'p, F, O> {
-        self.builder
-            .get_mut()
-            .responders
-            .push(DynCallOrderResponder {
-                response_index: self.response_index,
-                responder,
-            });
+    fn quantify(self) -> QuantifyResponse<'p, F, O> {
         QuantifyResponse {
             builder: self.builder,
             mock_fn: PhantomData,
-            response_index: self.response_index,
             ordering: self.ordering,
         }
     }
@@ -242,7 +253,6 @@ where
 pub struct QuantifyResponse<'p, F: MockFn, O> {
     builder: BuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
-    response_index: usize,
     ordering: O,
 }
 
@@ -269,10 +279,10 @@ where
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast> {
         self.count_expectation()
             .add_to_minimum(times, counter::Exactness::AtLeast);
+        self.builder.increase_response_index(times);
         QuantifiedResponse {
             builder: self.builder,
-            mock_fn: self.mock_fn,
-            response_index: self.response_index + times,
+            mock_fn: PhantomData,
             ordering: self.ordering,
             _repetition: AtLeast,
         }
@@ -297,11 +307,11 @@ where
         &mut self.builder.get_mut().count_expectation
     }
 
-    fn into_exact(self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
+    fn into_exact(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
+        self.builder.increase_response_index(times);
         QuantifiedResponse {
             builder: self.builder,
             mock_fn: PhantomData,
-            response_index: self.response_index + times,
             ordering: self.ordering,
             _repetition: Exact,
         }
@@ -312,7 +322,6 @@ where
 pub struct QuantifiedResponse<'p, F: MockFn, O, R> {
     builder: BuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
-    response_index: usize,
     ordering: O,
     _repetition: R,
 }
@@ -341,7 +350,6 @@ where
         Match {
             builder: self.builder,
             mock_fn: PhantomData,
-            response_index: self.response_index,
             ordering: self.ordering,
         }
     }
