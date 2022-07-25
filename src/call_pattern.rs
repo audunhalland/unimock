@@ -15,10 +15,8 @@ impl std::fmt::Display for PatIndex {
 
 type AnyBox = Box<dyn Any + Send + Sync + 'static>;
 
-fn downcast_box<F: MockFn, T: 'static>(any_box: &AnyBox) -> MockResult<&T> {
-    any_box
-        .downcast_ref()
-        .ok_or(MockError::Downcast { name: F::NAME })
+fn downcast_box<'b, T: 'static>(any_box: &'b AnyBox, name: &'static str) -> MockResult<&'b T> {
+    any_box.downcast_ref().ok_or(MockError::Downcast { name })
 }
 
 pub(crate) struct CallPattern {
@@ -33,7 +31,7 @@ impl CallPattern {
         &self,
         inputs: &<F as MockInputs<'_>>::Inputs,
     ) -> MockResult<bool> {
-        let input_matcher = downcast_box::<F, InputMatcher<F>>(&self.input_matcher.0)?;
+        let input_matcher: &InputMatcher<F> = downcast_box(&self.input_matcher.0, F::NAME)?;
 
         Ok((input_matcher.0)(inputs))
     }
@@ -89,25 +87,25 @@ pub(crate) struct DynStaticRefClosureResponder(AnyBox);
 
 impl DynValueResponder {
     pub fn downcast<F: MockFn>(&self) -> MockResult<&ValueResponder<F>> {
-        downcast_box::<F, _>(&self.0)
+        downcast_box(&self.0, F::NAME)
     }
 }
 
 impl DynBorrowableResponder {
     pub fn downcast<F: MockFn>(&self) -> MockResult<&BorrowableResponder<F>> {
-        downcast_box::<F, _>(&self.0)
+        downcast_box(&self.0, F::NAME)
     }
 }
 
 impl DynClosureResponder {
     pub fn downcast<F: MockFn>(&self) -> MockResult<&ClosureResponder<F>> {
-        downcast_box::<F, _>(&self.0)
+        downcast_box(&self.0, F::NAME)
     }
 }
 
 impl DynStaticRefClosureResponder {
     pub fn downcast<F: MockFn>(&self) -> MockResult<&StaticRefClosureResponder<F>> {
-        downcast_box::<F, _>(&self.0)
+        downcast_box(&self.0, F::NAME)
     }
 }
 
