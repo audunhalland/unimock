@@ -37,19 +37,7 @@ impl CallPattern {
     }
 
     pub fn next_responder(&self) -> Option<&DynResponder> {
-        let call_index = self.call_counter.fetch_add();
-
-        let mut responder = None;
-
-        for call_index_responder in self.responders.iter() {
-            if call_index_responder.response_index > call_index {
-                break;
-            }
-
-            responder = Some(&call_index_responder.responder);
-        }
-
-        responder
+        find_responder_by_call_index(&self.responders, self.call_counter.fetch_add())
     }
 }
 
@@ -168,5 +156,54 @@ impl<T: Clone + Send + Sync> StoredValue<T> for StoredValueSlot<T> {
 
     fn borrow_stored(&self) -> &T {
         &self.0
+    }
+}
+
+fn find_responder_by_call_index(
+    responders: &[DynCallOrderResponder],
+    call_index: usize,
+) -> Option<&DynResponder> {
+    if responders.is_empty() {
+        return None;
+    }
+
+    let index_result =
+        responders.binary_search_by(|responder| responder.response_index.cmp(&call_index));
+
+    Some(match index_result {
+        Ok(index) => &responders[index].responder,
+        Err(insert_index) => &responders[insert_index - 1].responder,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_select_responder_with_lower_call_index() {
+        let responders = vec![
+            DynCallOrderResponder {
+                response_index: 0,
+                responder: DynResponder::Panic("0".to_string()),
+            },
+            DynCallOrderResponder {
+                response_index: 5,
+                responder: DynResponder::Panic("5".to_string()),
+            },
+        ];
+
+        fn find_msg(responders: &[DynCallOrderResponder], call_index: usize) -> Option<&str> {
+            find_responder_by_call_index(responders, call_index).map(|responder| match responder {
+                DynResponder::Panic(msg) => msg.as_str(),
+                _ => panic!(),
+            })
+        }
+
+        assert_eq!(find_msg(&[], 42), None);
+        assert_eq!(find_msg(&responders, 0), Some("0"));
+        assert_eq!(find_msg(&responders, 4), Some("0"));
+        assert_eq!(find_msg(&responders, 5), Some("5"));
+        assert_eq!(find_msg(&responders, 7), Some("5"));
     }
 }
