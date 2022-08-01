@@ -1,6 +1,9 @@
 use quote::quote;
 use syn::spanned::Spanned;
 
+use super::attr::MockFnIdents;
+use super::attr::ModuleAttr;
+use super::attr::WithSpan;
 use super::doc;
 use super::output;
 use super::Attr;
@@ -14,11 +17,12 @@ pub struct MockMethod<'t> {
 }
 
 impl<'s> MockMethod<'s> {
-    pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
+    pub fn mock_fn_path(&self, method_ident: &syn::Ident, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
 
         match (&attr.module, &self.non_generic_mock_entry_ident) {
-            (Some(module), None) => quote! { #module::#mock_fn_ident },
+            (ModuleAttr::Ident(module), None) => quote! { #module::#mock_fn_ident },
+            (ModuleAttr::Unpacked, None) => quote! { #method_ident::#mock_fn_ident },
             _ => quote! { #mock_fn_ident },
         }
     }
@@ -210,26 +214,30 @@ fn generate_mock_fn_ident(
     generic: bool,
     attr: &Attr,
 ) -> syn::Ident {
-    let mock_fn_ident_method_part = attr
-        .mock_fn_idents
-        .as_ref()
-        .and_then(|idents| idents.0.get(method_index))
-        .unwrap_or(&method.sig.ident);
+    let mock_fn_ident_method_part = match &attr.mock_fn_idents {
+        Some(WithSpan(MockFnIdents::PerMethod(idents), _)) => {
+            idents.get(method_index).unwrap_or(&method.sig.ident)
+        }
+        Some(WithSpan(MockFnIdents::Uniform(ident), _)) => ident,
+        None => &method.sig.ident,
+    };
 
     if generic {
-        if attr.module.is_some() {
-            quote::format_ident!("__Generic{}", mock_fn_ident_method_part)
-        } else {
-            quote::format_ident!(
-                "__Generic{}__{}",
-                &item_trait.ident,
-                mock_fn_ident_method_part
-            )
+        match &attr.module {
+            ModuleAttr::Ident(_) | ModuleAttr::Unpacked => {
+                quote::format_ident!("__Generic{}", method.sig.ident)
+            }
+            ModuleAttr::None => {
+                quote::format_ident!("__Generic{}__{}", &item_trait.ident, method.sig.ident)
+            }
         }
-    } else if attr.module.is_some() {
-        mock_fn_ident_method_part.clone()
     } else {
-        quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part)
+        match &attr.module {
+            ModuleAttr::Ident(_) | ModuleAttr::Unpacked => mock_fn_ident_method_part.clone(),
+            ModuleAttr::None => {
+                quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part)
+            }
+        }
     }
 }
 

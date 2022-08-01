@@ -5,8 +5,8 @@ pub struct Attr {
     /// Unimock's prefix, e.g. `::unimock`
     pub prefix: syn::Path,
     /// Module to put the MockFn in
-    pub module: Option<syn::Ident>,
-    pub mock_fn_idents: Option<WithSpan<Vec<syn::Ident>>>,
+    pub module: ModuleAttr,
+    pub mock_fn_idents: Option<WithSpan<MockFnIdents>>,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
     pub input_lifetime: syn::Lifetime,
     pub debug: bool,
@@ -27,9 +27,11 @@ impl Attr {
 
     pub fn validate(&self, trait_info: &TraitInfo) -> syn::Result<()> {
         match &self.mock_fn_idents {
-            Some(idents) if idents.0.len() != trait_info.methods.len() => {
+            Some(WithSpan(MockFnIdents::PerMethod(idents), span))
+                if idents.len() != trait_info.methods.len() =>
+            {
                 return Err(syn::Error::new(
-                    idents.1,
+                    *span,
                     "Length must equal the number of trait methods",
                 ))
             }
@@ -53,7 +55,7 @@ impl Attr {
 impl syn::parse::Parse for Attr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut prefix: Option<syn::Path> = None;
-        let mut module = None;
+        let mut module = ModuleAttr::None;
         let mut mock_fn_idents = None;
         let mut unmocks = None;
         let mut debug = false;
@@ -62,19 +64,32 @@ impl syn::parse::Parse for Attr {
             if input.peek(syn::token::Mod) {
                 let _: syn::token::Mod = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
-                module = Some(input.parse()?);
+                if input.peek(syn::token::Star) {
+                    let _: syn::token::Star = input.parse()?;
+                    module = ModuleAttr::Unpacked;
+                } else {
+                    module = ModuleAttr::Ident(input.parse()?);
+                }
             } else if input.peek(syn::token::As) {
                 let _: syn::token::As = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
-                let content;
-                let _ = syn::bracketed!(content in input);
 
-                let mut idents: Vec<syn::Ident> = vec![content.parse()?];
-                while content.peek(syn::token::Comma) {
-                    let _: syn::token::Comma = content.parse()?;
-                    idents.push(content.parse()?);
+                if input.peek(syn::Ident) {
+                    let ident: syn::Ident = input.parse()?;
+                    let span = ident.span();
+                    mock_fn_idents = Some(WithSpan(MockFnIdents::Uniform(ident), span))
+                } else {
+                    let content;
+                    let _ = syn::bracketed!(content in input);
+
+                    let mut idents: Vec<syn::Ident> = vec![content.parse()?];
+                    while content.peek(syn::token::Comma) {
+                        let _: syn::token::Comma = content.parse()?;
+                        idents.push(content.parse()?);
+                    }
+                    mock_fn_idents =
+                        Some(WithSpan(MockFnIdents::PerMethod(idents), content.span()));
                 }
-                mock_fn_idents = Some(WithSpan(idents, content.span()));
             } else {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
@@ -116,6 +131,20 @@ impl syn::parse::Parse for Attr {
             debug,
         })
     }
+}
+
+pub enum ModuleAttr {
+    // One module containing all MockFns
+    Ident(syn::Ident),
+    // One module per MockFn, with with same name as the fn
+    Unpacked,
+    // No module
+    None,
+}
+
+pub enum MockFnIdents {
+    PerMethod(Vec<syn::Ident>),
+    Uniform(syn::Ident),
 }
 
 pub struct Unmock(Option<UnmockFn>);
@@ -164,25 +193,4 @@ impl syn::parse::Parse for Unmock {
 
 pub struct UnmockFnParams {
     pub params: syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>,
-}
-
-enum UnimockInnerAttr {
-    Name(syn::Ident),
-}
-
-impl syn::parse::Parse for UnimockInnerAttr {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let content;
-        let _ = syn::parenthesized!(content in input);
-
-        let keyword: syn::Ident = content.parse()?;
-        let _: syn::token::Eq = content.parse()?;
-        match keyword.to_string().as_str() {
-            "name" => {
-                let name: syn::Ident = content.parse()?;
-                Ok(Self::Name(name))
-            }
-            _ => Err(syn::Error::new(keyword.span(), "unrecognized keyword")),
-        }
-    }
 }

@@ -7,7 +7,7 @@ mod output;
 mod trait_info;
 mod util;
 
-pub use attr::Attr;
+pub use attr::{Attr, ModuleAttr};
 use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
@@ -62,14 +62,14 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
     let generic_params = util::Generics::params(&trait_info);
     let generic_args = util::Generics::args(&trait_info);
 
-    let mock_fns_public = if let Some(module) = &attr.module {
+    let mock_fns_public = if let ModuleAttr::Ident(module_ident) = &attr.module {
         let doc_string = format!("Unimock module for `{}`", trait_info.item.ident);
         let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
         let vis = &trait_info.item.vis;
         quote! {
             #[doc = #doc_lit_str]
-            #vis mod #module {
+            #vis mod #module_ident {
                 #(#mock_fns_public)*
             }
         }
@@ -110,15 +110,14 @@ fn def_mock_fn(
     let method = method?;
     let prefix = &attr.prefix;
     let mock_fn_ident = &method.mock_fn_ident;
-    let mock_fn_path = method.mock_fn_path(attr);
+    let mock_fn_path = method.mock_fn_path(&method.method.sig.ident, attr);
     let mock_fn_name = &method.mock_fn_name;
 
-    let mock_visibility = if attr.module.is_some() {
-        syn::Visibility::Public(syn::VisPublic {
+    let mock_visibility = match &attr.module {
+        ModuleAttr::Ident(_) | ModuleAttr::Unpacked => syn::Visibility::Public(syn::VisPublic {
             pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
-        })
-    } else {
-        trait_info.item.vis.clone()
+        }),
+        ModuleAttr::None => trait_info.item.vis.clone(),
     };
 
     let input_lifetime = &attr.input_lifetime;
@@ -159,6 +158,32 @@ fn def_mock_fn(
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
+    let gen_public_defs = |non_generic_ident: &syn::Ident| {
+        if let ModuleAttr::Unpacked = attr.module {
+            let method_ident = &method.method.sig.ident;
+            let vis = &trait_info.item.vis;
+            let module_doc_string = format!(
+                "Unimock module for `{}::{}`",
+                trait_info.item.ident, method_ident
+            );
+
+            quote! {
+                #[doc = #module_doc_string]
+                #vis mod #method_ident {
+                    #[allow(non_camel_case_types)]
+                    #(#doc_attrs)*
+                    #mock_visibility struct #non_generic_ident;
+                }
+            }
+        } else {
+            quote! {
+                #[allow(non_camel_case_types)]
+                #(#doc_attrs)*
+                #mock_visibility struct #non_generic_ident;
+            }
+        }
+    };
+
     let impl_blocks = quote! {
         impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args #where_clause {
             type Inputs = (#(#inputs_tuple),*);
@@ -180,14 +205,17 @@ fn def_mock_fn(
         let untyped_phantoms = trait_info
             .generic_type_params()
             .map(|_| util::UntypedPhantomData);
-        let module_scope = attr.module.as_ref().map(|module| quote! { #module:: });
+        let module_scope = match &attr.module {
+            ModuleAttr::Ident(ident) => Some(quote! { #ident:: }),
+            ModuleAttr::Unpacked => {
+                let method_ident = &method.method.sig.ident;
+                Some(quote! { #method_ident:: })
+            }
+            ModuleAttr::None => None,
+        };
 
         MockFnDef {
-            public: quote! {
-                #[allow(non_camel_case_types)]
-                #(#doc_attrs)*
-                #mock_visibility struct #non_generic_ident;
-            },
+            public: gen_public_defs(non_generic_ident),
             private: quote! {
                 impl #module_scope #non_generic_ident {
                     pub fn with_types #generic_params(
@@ -208,11 +236,7 @@ fn def_mock_fn(
         }
     } else {
         MockFnDef {
-            public: quote! {
-                #[allow(non_camel_case_types)]
-                #(#doc_attrs)*
-                #mock_visibility struct #mock_fn_ident;
-            },
+            public: gen_public_defs(mock_fn_ident),
             private: impl_blocks,
         }
     };
@@ -233,7 +257,7 @@ fn def_method_impl(
 
     let prefix = &attr.prefix;
     let method_sig = &method.method.sig;
-    let mock_fn_path = method.mock_fn_path(attr);
+    let mock_fn_path = method.mock_fn_path(&method.method.sig.ident, attr);
 
     let eval_fn = syn::Ident::new(
         method.output_structure.ownership.eval_fn(),

@@ -372,6 +372,63 @@ fn test_with_module() {
     ));
 }
 
+mod unpacked_module {
+    mod basic {
+        use unimock::*;
+
+        #[unimock(mod=*, as=[Funk, Funk])]
+        trait WithUnpackedModule {
+            fn foo(&self, input: String) -> i32;
+            fn bar(&self);
+        }
+
+        #[test]
+        fn test_unpacked_module() {
+            let _ = foo::Funk.each_call(matching!(_)).returns(33).in_any_order();
+            let _ = bar::Funk.each_call(matching!(_)).returns(()).in_any_order();
+        }
+    }
+
+    mod uniform_idents {
+        use unimock::*;
+
+        #[unimock(mod=*, as=Funk)]
+        trait UnpackedModuleUniformIdent {
+            fn foo(&self, input: String) -> i32;
+            fn bar(&self);
+        }
+    }
+
+    mod generics {
+        use unimock::*;
+
+        #[unimock(mod=*, as=Funk)]
+        trait UnpackedGenerics<T> {
+            fn foo(&self, input: String) -> T;
+            fn bar(&self, input: &T);
+        }
+    }
+
+    mod exports {
+        mod inner {
+            use unimock::*;
+            #[unimock(mod=*, as=Fn)]
+            pub trait Trait {
+                fn foo(&self);
+            }
+        }
+
+        #[test]
+        fn test_inner() {
+            use unimock::*;
+            let _ = inner::foo::Fn
+                .each_call(matching!())
+                .returns(())
+                .in_any_order();
+        }
+    }
+}
+
 #[unimock]
 #[async_trait]
 trait Async {
