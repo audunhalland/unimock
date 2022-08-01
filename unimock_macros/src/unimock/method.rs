@@ -1,4 +1,6 @@
+use proc_macro2::TokenStream;
 use quote::quote;
+use quote::ToTokens;
 use syn::spanned::Spanned;
 
 use super::attr::MockFnIdents;
@@ -10,8 +12,8 @@ use super::Attr;
 
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemMethod,
-    pub non_generic_mock_entry_ident: Option<syn::Ident>,
-    pub mock_fn_ident: syn::Ident,
+    pub non_generic_mock_entry_ident: Option<MockFnIdent>,
+    pub mock_fn_ident: MockFnIdent,
     pub mock_fn_name: syn::LitStr,
     pub output_structure: output::OutputStructure<'t>,
 }
@@ -207,36 +209,70 @@ fn determine_mockable(method: &syn::TraitItemMethod) -> Mockable {
     }
 }
 
+pub struct MockFnIdent {
+    ident: syn::Ident,
+    kind: MockFnIdentKind,
+}
+
+impl MockFnIdent {
+    fn new(ident: syn::Ident, kind: MockFnIdentKind) -> Self {
+        Self { ident, kind }
+    }
+
+    pub fn allow_attr(&self) -> Option<TokenStream> {
+        match self.kind {
+            MockFnIdentKind::Inferred => Some(quote! { #[allow(non_camel_case_types)] }),
+            MockFnIdentKind::Explicit => None,
+        }
+    }
+}
+
+impl ToTokens for MockFnIdent {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        self.ident.to_tokens(tokens);
+    }
+}
+
+pub enum MockFnIdentKind {
+    Inferred,
+    Explicit,
+}
+
 fn generate_mock_fn_ident(
     item_trait: &syn::ItemTrait,
     method: &syn::TraitItemMethod,
     method_index: usize,
     generic: bool,
     attr: &Attr,
-) -> syn::Ident {
-    let mock_fn_ident_method_part = match &attr.mock_fn_idents {
-        Some(WithSpan(MockFnIdents::PerMethod(idents), _)) => {
-            idents.get(method_index).unwrap_or(&method.sig.ident)
-        }
-        Some(WithSpan(MockFnIdents::Uniform(ident), _)) => ident,
-        None => &method.sig.ident,
+) -> MockFnIdent {
+    let (mock_fn_ident_method_part, kind) = match &attr.mock_fn_idents {
+        Some(WithSpan(MockFnIdents::PerMethod(idents), _)) => idents
+            .get(method_index)
+            .map(|ident| (ident, MockFnIdentKind::Explicit))
+            .unwrap_or((&method.sig.ident, MockFnIdentKind::Inferred)),
+        Some(WithSpan(MockFnIdents::Uniform(ident), _)) => (ident, MockFnIdentKind::Explicit),
+        None => (&method.sig.ident, MockFnIdentKind::Inferred),
     };
 
     if generic {
         match &attr.module {
             ModuleAttr::Ident(_) | ModuleAttr::Unpacked => {
-                quote::format_ident!("__Generic{}", method.sig.ident)
+                MockFnIdent::new(quote::format_ident!("__Generic{}", method.sig.ident), kind)
             }
-            ModuleAttr::None => {
-                quote::format_ident!("__Generic{}__{}", &item_trait.ident, method.sig.ident)
-            }
+            ModuleAttr::None => MockFnIdent::new(
+                quote::format_ident!("__Generic{}__{}", &item_trait.ident, method.sig.ident),
+                kind,
+            ),
         }
     } else {
         match &attr.module {
-            ModuleAttr::Ident(_) | ModuleAttr::Unpacked => mock_fn_ident_method_part.clone(),
-            ModuleAttr::None => {
-                quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part)
+            ModuleAttr::Ident(_) | ModuleAttr::Unpacked => {
+                MockFnIdent::new(mock_fn_ident_method_part.clone(), kind)
             }
+            ModuleAttr::None => MockFnIdent::new(
+                quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part),
+                kind,
+            ),
         }
     }
 }

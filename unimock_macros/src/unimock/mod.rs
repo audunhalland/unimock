@@ -12,6 +12,8 @@ use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
+use self::method::MockFnIdent;
+
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let trait_info = trait_info::TraitInfo::analyze(&item_trait, &attr)?;
     attr.validate(&trait_info)?;
@@ -158,7 +160,9 @@ fn def_mock_fn(
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
-    let gen_public_defs = |non_generic_ident: &syn::Ident| {
+    let gen_public_defs = |non_generic_ident: &MockFnIdent| {
+        let allow_ident_attr = non_generic_ident.allow_attr();
+
         if let ModuleAttr::Unpacked = attr.module {
             let method_ident = &method.method.sig.ident;
             let vis = &trait_info.item.vis;
@@ -170,14 +174,14 @@ fn def_mock_fn(
             quote! {
                 #[doc = #module_doc_string]
                 #vis mod #method_ident {
-                    #[allow(non_camel_case_types)]
+                    #allow_ident_attr
                     #(#doc_attrs)*
                     #mock_visibility struct #non_generic_ident;
                 }
             }
         } else {
             quote! {
-                #[allow(non_camel_case_types)]
+                #allow_ident_attr
                 #(#doc_attrs)*
                 #mock_visibility struct #non_generic_ident;
             }
@@ -213,6 +217,7 @@ fn def_mock_fn(
             }
             ModuleAttr::None => None,
         };
+        let allow_ident_attr = mock_fn_ident.allow_attr();
 
         MockFnDef {
             public: gen_public_defs(non_generic_ident),
@@ -228,7 +233,7 @@ fn def_mock_fn(
                     }
                 }
 
-                #[allow(non_camel_case_types)]
+                #allow_ident_attr
                 struct #mock_fn_ident #generic_args #phantoms_tuple;
 
                 #impl_blocks

@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Fixed
+- Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the type name with `as=Ident`.
 
 ## [0.3.14] - 2022-08-01
 ### Added
