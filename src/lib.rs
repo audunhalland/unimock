@@ -186,11 +186,12 @@
 //! # trait Hidden { fn hidden(&self, arg: i32) -> i32; }
 //! # let deps = mock([
 //! # Hidden__hidden.stub(|each| {
-//! each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
+//! each.call(matching!(_)).returns(1).n_times(2).then().returns(2).cloned();
 //! # })
 //! # ]);
 //! # assert_eq!(1, deps.hidden(42));
 //! # assert_eq!(1, deps.hidden(42));
+//! # assert_eq!(2, deps.hidden(42));
 //! # assert_eq!(2, deps.hidden(42));
 //! ```
 //!
@@ -210,7 +211,7 @@
 //! # trait Bar { fn bar(&self, arg: i32) -> i32; }
 //! # let deps =
 //! mock([
-//!     Foo__foo.next_call(matching!(3)).returns(5).once().in_order(),
+//!     Foo__foo.next_call(matching!(3)).returns(5).in_order(),
 //!     Bar__bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
 //! ]);
 //! # assert_eq!(5, deps.foo(3));
@@ -374,7 +375,7 @@ use std::sync::{Arc, Mutex};
 ///     sum(mock(None)); // note: panics at runtime!
 ///
 ///     // Mock a single method (still panics, because all 3 must be mocked:):
-///     sum(mock(Some(Trait1__a.next_call(|_| true).returns(0).once().in_order())));
+///     sum(mock(Some(Trait1__a.next_call(|_| true).returns(0).in_order())));
 /// }
 /// ```
 ///
@@ -726,7 +727,7 @@ where
 /// spy([]).foo();
 /// // prints "real thing" x 2
 ///
-/// spy(Some(Trait__foo.next_call(matching!()).returns(()).once().in_order())).foo();
+/// spy(Some(Trait__foo.next_call(matching!()).returns(()).in_order())).foo();
 /// // does not print
 ///
 /// // spy object that prevents the real

@@ -17,6 +17,7 @@ nightly-tests = []
 
 [dependencies]
 unimock_macros = { path = "unimock_macros", version = "0.3.10" }
+lazycell = "1"
 
 [dev-dependencies]
 async-trait = "0.1"

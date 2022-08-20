@@ -5,9 +5,11 @@ pub trait Ordering {
 }
 
 /// Marker type for calls that can be matched in any order.
+#[derive(Clone, Copy)]
 pub struct InAnyOrder;
 
 /// Marker type for calls that must be matched in a specific order.
+#[derive(Clone, Copy)]
 pub struct InOrder;
 
 impl Ordering for InAnyOrder {

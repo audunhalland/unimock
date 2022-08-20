@@ -40,9 +40,15 @@ impl<'u> EvalCtx<'u> {
 
         match dyn_ctx.eval(&|pattern| pattern.match_inputs::<F>(&inputs))? {
             Eval::Responder(pat_index, responder) => match responder {
-                DynResponder::Value(inner) => Ok(Evaluation::Evaluated(
-                    *inner.downcast::<F>()?.stored_value.box_clone(),
-                )),
+                DynResponder::Value(inner) => {
+                    match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
+                        Some(value) => Ok(Evaluation::Evaluated(*value)),
+                        None => Err(MockError::CannotReturnValueMoreThanOnce {
+                            fn_call: dyn_ctx.fn_call(),
+                            pat_index,
+                        }),
+                    }
+                }
                 DynResponder::Closure(inner) => {
                     Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
                 }

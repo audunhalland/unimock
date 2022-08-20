@@ -198,6 +198,29 @@ mod referenced {
     }
 }
 
+mod no_clone_return {
+    use unimock::*;
+
+    struct NoClone(i32);
+
+    #[unimock]
+    trait Foo {
+        fn foo(&self) -> NoClone;
+    }
+
+    #[test]
+    fn test_no_clone_return() {
+        let u = mock(Some(
+            Foo__foo
+                .each_call(matching!())
+                .returns(NoClone(55))
+                .once()
+                .in_any_order(),
+        ));
+        assert_eq!(55, u.foo().0);
+    }
+}
+
 #[unimock]
 trait SingleArg {
     fn method1<'i>(&'i self, a: &'i str) -> &'i str;

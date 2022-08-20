@@ -102,7 +102,7 @@ pub(crate) trait IntoDynResponder: Sized {
 }
 
 pub(crate) struct ValueResponder<F: MockFn> {
-    pub stored_value: Box<dyn StoredValue<F::Output>>,
+    pub stored_value: Box<dyn CloneOrTakeOrBorrow<F::Output>>,
 }
 pub(crate) struct BorrowableResponder<F: MockFn> {
     pub borrowable: Box<dyn Borrow<F::Output> + Send + Sync>,
@@ -141,21 +141,61 @@ impl<F: MockFn> IntoDynResponder for StaticRefClosureResponder<F> {
     }
 }
 
-pub trait StoredValue<T: ?Sized>: Send + Sync {
-    fn box_clone(&self) -> Box<T>;
+pub(crate) trait CloneOrTakeOrBorrow<T: ?Sized>: Send + Sync {
+    fn box_take_or_clone(&self) -> Option<Box<T>>;
 
     fn borrow_stored(&self) -> &T;
 }
 
 pub(crate) struct StoredValueSlot<T>(pub T);
 
-impl<T: Clone + Send + Sync> StoredValue<T> for StoredValueSlot<T> {
-    fn box_clone(&self) -> Box<T> {
-        Box::new(self.0.clone())
+impl<T: Clone + Send + Sync> CloneOrTakeOrBorrow<T> for StoredValueSlot<T> {
+    fn box_take_or_clone(&self) -> Option<Box<T>> {
+        Some(Box::new(self.0.clone()))
     }
 
     fn borrow_stored(&self) -> &T {
         &self.0
+    }
+}
+
+pub(crate) struct StoredValueSlotOnce<T> {
+    initial_value: Mutex<Option<T>>,
+    borrowed_value: lazycell::AtomicLazyCell<T>,
+}
+
+impl<T> StoredValueSlotOnce<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            initial_value: Mutex::new(Some(value)),
+            borrowed_value: lazycell::AtomicLazyCell::new(),
+        }
+    }
+}
+
+impl<T: Send + Sync> CloneOrTakeOrBorrow<T> for StoredValueSlotOnce<T> {
+    fn box_take_or_clone(&self) -> Option<Box<T>> {
+        let mut lock = self.initial_value.lock().unwrap();
+        lock.take().map(|value| Box::new(value))
+    }
+
+    fn borrow_stored(&self) -> &T {
+        if let Some(value) = self.borrowed_value.borrow() {
+            return value;
+        }
+
+        {
+            let mut lock = self.initial_value.lock().unwrap();
+            if let Some(value) = lock.take() {
+                if self.borrowed_value.fill(value).is_err() {
+                    panic!("Tried to set borrowed value twice");
+                }
+            }
+        }
+
+        self.borrowed_value
+            .borrow()
+            .expect("Tried to borrow a value that has already been taken")
     }
 }
 

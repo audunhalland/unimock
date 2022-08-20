@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Changed
+- Do not require a `Clone` bound immediately when using the `.returns(value)` builder combinator. This is only necessary when returning multiple times.
 ### Fixed
 - Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the type name with `as=Ident`.
 
