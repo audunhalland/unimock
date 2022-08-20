@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Changed
 - Do not require a `Clone` bound immediately when using the `.returns(value)` builder combinator. This is only necessary when returning multiple times.
+- Remove the `Unmock` trait.
 ### Fixed
 - Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the type name with `as=Ident`.
 

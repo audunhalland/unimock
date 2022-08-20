@@ -38,8 +38,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
     let mock_fn_defs: Vec<Option<MockFnDef>> = trait_info
         .methods
         .iter()
-        .enumerate()
-        .map(|(index, method)| def_mock_fn(index, method.as_ref(), &trait_info, &attr))
+        .map(|method| def_mock_fn(method.as_ref(), &trait_info, &attr))
         .collect();
     let associated_futures = trait_info
         .methods
@@ -104,7 +103,6 @@ struct MockFnDef {
 }
 
 fn def_mock_fn(
-    index: usize,
     method: Option<&method::MockMethod>,
     trait_info: &TraitInfo,
     attr: &Attr,
@@ -145,13 +143,7 @@ fn def_mock_fn(
     let generic_args = util::Generics::args(trait_info);
     let where_clause = &trait_info.item.generics.where_clause;
 
-    let unmock_impl = attr.get_unmock_fn(index).map(|_| {
-        quote! {
-            impl #generic_params #prefix::Unmock for #mock_fn_path #generic_args #where_clause {}
-        }
-    });
-
-    let doc_attrs = method.mockfn_doc_attrs(trait_info.ident(), &unmock_impl);
+    let doc_attrs = method.mockfn_doc_attrs(trait_info.ident());
 
     let output = match &method.output_structure.ty {
         Some(ty) => quote! { #ty },
@@ -199,8 +191,6 @@ fn def_mock_fn(
 
             #debug_inputs_fn
         }
-
-        #unmock_impl
     };
 
     let mock_fn_def = if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {

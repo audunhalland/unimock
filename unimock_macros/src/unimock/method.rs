@@ -84,28 +84,13 @@ impl<'s> MockMethod<'s> {
             })
     }
 
-    pub fn mockfn_doc_attrs(
-        &self,
-        trait_ident: &syn::Ident,
-        unmock_impl: &Option<proc_macro2::TokenStream>,
-    ) -> Vec<proc_macro2::TokenStream> {
+    pub fn mockfn_doc_attrs(&self, trait_ident: &syn::Ident) -> Vec<proc_macro2::TokenStream> {
         let sig_string = doc::signature_documentation(&self.method.sig, doc::SkipReceiver(true));
 
         let doc_string = if self.non_generic_mock_entry_ident.is_some() {
-            let mut doc_string =
-                format!("Generic mock interface for `{trait_ident}::{sig_string}`. Get a MockFn instance by calling `with_types()`.");
-
-            if unmock_impl.is_some() {
-                doc_string.push_str(" The resulting type will implement Unmock`.");
-            }
-            doc_string
+            format!("Generic mock interface for `{trait_ident}::{sig_string}`. Get a MockFn instance by calling `with_types()`.")
         } else {
-            let mut doc_string = format!("MockFn for `{trait_ident}::{sig_string}`.");
-
-            if unmock_impl.is_some() {
-                doc_string.push_str(" Implements `Unmock`.");
-            }
-            doc_string
+            format!("MockFn for `{trait_ident}::{sig_string}`.")
         };
 
         let doc_lit = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());

@@ -273,7 +273,7 @@
 //! Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 //! For that to work, unimock needs to know how to call the "real" implementation of traits.
 //!
-//! See the documentation of [Unmock](crate::Unmock) and [spy](crate::spy) to see how this works.
+//! See the documentation of [spy](crate::spy) to see how this works.
 //!
 //! Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 //!
@@ -379,15 +379,69 @@ use std::sync::{Arc, Mutex};
 /// }
 /// ```
 ///
+/// # Unmocking
+/// _Unmocking_ of a mocked function means falling back to a true implementation.
+///
+/// A true implementation must be a standalone function, not part of a trait,
+/// where the first parameter is generic (a `self`-replacement), and the rest of the parameters are
+/// identical to [MockInputs::Inputs]:
+///
+/// ```rust
+/// # use unimock::*;
+/// #[unimock(unmocked=[my_original(self, a)])]
+/// trait DoubleNumber {
+///     fn double_number(&self, a: i32) -> i32;
+/// }
+///
+/// // The true implementation is a regular, generic function which performs number doubling!
+/// fn my_original<T>(_: T, a: i32) -> i32 {
+///     a * 2
+/// }
+/// ```
+///
+/// The unmock feature makes sense when the reason to define a mockable trait is _solely_ for the purpose of inversion-of-control at test-time:
+///   Release code need only one way to double a number.
+///
+/// Standalone functions enables arbitrarily deep integration testing in unimock-based application architectures.
+/// When unimock calls the true implementation, it inserts itself as the generic first parameter.
+/// When this parameter is bounded by traits, the original `fn` is given capabilities to call other APIs, though only indirectly.
+/// Each method invocation happening during a test will invisibly pass through unimock, resulting in a great level of control.
+/// Consider:
+///
+/// ```rust
+/// # use unimock::*;
+/// #[unimock(unmocked=[my_factorial(self, input)])]
+/// trait Factorial {
+///     fn factorial(&self, input: u32) -> u32;
+/// }
+///
+/// // will it eventually panic?
+/// fn my_factorial(f: &impl Factorial, input: u32) -> u32 {
+///     f.factorial(input - 1) * input
+/// }
+///
+/// assert_eq!(
+///     120,
+///     // well, not in the test, at least!
+///     mock([
+///         Factorial__factorial.stub(|each| {
+///             each.call(matching! {(input) if *input <= 1}).returns(1_u32); // unimock controls the API call
+///             each.call(matching!(_)).unmocked();
+///         })
+///     ])
+///     .factorial(5)
+/// );
+/// ```
+///
+///
 /// # Arguments
 /// The unimock macro accepts a number of comma-separated key-value configuration parameters:
 ///
 /// * `#[unimock(mod=ident)]`: Puts the [MockFn] types in a new module named `ident`.
 /// * `#[unimock(as=[a, b, c])]`: Given there are e.g. 3 methods in the annotated trait, assigns the names `a`, `b` and `c` for the [MockFn] types respectively, in the same order as the trait methods.
-/// * `#[unimock(unmock=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
+/// * `#[unimock(unmocked=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
 ///   The functions are assigned to the methods in the same order as the methods are listed in the trait.
 ///   A value of `_` means _no unmock support_ for that method.
-///   See [Unmock](crate::Unmock) for more information.
 /// * `#[unimock(prefix=path)]`: Makes unimock use a different path prefix than `::unimock`, in case the crate has been re-exported through another crate.
 pub use unimock_macros::unimock;
 
@@ -565,7 +619,7 @@ pub trait MockInputs<'i> {
 /// The main trait used for unimock configuration.
 ///
 /// `MockFn` describes functional APIs that may be called via dispatch, a.k.a. _Inversion of Control_.
-/// Virtuality should be regarded as as test-time virtuality: A virtual function is either the real deal (see [Unmock]) OR it is mocked.
+/// Virtuality should be regarded as as test-time virtuality: A virtual function is either the real deal OR it is mocked.
 ///
 /// In Rust, the most convenient way to perform a virtualized/dispatched function call is to call a trait method.
 ///
@@ -640,61 +694,6 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     }
 }
 
-/// [MockFn] with the ability to unmock into a unique true implementation.
-///
-/// A true implementation must be a standalone function, not part of a trait,
-/// where the first parameter is generic (a `self`-replacement), and the rest of the parameters are
-/// identical to [MockInputs::Inputs]:
-///
-/// ```rust
-/// # use unimock::*;
-/// #[unimock(unmocked=[my_original(self, a)])]
-/// trait DoubleNumber {
-///     fn double_number(&self, a: i32) -> i32;
-/// }
-///
-/// // The true implementation is a regular, generic function which performs number doubling!
-/// fn my_original<T>(_: T, a: i32) -> i32 {
-///     a * 2
-/// }
-/// ```
-///
-/// The unmock feature makes sense when the reason to define a mockable trait is _solely_ for the purpose of inversion-of-control at test-time:
-///   Release code need only one way to double a number.
-///
-/// Standalone functions enables arbitrarily deep integration testing in unimock-based application architectures.
-/// When unimock calls the true implementation, it inserts itself as the generic first parameter.
-/// When this parameter is bounded by traits, the original `fn` is given capabilities to call other APIs, though only indirectly.
-/// Each method invocation happening during a test will invisibly pass through unimock, resulting in a great level of control.
-/// Consider:
-///
-/// ```rust
-/// # use unimock::*;
-/// #[unimock(unmocked=[my_factorial(self, input)])]
-/// trait Factorial {
-///     fn factorial(&self, input: u32) -> u32;
-/// }
-///
-/// // will it eventually panic?
-/// fn my_factorial(f: &impl Factorial, input: u32) -> u32 {
-///     f.factorial(input - 1) * input
-/// }
-///
-/// assert_eq!(
-///     120,
-///     // well, not in the test, at least!
-///     mock([
-///         Factorial__factorial.stub(|each| {
-///             each.call(matching! {(input) if *input <= 1}).returns(1_u32); // unimock controls the API call
-///             each.call(matching!(_)).unmocked();
-///         })
-///     ])
-///     .factorial(5)
-/// );
-/// ```
-///
-pub trait Unmock: MockFn {}
-
 /// Construct a unimock instance that works like a mock or a stub, from a set of [Clause]es.
 ///
 /// Every call hitting the instance must be declared in advance as an input clause, or else panic will ensue.
@@ -707,7 +706,11 @@ where
 }
 
 /// Construct a unimock instance that works like a _spy_.
-/// In a spy, every clause acts as an override over the default behaviour, which is to hit "real world" code using the [Unmock] feature.
+///
+/// In a spy, every clause acts as an override over the default behaviour, which is to hit "real world" code.
+/// Traits that are mocked using the `unmock` option get unmocked automatically in a spy.
+///
+/// Traits that lack an `unmock` specifier will still need to be explicitly mocked using clauses.
 ///
 /// # Example
 /// ```rust

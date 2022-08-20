@@ -246,11 +246,11 @@ where
         self.quantify()
     }
 
-    /// Instruct this call pattern to invoke the [Unmock]ed function.
-    pub fn unmocked(mut self) -> Quantify<'p, F, O>
-    where
-        F: Unmock,
-    {
+    /// Instruct this call pattern to invoke its corresponding `unmocked` function.
+    ///
+    /// For this to work, the mocked trait must be configured with an `unmocked=[..]` parameter.
+    /// If unimock doesn't find a way to unmock the function, this will panic when the function is called.
+    pub fn unmocked(mut self) -> Quantify<'p, F, O> {
         self.builder.push_responder(DynResponder::Unmock);
         self.quantify()
     }
