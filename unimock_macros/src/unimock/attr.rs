@@ -44,7 +44,6 @@ impl syn::parse::Parse for Attr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut prefix: Option<syn::Path> = None;
         let mut no_mod = false;
-        let mut module = MockInterface::FromMethodAttr;
         let mut unmocks = None;
         let mut debug = false;
 
@@ -55,11 +54,6 @@ impl syn::parse::Parse for Attr {
                 if input.peek(syn::token::Bang) {
                     let _: syn::token::Bang = input.parse()?;
                     no_mod = true;
-                } else if input.peek(syn::token::Star) {
-                    let _: syn::token::Star = input.parse()?;
-                    module = MockInterface::Unpacked;
-                } else {
-                    module = MockInterface::Ident(input.parse()?);
                 }
             } else {
                 let keyword: syn::Ident = input.parse()?;
@@ -96,7 +90,7 @@ impl syn::parse::Parse for Attr {
         Ok(Self {
             prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
             no_mod,
-            mock_interface: module,
+            mock_interface: MockInterface::FromMethodAttr,
             unmocks,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             debug,
@@ -107,10 +101,6 @@ impl syn::parse::Parse for Attr {
 pub enum MockInterface {
     // mod TraitMock { }...
     MockMod(syn::Ident),
-    // One module containing all MockFns
-    Ident(syn::Ident),
-    // One module per MockFn, with with same name as the fn
-    Unpacked,
     // Default: construct a MockFn
     FromMethodAttr,
 }

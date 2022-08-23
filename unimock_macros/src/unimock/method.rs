@@ -54,14 +54,13 @@ impl syn::parse::Parse for UnimockMethodAttrs {
 }
 
 impl<'s> MockMethod<'s> {
-    pub fn mock_fn_path(&self, method_ident: &syn::Ident, attr: &Attr) -> proc_macro2::TokenStream {
+    pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
 
         match (&attr.mock_interface, &self.non_generic_mock_entry_ident) {
-            (MockInterface::MockMod(ident) | MockInterface::Ident(ident), None) => {
+            (MockInterface::MockMod(ident), None) => {
                 quote! { #ident::#mock_fn_ident }
             }
-            (MockInterface::Unpacked, None) => quote! { #method_ident::#mock_fn_ident },
             _ => quote! { #mock_fn_ident },
         }
     }
@@ -325,12 +324,10 @@ fn generate_mock_fn_ident(
 ) -> syn::Result<MockFnIdent> {
     if generic {
         match &attr.mock_interface {
-            MockInterface::MockMod(_) | MockInterface::Ident(_) | MockInterface::Unpacked => {
-                Ok(MockFnIdent::new(
-                    quote::format_ident!("__Generic{}", method.sig.ident),
-                    MockFnIdentKind::Inferred,
-                ))
-            }
+            MockInterface::MockMod(_) => Ok(MockFnIdent::new(
+                quote::format_ident!("__Generic{}", method.sig.ident),
+                MockFnIdentKind::Inferred,
+            )),
             MockInterface::FromMethodAttr => Ok(MockFnIdent::new(
                 quote::format_ident!(
                     "__Generic{}",
@@ -341,9 +338,10 @@ fn generate_mock_fn_ident(
         }
     } else {
         match &attr.mock_interface {
-            MockInterface::MockMod(_) | MockInterface::Ident(_) | MockInterface::Unpacked => Ok(
-                MockFnIdent::new(method.sig.ident.clone(), MockFnIdentKind::Inferred),
-            ),
+            MockInterface::MockMod(_) => Ok(MockFnIdent::new(
+                method.sig.ident.clone(),
+                MockFnIdentKind::Inferred,
+            )),
             MockInterface::FromMethodAttr => Ok(MockFnIdent::new(
                 unimock_method_attrs.expect_struct_ident(method)?.clone(),
                 MockFnIdentKind::Explicit,

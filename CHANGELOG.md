@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mod = !` trait attribute to opt-out of generating a wrapper module for `MockFn`s.
 ### Fixed
 - Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the type name with `as=Ident`.
+### Removed
+- `unmocked=function` attribute option at trait level.
+- `mod = *` attribute option at trait level.
 
 ## [0.3.14] - 2022-08-01
 ### Added

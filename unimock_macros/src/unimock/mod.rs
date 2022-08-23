@@ -72,7 +72,7 @@ pub fn generate(
     let generic_args = util::Generics::args(&trait_info);
 
     let mock_fns_public = match &attr.mock_interface {
-        MockInterface::MockMod(module_ident) | MockInterface::Ident(module_ident) => {
+        MockInterface::MockMod(module_ident) => {
             let doc_string = format!("Unimock setup module for `{}`", trait_info.item.ident);
             let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
@@ -122,15 +122,13 @@ fn def_mock_fn(
     let method = method?;
     let prefix = &attr.prefix;
     let mock_fn_ident = &method.mock_fn_ident;
-    let mock_fn_path = method.mock_fn_path(&method.method.sig.ident, attr);
+    let mock_fn_path = method.mock_fn_path(attr);
     let mock_fn_name = &method.mock_fn_name;
 
     let mock_visibility = match &attr.mock_interface {
-        MockInterface::Ident(_) | MockInterface::MockMod(_) | MockInterface::Unpacked => {
-            syn::Visibility::Public(syn::VisPublic {
-                pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
-            })
-        }
+        MockInterface::MockMod(_) => syn::Visibility::Public(syn::VisPublic {
+            pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
+        }),
         MockInterface::FromMethodAttr => trait_info.item.vis.clone(),
     };
 
@@ -169,28 +167,10 @@ fn def_mock_fn(
     let gen_public_defs = |non_generic_ident: &MockFnIdent| {
         let allow_ident_attr = non_generic_ident.allow_attr();
 
-        if let MockInterface::Unpacked = attr.mock_interface {
-            let method_ident = &method.method.sig.ident;
-            let vis = &trait_info.item.vis;
-            let module_doc_string = format!(
-                "Unimock module for `{}::{}`",
-                trait_info.item.ident, method_ident
-            );
-
-            quote! {
-                #[doc = #module_doc_string]
-                #vis mod #method_ident {
-                    #allow_ident_attr
-                    #(#doc_attrs)*
-                    #mock_visibility struct #non_generic_ident;
-                }
-            }
-        } else {
-            quote! {
-                #allow_ident_attr
-                #(#doc_attrs)*
-                #mock_visibility struct #non_generic_ident;
-            }
+        quote! {
+            #allow_ident_attr
+            #(#doc_attrs)*
+            #mock_visibility struct #non_generic_ident;
         }
     };
 
@@ -215,11 +195,6 @@ fn def_mock_fn(
             .map(|_| util::UntypedPhantomData);
         let module_scope = match &attr.mock_interface {
             MockInterface::MockMod(ident) => Some(quote! { #ident:: }),
-            MockInterface::Ident(ident) => Some(quote! { #ident:: }),
-            MockInterface::Unpacked => {
-                let method_ident = &method.method.sig.ident;
-                Some(quote! { #method_ident:: })
-            }
             MockInterface::FromMethodAttr => None,
         };
         let allow_ident_attr = mock_fn_ident.allow_attr();
@@ -267,7 +242,7 @@ fn def_method_impl(
 
     let prefix = &attr.prefix;
     let method_sig = &method.method.sig;
-    let mock_fn_path = method.mock_fn_path(&method.method.sig.ident, attr);
+    let mock_fn_path = method.mock_fn_path(attr);
 
     let eval_fn = syn::Ident::new(
         method.output_structure.ownership.eval_fn(),
