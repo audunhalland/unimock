@@ -51,12 +51,12 @@ trait Foo {
 }
 ```
 
-we would like to tell unimock what `Foo::foo`'s behaviour will be, i.e. what it will return.
+we would like to tell unimock what `FooMock::foo`'s behaviour will be, i.e. what it will return.
 In order to do that, we first need to refer to the method.
 In Rust, trait methods aren't reified entities, they are not types nor values, so they cannot be referred to in code.
 Therefore, the unimock macro creates a surrogate type to represent it. By default, this type will be called
 
-`Foo__foo`.
+`FooMock::foo`.
 
 This type will implement `MockFn`, which is the entrypoint for creating clauses:
 
@@ -70,14 +70,14 @@ fn test_me(foo: impl Foo) -> i32 {
     foo.foo()
 }
 
-let clause = Foo__foo.each_call(matching!()).returns(1337).in_any_order();
+let clause = FooMock::foo.each_call(matching!()).returns(1337).in_any_order();
 
 assert_eq!(1337, test_me(mock(Some(clause))));
 ```
 
 `Clause` construction is a type-state machine that in this example goes through 3 steps:
 
-1. `Foo__foo.each_call(matching!())`: Define a _call pattern_.
+1. `FooMock::foo.each_call(matching!())`: Define a _call pattern_.
    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 2. `.returs(1337)`: Each matching call will return the value `1337`.
 3. `.in_any_order()`: this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it.
@@ -129,11 +129,11 @@ assert_eq!(
     42,
     test_me(
         &mock([
-            Foo__foo
+            FooMock::foo
                 .each_call(matching!(_))
                 .answers(|arg| arg * 3)
                 .in_any_order(),
-            Bar__bar
+            BarMock::bar
                 .each_call(matching! {(arg) if *arg > 20})
                 .answers(|arg| arg * 2)
                 .in_any_order(),
@@ -148,11 +148,11 @@ assert_eq!(
     42,
     test_me(
         &mock([
-            Foo__foo.stub(|each| {
+            FooMock::foo.stub(|each| {
                 each.call(matching!(1337)).returns(1024);
                 each.call(matching!(_)).answers(|arg| arg * 3);
             }),
-            Bar__bar.stub(|each| {
+            BarMock::bar.stub(|each| {
                 each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
             }),
         ]),
@@ -186,7 +186,7 @@ To make a call count expectation for a specific call pattern,
 With exact quantification in place, we can produce output sequences by chaining output definitions:
 
 ```rust
-each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
+each.call(matching!(_)).returns(1).n_times(2).then().returns(2).cloned();
 ```
 
 The output sequence will be `[1, 1, 2, 2, 2, ..]`.
@@ -199,8 +199,8 @@ Use [`next_call`](MockFn::next_call) to define a call pattern, and [`in_order`](
 
 ```rust
 mock([
-    Foo__foo.next_call(matching!(3)).returns(5).once().in_order(),
-    Bar__bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
+    FooMock::foo.next_call(matching!(3)).returns(5).in_order(),
+    BarMock::bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
 ]);
 ```
 
@@ -255,7 +255,7 @@ To wire all of this together into a full-fledged runtime solution, without too m
 Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 For that to work, unimock needs to know how to call the "real" implementation of traits.
 
-See the documentation of Unmock and spy to see how this works.
+See the documentation of spy to see how this works.
 
 Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 

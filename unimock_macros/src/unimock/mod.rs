@@ -1,4 +1,4 @@
-use quote::quote;
+use quote::{format_ident, quote};
 
 mod attr;
 mod doc;
@@ -7,15 +7,24 @@ mod output;
 mod trait_info;
 mod util;
 
-pub use attr::{Attr, ModuleAttr};
+pub use attr::{Attr, MockInterface};
 use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
 use self::method::MockFnIdent;
 
-pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
-    let trait_info = trait_info::TraitInfo::analyze(&item_trait, &attr)?;
+pub fn generate(
+    mut attr: Attr,
+    mut item_trait: syn::ItemTrait,
+) -> syn::Result<proc_macro2::TokenStream> {
+    if !attr.no_mod {
+        attr.mock_interface =
+            attr::MockInterface::MockMod(format_ident!("{}Mock", item_trait.ident));
+    }
+
+    let method_attr_map = method::extract_method_attr_map(&mut item_trait)?;
+    let trait_info = trait_info::TraitInfo::analyze(&item_trait, method_attr_map, &attr)?;
     attr.validate(&trait_info)?;
 
     let prefix = &attr.prefix;
@@ -50,7 +59,6 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .enumerate()
         .map(|(index, method)| def_method_impl(index, method.as_ref(), &trait_info, &attr));
 
-    let item_trait = &trait_info.item;
     let where_clause = &trait_info.item.generics.where_clause;
     let mock_fns_public = mock_fn_defs
         .iter()
@@ -63,20 +71,24 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
     let generic_params = util::Generics::params(&trait_info);
     let generic_args = util::Generics::args(&trait_info);
 
-    let mock_fns_public = if let ModuleAttr::Ident(module_ident) = &attr.module {
-        let doc_string = format!("Unimock module for `{}`", trait_info.item.ident);
-        let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
+    let mock_fns_public = match &attr.mock_interface {
+        MockInterface::MockMod(module_ident) | MockInterface::Ident(module_ident) => {
+            let doc_string = format!("Unimock setup module for `{}`", trait_info.item.ident);
+            let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
-        let vis = &trait_info.item.vis;
-        quote! {
-            #[doc = #doc_lit_str]
-            #vis mod #module_ident {
-                #(#mock_fns_public)*
+            let vis = &trait_info.item.vis;
+            quote! {
+                #[doc = #doc_lit_str]
+                #[allow(non_snake_case)]
+                #vis mod #module_ident {
+                    #(#mock_fns_public)*
+                }
             }
         }
-    } else {
-        quote! {
-            #(#mock_fns_public)*
+        _ => {
+            quote! {
+                #(#mock_fns_public)*
+            }
         }
     };
 
@@ -113,11 +125,13 @@ fn def_mock_fn(
     let mock_fn_path = method.mock_fn_path(&method.method.sig.ident, attr);
     let mock_fn_name = &method.mock_fn_name;
 
-    let mock_visibility = match &attr.module {
-        ModuleAttr::Ident(_) | ModuleAttr::Unpacked => syn::Visibility::Public(syn::VisPublic {
-            pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
-        }),
-        ModuleAttr::None => trait_info.item.vis.clone(),
+    let mock_visibility = match &attr.mock_interface {
+        MockInterface::Ident(_) | MockInterface::MockMod(_) | MockInterface::Unpacked => {
+            syn::Visibility::Public(syn::VisPublic {
+                pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
+            })
+        }
+        MockInterface::FromMethodAttr => trait_info.item.vis.clone(),
     };
 
     let input_lifetime = &attr.input_lifetime;
@@ -155,7 +169,7 @@ fn def_mock_fn(
     let gen_public_defs = |non_generic_ident: &MockFnIdent| {
         let allow_ident_attr = non_generic_ident.allow_attr();
 
-        if let ModuleAttr::Unpacked = attr.module {
+        if let MockInterface::Unpacked = attr.mock_interface {
             let method_ident = &method.method.sig.ident;
             let vis = &trait_info.item.vis;
             let module_doc_string = format!(
@@ -199,13 +213,14 @@ fn def_mock_fn(
         let untyped_phantoms = trait_info
             .generic_type_params()
             .map(|_| util::UntypedPhantomData);
-        let module_scope = match &attr.module {
-            ModuleAttr::Ident(ident) => Some(quote! { #ident:: }),
-            ModuleAttr::Unpacked => {
+        let module_scope = match &attr.mock_interface {
+            MockInterface::MockMod(ident) => Some(quote! { #ident:: }),
+            MockInterface::Ident(ident) => Some(quote! { #ident:: }),
+            MockInterface::Unpacked => {
                 let method_ident = &method.method.sig.ident;
                 Some(quote! { #method_ident:: })
             }
-            ModuleAttr::None => None,
+            MockInterface::FromMethodAttr => None,
         };
         let allow_ident_attr = mock_fn_ident.allow_attr();
 

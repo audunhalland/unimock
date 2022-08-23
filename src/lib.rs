@@ -44,12 +44,12 @@
 //! }
 //! ```
 //!
-//! we would like to tell unimock what `Foo::foo`'s behaviour will be, i.e. what it will return.
+//! we would like to tell unimock what `FooMock::foo`'s behaviour will be, i.e. what it will return.
 //! In order to do that, we first need to refer to the method.
 //! In Rust, trait methods aren't reified entities, they are not types nor values, so they cannot be referred to in code.
 //! Therefore, the unimock macro creates a surrogate type to represent it. By default, this type will be called
 //!
-//! `Foo__foo`.
+//! `FooMock::foo`.
 //!
 //! This type will implement [`MockFn`](crate::MockFn), which is the entrypoint for creating clauses:
 //!
@@ -64,14 +64,14 @@
 //!     foo.foo()
 //! }
 //!
-//! let clause = Foo__foo.each_call(matching!()).returns(1337).in_any_order();
+//! let clause = FooMock::foo.each_call(matching!()).returns(1337).in_any_order();
 //!
 //! assert_eq!(1337, test_me(mock(Some(clause))));
 //! ```
 //!
 //! `Clause` construction is a type-state machine that in this example goes through 3 steps:
 //!
-//! 1. [`Foo__foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
+//! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 //! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`.
 //! 3. [`.in_any_order()`](crate::build::QuantifyResponse::in_any_order): this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it.
@@ -124,11 +124,11 @@
 //!     42,
 //!     test_me(
 //!         &mock([
-//!             Foo__foo
+//!             FooMock::foo
 //!                 .each_call(matching!(_))
 //!                 .answers(|arg| arg * 3)
 //!                 .in_any_order(),
-//!             Bar__bar
+//!             BarMock::bar
 //!                 .each_call(matching! {(arg) if *arg > 20})
 //!                 .answers(|arg| arg * 2)
 //!                 .in_any_order(),
@@ -143,11 +143,11 @@
 //!     42,
 //!     test_me(
 //!         &mock([
-//!             Foo__foo.stub(|each| {
+//!             FooMock::foo.stub(|each| {
 //!                 each.call(matching!(1337)).returns(1024);
 //!                 each.call(matching!(_)).answers(|arg| arg * 3);
 //!             }),
-//!             Bar__bar.stub(|each| {
+//!             BarMock::bar.stub(|each| {
 //!                 each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
 //!             }),
 //!         ]),
@@ -185,7 +185,7 @@
 //! # #[unimock]
 //! # trait Hidden { fn hidden(&self, arg: i32) -> i32; }
 //! # let deps = mock([
-//! # Hidden__hidden.stub(|each| {
+//! # HiddenMock::hidden.stub(|each| {
 //! each.call(matching!(_)).returns(1).n_times(2).then().returns(2).cloned();
 //! # })
 //! # ]);
@@ -211,8 +211,8 @@
 //! # trait Bar { fn bar(&self, arg: i32) -> i32; }
 //! # let deps =
 //! mock([
-//!     Foo__foo.next_call(matching!(3)).returns(5).in_order(),
-//!     Bar__bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
+//!     FooMock::foo.next_call(matching!(3)).returns(5).in_order(),
+//!     BarMock::bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
 //! ]);
 //! # assert_eq!(5, deps.foo(3));
 //! # assert_eq!(7, deps.bar(8));
@@ -375,7 +375,7 @@ use std::sync::{Arc, Mutex};
 ///     sum(mock(None)); // note: panics at runtime!
 ///
 ///     // Mock a single method (still panics, because all 3 must be mocked:):
-///     sum(mock(Some(Trait1__a.next_call(|_| true).returns(0).in_order())));
+///     sum(mock(Some(Trait1Mock::a.next_call(|_| true).returns(0).in_order())));
 /// }
 /// ```
 ///
@@ -424,7 +424,7 @@ use std::sync::{Arc, Mutex};
 ///     120,
 ///     // well, not in the test, at least!
 ///     mock([
-///         Factorial__factorial.stub(|each| {
+///         FactorialMock::factorial.stub(|each| {
 ///             each.call(matching! {(input) if *input <= 1}).returns(1_u32); // unimock controls the API call
 ///             each.call(matching!(_)).unmocked();
 ///         })
@@ -437,8 +437,7 @@ use std::sync::{Arc, Mutex};
 /// # Arguments
 /// The unimock macro accepts a number of comma-separated key-value configuration parameters:
 ///
-/// * `#[unimock(mod=ident)]`: Puts the [MockFn] types in a new module named `ident`.
-/// * `#[unimock(as=[a, b, c])]`: Given there are e.g. 3 methods in the annotated trait, assigns the names `a`, `b` and `c` for the [MockFn] types respectively, in the same order as the trait methods.
+/// * `#[unimock(mod=!)]`: Do not put [MockFn]s inside a module called `TraitMock`. Requires a `#[unimock(struct = StructName)]` attribute on each method to specify the struct to generate.
 /// * `#[unimock(unmocked=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
 ///   The functions are assigned to the methods in the same order as the methods are listed in the trait.
 ///   A value of `_` means _no unmock support_ for that method.
@@ -629,14 +628,16 @@ pub trait MockInputs<'i> {
 /// so we cannot implement `MockFn` for those. But a surrogate type can be introduced:
 ///
 /// ```rust
-/// trait ILoveToMock {
+/// trait MockMe {
 ///     fn method(&self);
 /// }
 ///
 /// // The method can be referred to via the following empty surrogate struct:
-/// struct ILoveToMock__method;
+/// mod MockMeMock {
+///     pub struct method;
+/// }
 ///
-/// /* impl MockFn for ILoveToMock__method ... */
+/// /* impl MockFn for MockMeMock::method ... */
 /// ```
 ///
 pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
@@ -730,7 +731,7 @@ where
 /// spy([]).foo();
 /// // prints "real thing" x 2
 ///
-/// spy(Some(Trait__foo.next_call(matching!()).returns(()).in_order())).foo();
+/// spy(Some(TraitMock::foo.next_call(matching!()).returns(()).in_order())).foo();
 /// // does not print
 ///
 /// // spy object that prevents the real
@@ -796,15 +797,15 @@ fn mock_from_iterator(
 /// // reusable function
 /// fn foo_bar_setup_clause() -> Clause {
 ///     [
-///         Foo__foo.each_call(matching!(_)).returns(1).in_any_order(),
-///         Bar__bar.each_call(matching!(_)).returns(2).in_any_order(),
+///         FooMock::foo.each_call(matching!(_)).returns(1).in_any_order(),
+///         BarMock::bar.each_call(matching!(_)).returns(2).in_any_order(),
 ///     ]
 ///     .into()
 /// }
 ///
 /// let unimock = mock([
 ///     foo_bar_setup_clause(),
-///     Baz__baz.each_call(matching!(_)).returns(3).in_any_order()
+///     BazMock::baz.each_call(matching!(_)).returns(3).in_any_order()
 /// ]);
 /// assert_eq!(6, unimock.foo(0) + unimock.bar(0) + unimock.baz(0));
 /// ```

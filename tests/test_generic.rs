@@ -13,12 +13,12 @@ mod output {
     #[test]
     fn test_generic_return() {
         let deps = mock([
-            GenericOutput__generic_output
+            GenericOutputMock::generic_output
                 .with_types::<String>()
                 .each_call(matching!())
                 .returns("success".to_string())
                 .in_any_order(),
-            GenericOutput__generic_output
+            GenericOutputMock::generic_output
                 .with_types::<i32>()
                 .each_call(matching!())
                 .returns(42)
@@ -44,12 +44,12 @@ mod param {
     #[test]
     fn test_generic_param() {
         let deps = mock([
-            GenericParam__generic_param
+            GenericParamMock::generic_param
                 .with_types::<&'static str>()
                 .each_call(matching!("foobar"))
                 .returns_static("a string")
                 .in_any_order(),
-            GenericParam__generic_param
+            GenericParamMock::generic_param
                 .with_types::<i32>()
                 .each_call(matching!(42))
                 .returns_static("a number")
@@ -67,7 +67,7 @@ mod param {
     )]
     fn test_generic_param_panic_no_debug() {
         let deps = mock(Some(
-            GenericParam__generic_param
+            GenericParamMock::generic_param
                 .with_types::<i32>()
                 .each_call(matching!(1337))
                 .returns_static("a number")
@@ -89,7 +89,7 @@ mod param {
     )]
     fn test_generic_param_panic_debug() {
         let deps = mock(Some(
-            GenericParamDebug__generic_param_debug
+            GenericParamDebugMock::generic_param_debug
                 .with_types::<i32>()
                 .each_call(matching!(1337))
                 .returns_static("a number")
@@ -128,18 +128,18 @@ mod async_generic {
     }
 }
 
-mod generic_with_module {
+mod generic_without_module {
     use super::*;
 
-    #[unimock(mod=with_module, as=[Funk])]
+    #[unimock(mod=!)]
     trait WithModule<T: Debug> {
+        #[unimock(struct = Func)]
         fn func(&self) -> T;
     }
 
     #[test]
     fn mock() {
-        with_module::Funk
-            .with_types::<String>()
+        Func.with_types::<String>()
             .each_call(matching!())
             .returns("".to_string());
     }

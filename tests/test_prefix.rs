@@ -9,7 +9,7 @@ trait Test {
 fn test() {
     use mocknroll::MockFn;
 
-    let roll = mocknroll::mock(Some(Test__test.stub(|each| {
+    let roll = mocknroll::mock(Some(TestMock::test.stub(|each| {
         each.call(mocknroll::matching!()).returns(());
     })));
 

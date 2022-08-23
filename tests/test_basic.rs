@@ -11,10 +11,9 @@ fn noarg_works() {
 
     assert_eq!(
         1_000_000,
-        mock([NoArg__no_arg
+        mock([NoArgMock::no_arg
             .next_call(matching!())
             .returns(1_000_000)
-            .once()
             .in_order()])
         .no_arg()
     );
@@ -49,7 +48,7 @@ fn owned_output_works() {
         "ab",
         takes_owned(
             &mock(Some(
-                Owned__foo
+                OwnedMock::foo
                     .next_call(matching!(_, _))
                     .answers(|(a, b)| format!("{a}{b}"))
                     .once()
@@ -62,7 +61,7 @@ fn owned_output_works() {
     assert_eq!(
         "lol",
         takes_owned(
-            &mock(Some(Owned__foo.stub(|each| {
+            &mock(Some(OwnedMock::foo.stub(|each| {
                 each.call(matching!(_, _)).returns("lol");
             }))),
             "a",
@@ -72,7 +71,7 @@ fn owned_output_works() {
     assert_eq!(
         "",
         takes_owned(
-            &mock(Some(Owned__foo.stub(|each| {
+            &mock(Some(OwnedMock::foo.stub(|each| {
                 each.call(matching!("a", "b")).returns_default();
             }))),
             "a",
@@ -103,7 +102,7 @@ mod exotic_self_types {
     #[test]
     fn rc_self() {
         let deps = Rc::new(mock(Some(
-            RcSelf__rc_self
+            RcSelfMock::rc_self
                 .each_call(matching!())
                 .returns(())
                 .in_any_order(),
@@ -127,7 +126,7 @@ mod exotic_methods {
     #[test]
     fn test_provided() {
         let deps = mock(Some(
-            Provided__provided
+            ProvidedMock::provided
                 .each_call(matching!())
                 .returns(42)
                 .in_any_order(),
@@ -162,7 +161,7 @@ mod referenced {
         assert_eq!(
             "answer",
             takes_referenced(
-                &mock(vec![Referenced__foo.stub(|each| {
+                &mock(vec![ReferencedMock::foo.stub(|each| {
                     each.call(matching!("a")).returns_ref("answer".to_string());
                 })]),
                 "a",
@@ -175,7 +174,7 @@ mod referenced {
         assert_eq!(
             "",
             takes_referenced(
-                &mock([Referenced__foo.stub(|each| {
+                &mock([ReferencedMock::foo.stub(|each| {
                     each.call(matching!("Æ")).panics("Should not be called");
                     each.call(matching!("a")).returns_ref(String::new());
                 }),]),
@@ -189,7 +188,7 @@ mod referenced {
         assert_eq!(
             "foobar",
             takes_referenced(
-                &mock([Referenced__foo.stub(|each| {
+                &mock([ReferencedMock::foo.stub(|each| {
                     each.call(matching!("a")).returns_static("foobar");
                 }),]),
                 "a",
@@ -201,7 +200,7 @@ mod referenced {
 mod no_clone_return {
     use unimock::*;
 
-    struct NoClone(i32);
+    pub struct NoClone(i32);
 
     #[unimock]
     trait Foo {
@@ -211,7 +210,7 @@ mod no_clone_return {
     #[test]
     fn test_no_clone_return() {
         let u = mock(Some(
-            Foo__foo
+            FooMock::foo
                 .each_call(matching!())
                 .returns(NoClone(55))
                 .once()
@@ -241,12 +240,12 @@ fn test_multiple() {
     assert_eq!(
         "success",
         takes_single_multi(&mock([
-            SingleArg__method1.stub(|each| {
+            SingleArgMock::method1.stub(|each| {
                 each.call(matching!("b"))
                     .returns_ref("B".to_string())
                     .once();
             }),
-            MultiArg__method2.stub(|each| {
+            MultiArgMock::method2.stub(|each| {
                 each.call(matching!("a", _)).panics("should not call this");
                 each.call(matching!("B", "B"))
                     .returns_ref("success".to_string())
@@ -259,7 +258,7 @@ fn test_multiple() {
 mod no_debug {
     use super::*;
 
-    enum PrimitiveEnum {
+    pub enum PrimitiveEnum {
         Foo,
         Bar,
     }
@@ -271,7 +270,7 @@ mod no_debug {
 
     #[test]
     fn can_match_a_non_debug_argument() {
-        match mock(Some(VeryPrimitive__primitive.stub(|each| {
+        match mock(Some(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
         })))
@@ -285,7 +284,7 @@ mod no_debug {
     #[test]
     #[should_panic(expected = "VeryPrimitive::primitive(?, \"\"): No matching call patterns.")]
     fn should_format_non_debug_input_with_a_question_mark() {
-        mock([VeryPrimitive__primitive.stub(|each| {
+        mock([VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
         })])
@@ -296,7 +295,7 @@ mod no_debug {
 #[test]
 fn should_debug_reference_to_debug_implementing_type() {
     #[derive(Debug)]
-    enum DebugEnum {}
+    pub enum DebugEnum {}
 
     #[unimock]
     trait VeryPrimitiveRefZero {
@@ -317,7 +316,7 @@ fn should_debug_reference_to_debug_implementing_type() {
 #[test]
 fn should_be_able_to_borrow_a_returns_value() {
     #[derive(Eq, PartialEq, Debug, Clone)]
-    struct Ret(i32);
+    pub struct Ret(i32);
 
     #[unimock]
     trait BorrowsRet {
@@ -327,7 +326,7 @@ fn should_be_able_to_borrow_a_returns_value() {
     assert_eq!(
         &Ret(42),
         mock(Some(
-            BorrowsRet__borrows_ret
+            BorrowsRetMock::borrows_ret
                 .each_call(matching!())
                 .returns(Ret(42))
                 .in_any_order()
@@ -350,7 +349,7 @@ fn borrowing_with_memory_leak() {
         "foo",
         get_str(
             &mock(Some(
-                Borrowing__borrow
+                BorrowingMock::borrow
                     .next_call(matching!(_))
                     .returns_ref("foo".to_string())
                     .once()
@@ -363,7 +362,7 @@ fn borrowing_with_memory_leak() {
         "yoyo",
         get_str(
             &mock(Some(
-                Borrowing__borrow
+                BorrowingMock::borrow
                     .next_call(matching!(_))
                     .answers_leaked_ref(|input| format!("{input}{input}"))
                     .once()
@@ -374,60 +373,58 @@ fn borrowing_with_memory_leak() {
     );
 }
 
-pub struct MyType;
+mod without_module {
+    use unimock::*;
 
-#[unimock(mod=with_module, as=[Funk])]
-trait WithModule {
-    fn func(&self, input: String) -> &MyType;
-}
+    pub struct MyType;
 
-#[test]
-#[should_panic(
-    expected = "WithModule::func: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.\nMock for WithModule::func was never called. Dead mocks should be removed."
-)]
-fn test_with_module() {
-    mock(Some(
-        with_module::Funk
-            .next_call(matching!(_))
-            .returns_ref(MyType)
-            .once()
-            .in_order(),
-    ));
+    #[unimock(mod = !)]
+    trait Single {
+        #[unimock(struct = Func)]
+        fn func(&self) -> &MyType;
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Single::func: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+    )]
+    fn test_without_module() {
+        mock(Some(
+            Func.next_call(matching!(_))
+                .returns_ref(MyType)
+                .once()
+                .in_order(),
+        ));
+    }
 }
 
 mod unpacked_module {
     mod basic {
         use unimock::*;
 
-        #[unimock(mod=*, as=[Funk, Funk])]
+        #[unimock(mod=!)]
         trait WithUnpackedModule {
+            #[unimock(struct = Foo)]
             fn foo(&self, input: String) -> i32;
+            #[unimock(struct = Bar)]
             fn bar(&self);
         }
 
         #[test]
         fn test_unpacked_module() {
-            let _ = foo::Funk.each_call(matching!(_)).returns(33).in_any_order();
-            let _ = bar::Funk.each_call(matching!(_)).returns(()).in_any_order();
-        }
-    }
-
-    mod uniform_idents {
-        use unimock::*;
-
-        #[unimock(mod=*, as=Funk)]
-        trait UnpackedModuleUniformIdent {
-            fn foo(&self, input: String) -> i32;
-            fn bar(&self);
+            let _ = Foo.each_call(matching!(_)).returns(33).in_any_order();
+            let _ = Bar.each_call(matching!(_)).returns(()).in_any_order();
         }
     }
 
     mod generics {
         use unimock::*;
 
-        #[unimock(mod=*, as=Funk)]
+        #[unimock(mod=!)]
         trait UnpackedGenerics<T> {
+            #[unimock(struct = Foo)]
             fn foo(&self, input: String) -> T;
+            #[unimock(struct = Bar)]
             fn bar(&self, input: &T);
         }
     }
@@ -435,8 +432,9 @@ mod unpacked_module {
     mod exports {
         mod inner {
             use unimock::*;
-            #[unimock(mod=*, as=Fn)]
+            #[unimock(mod=!)]
             pub trait Trait {
+                #[unimock(struct = FooMock)]
                 fn foo(&self);
             }
         }
@@ -444,7 +442,7 @@ mod unpacked_module {
         #[test]
         fn test_inner() {
             use unimock::*;
-            let _ = inner::foo::Fn
+            let _ = inner::FooMock
                 .each_call(matching!())
                 .returns(())
                 .in_any_order();
@@ -467,7 +465,7 @@ async fn test_async_trait() {
     assert_eq!(
         "42",
         takes_async(
-            &mock([Async__func.stub(|each| {
+            &mock([AsyncMock::func.stub(|each| {
                 each.call(matching!(_)).returns("42");
             })]),
             21
@@ -492,7 +490,7 @@ fn test_cow() {
     assert_eq!(
         "output",
         takes(
-            &mock(Some(CowBased__func.stub(|each| {
+            &mock(Some(CowBasedMock::func.stub(|each| {
                 each.call(matching! {("input") | ("foo")}).returns("output");
             }))),
             "input".into()
@@ -503,7 +501,7 @@ fn test_cow() {
 #[test]
 fn newtype() {
     #[derive(Clone)]
-    struct MyString(pub String);
+    pub struct MyString(pub String);
 
     impl<'s> From<&'s str> for MyString {
         fn from(s: &'s str) -> Self {
@@ -527,7 +525,7 @@ fn newtype() {
     }
 
     let _ = takes(
-        &mock(Some(NewtypeString__func.stub(|each| {
+        &mock(Some(NewtypeStringMock::func.stub(|each| {
             each.call(matching!("input")).returns("output");
         }))),
         "input".into(),
@@ -575,15 +573,24 @@ fn clause_helpers() {
 
     fn setup_foo_bar() -> Clause {
         [
-            Foo__m1.each_call(matching!(_)).returns(1).in_any_order(),
-            Bar__m2.each_call(matching!(_)).returns(2).in_any_order(),
+            FooMock::m1
+                .each_call(matching!(_))
+                .returns(1)
+                .in_any_order(),
+            BarMock::m2
+                .each_call(matching!(_))
+                .returns(2)
+                .in_any_order(),
         ]
         .into()
     }
 
     let unimock = mock([
         setup_foo_bar(),
-        Baz__m3.each_call(matching!(_)).returns(3).in_any_order(),
+        BazMock::m3
+            .each_call(matching!(_))
+            .returns(3)
+            .in_any_order(),
     ]);
     assert_eq!(6, unimock.m1() + unimock.m2() + unimock.m3());
 }
@@ -597,7 +604,7 @@ mod responders_in_series {
     }
 
     fn clause() -> Clause {
-        Series__series
+        SeriesMock::series
             .each_call(matching!())
             .returns(1)
             .once()
@@ -650,7 +657,7 @@ fn borrow_static_should_not_work_with_returns_ref() {
     assert_eq!(
         "foo",
         mock(Some(
-            BorrowStatic__static_str
+            BorrowStaticMock::static_str
                 .next_call(matching!(_))
                 .returns_ref("foo")
                 .once()
@@ -665,7 +672,7 @@ fn borrow_static_should_work_with_returns_static() {
     assert_eq!(
         "foo",
         mock(Some(
-            BorrowStatic__static_str
+            BorrowStaticMock::static_str
                 .next_call(matching!(_))
                 .returns_static("foo")
                 .once()
@@ -687,7 +694,7 @@ mod async_argument_borrowing {
     #[tokio::test]
     async fn test_argument_borrowing() {
         let unimock = mock(Some(
-            BorrowParam__borrow_param
+            BorrowParamMock::borrow_param
                 .each_call(matching!(_))
                 .returns_static("foobar")
                 .in_any_order(),
@@ -702,7 +709,7 @@ mod async_argument_borrowing {
     )]
     async fn test_argument_borrowing_error() {
         let unimock = mock(Some(
-            BorrowParam__borrow_param
+            BorrowParamMock::borrow_param
                 .each_call(matching!(_))
                 .returns_ref("foobar")
                 .in_any_order(),
@@ -716,10 +723,10 @@ mod lifetime_constrained_output_type {
     use super::*;
 
     #[derive(Clone)]
-    struct Borrowing1<'a>(&'a str);
+    pub struct Borrowing1<'a>(&'a str);
 
     #[derive(Clone)]
-    struct Borrowing2<'a, 'b>(&'a str, &'b str);
+    pub struct Borrowing2<'a, 'b>(&'a str, &'b str);
 
     #[unimock]
     trait BorrowSync {
@@ -739,7 +746,7 @@ mod lifetime_constrained_output_type {
     #[test]
     fn test_borrow() {
         let deps = mock(Some(
-            BorrowSync__borrow_sync_explicit2
+            BorrowSyncMock::borrow_sync_explicit2
                 .each_call(matching!("foobar"))
                 .returns(Borrowing2("a", "b"))
                 .in_any_order(),

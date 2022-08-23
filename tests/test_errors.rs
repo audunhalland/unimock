@@ -16,7 +16,7 @@ fn should_panic_for_nonexisting_mock() {
     expected = "Mock for SingleArg::method1 was never called. Dead mocks should be removed."
 )]
 fn should_panic_for_unused_stub() {
-    mock(Some(SingleArg__method1.stub(|each| {
+    mock(Some(SingleArgMock::method1.stub(|each| {
         each.call(matching!(_));
     })));
 }
@@ -27,11 +27,11 @@ fn should_panic_for_unused_stub() {
 )]
 fn should_complain_about_mismatched_modes() {
     mock([
-        SingleArg__method1
+        SingleArgMock::method1
             .each_call(matching!(_))
             .returns_ref("a")
             .in_any_order(),
-        SingleArg__method1
+        SingleArgMock::method1
             .next_call(matching!(_))
             .returns_ref("b")
             .once()
@@ -42,7 +42,7 @@ fn should_complain_about_mismatched_modes() {
 #[test]
 #[should_panic(expected = "Stub contained no call patterns")]
 fn should_panic_for_empty_stub_closure() {
-    let _ = SingleArg__method1.stub(|_| {});
+    let _ = SingleArgMock::method1.stub(|_| {});
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn should_panic_for_empty_stub_closure() {
     expected = "SingleArg::method1(\"whatever\"): No output available for matching call pattern #0"
 )]
 fn call_pattern_without_output_factory_should_crash() {
-    mock([SingleArg__method1.stub(|each| {
+    mock([SingleArgMock::method1.stub(|each| {
         each.call(matching!(_));
     })])
     .method1("whatever");
@@ -59,7 +59,7 @@ fn call_pattern_without_output_factory_should_crash() {
 #[test]
 #[should_panic(expected = "SingleArg::method1(\"anything\"): No matching call patterns.")]
 fn should_panic_if_no_call_patterns_in_stub_are_matched() {
-    mock([SingleArg__method1.stub(|each| {
+    mock([SingleArgMock::method1.stub(|each| {
         each.call(matching!("something"));
     })])
     .method1("anything");
@@ -70,7 +70,7 @@ fn should_panic_if_no_call_patterns_in_stub_are_matched() {
     expected = "SingleArg::method1: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls."
 )]
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
-    mock([SingleArg__method1.stub(|each| {
+    mock([SingleArgMock::method1.stub(|each| {
         each.call(matching!("a")).returns_ref(String::new()).once();
         each.call(matching!(_)).returns_ref(String::new());
     })])
@@ -80,7 +80,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
 #[test]
 #[should_panic(expected = "SingleArg::method1(\"b\"): Explicit panic for call pattern #0: foobar!")]
 fn should_panic_with_explicit_message() {
-    mock([SingleArg__method1.stub(|each| {
+    mock([SingleArgMock::method1.stub(|each| {
         each.call(matching!(_)).panics("foobar!");
     })])
     .method1("b");
@@ -124,7 +124,7 @@ fn should_complain_when_returning_unquantified_value_more_then_once() {
         fn foo(&self, arg: i32) -> i32;
     }
 
-    let unimock = mock(Some(Foo__foo.stub(|each| {
+    let unimock = mock(Some(FooMock::foo.stub(|each| {
         each.call(matching!(_)).returns(42);
     })));
 

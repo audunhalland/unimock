@@ -31,7 +31,7 @@ mod unmock_simple {
     fn works_with_a_spy_having_a_stub_with_non_matching_pattern() {
         assert_eq!(
             "ab",
-            spy(Some(Spyable__concat.stub(|each| {
+            spy(Some(SpyableMock::concat.stub(|each| {
                 each.call(matching!("something", "else"))
                     .panics("not matched");
             })))
@@ -43,7 +43,7 @@ mod unmock_simple {
     fn returns_the_matched_pattern_if_overridden() {
         assert_eq!(
             "42",
-            spy(Some(Spyable__concat.stub(|each| {
+            spy(Some(SpyableMock::concat.stub(|each| {
                 each.call(matching!("a", "b")).returns("42");
             })))
             .concat("a".to_string(), "b".to_string())
@@ -54,7 +54,7 @@ mod unmock_simple {
     fn works_on_a_mock_instance_with_explicit_unmock_setup() {
         assert_eq!(
             "ab",
-            mock([Spyable__concat.stub(|each| {
+            mock([SpyableMock::concat.stub(|each| {
                 each.call(matching!("a", "b")).unmocked().once();
             })])
             .concat("a".to_string(), "b".to_string())
@@ -66,7 +66,7 @@ mod unmock_simple {
         expected = "Spyable::concat: Expected call pattern #0 to match at least 1 call, but it actually matched no calls."
     )]
     fn unmatched_pattern_still_panics() {
-        mock([Spyable__concat.stub(|each| {
+        mock([SpyableMock::concat.stub(|each| {
             each.call(matching!("", ""))
                 .returns("foobar")
                 .at_least_times(1);
@@ -89,7 +89,7 @@ fn unmock_recursion() {
 
     assert_eq!(
         120,
-        mock([Factorial__factorial.stub(|each| {
+        mock([FactorialMock::factorial.stub(|each| {
             each.call(matching! {(input) if *input <= 1}).returns(1u32);
             each.call(matching!(_)).unmocked();
         })])
@@ -112,7 +112,7 @@ async fn unmock_async() {
     assert_eq!(
         120,
         spy(Some(
-            AsyncFactorial__factorial
+            AsyncFactorialMock::factorial
                 .each_call(matching!(1))
                 .returns(1_u32)
                 .in_any_order()
@@ -124,7 +124,7 @@ async fn unmock_async() {
 
     assert_eq!(
         120,
-        mock(Some(AsyncFactorial__factorial.stub(|each| {
+        mock(Some(AsyncFactorialMock::factorial.stub(|each| {
             each.call(matching! {(input) if *input <= 1 })
                 .returns(1_u32);
             each.call(matching!(_)).unmocked();

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Do not require a `Clone` bound immediately when using the `.returns(value)` builder combinator. This is only necessary when returning multiple times.
 - Remove the `Unmock` trait.
+- The generated `MockFn` structs are now put in a module called `TraitMock` where `Trait` is the name of the trait.
+  The name of the generated structs are the same as the names of the methods.
+### Added
+- `[unimock(..)]` method attributes
+- `mod = !` trait attribute to opt-out of generating a wrapper module for `MockFn`s.
 ### Fixed
 - Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the type name with `as=Ident`.
 

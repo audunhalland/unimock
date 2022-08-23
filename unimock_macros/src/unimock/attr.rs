@@ -4,9 +4,9 @@ use super::trait_info::TraitInfo;
 pub struct Attr {
     /// Unimock's prefix, e.g. `::unimock`
     pub prefix: syn::Path,
+    pub no_mod: bool,
     /// Module to put the MockFn in
-    pub module: ModuleAttr,
-    pub mock_fn_idents: Option<WithSpan<MockFnIdents>>,
+    pub mock_interface: MockInterface,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
     pub input_lifetime: syn::Lifetime,
     pub debug: bool,
@@ -26,18 +26,6 @@ impl Attr {
     }
 
     pub fn validate(&self, trait_info: &TraitInfo) -> syn::Result<()> {
-        match &self.mock_fn_idents {
-            Some(WithSpan(MockFnIdents::PerMethod(idents), span))
-                if idents.len() != trait_info.methods.len() =>
-            {
-                return Err(syn::Error::new(
-                    *span,
-                    "Length must equal the number of trait methods",
-                ))
-            }
-            _ => {}
-        }
-
         match &self.unmocks {
             Some(unmocked) if unmocked.0.len() != trait_info.methods.len() => {
                 return Err(syn::Error::new(
@@ -55,8 +43,8 @@ impl Attr {
 impl syn::parse::Parse for Attr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut prefix: Option<syn::Path> = None;
-        let mut module = ModuleAttr::None;
-        let mut mock_fn_idents = None;
+        let mut no_mod = false;
+        let mut module = MockInterface::FromMethodAttr;
         let mut unmocks = None;
         let mut debug = false;
 
@@ -64,31 +52,14 @@ impl syn::parse::Parse for Attr {
             if input.peek(syn::token::Mod) {
                 let _: syn::token::Mod = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
-                if input.peek(syn::token::Star) {
+                if input.peek(syn::token::Bang) {
+                    let _: syn::token::Bang = input.parse()?;
+                    no_mod = true;
+                } else if input.peek(syn::token::Star) {
                     let _: syn::token::Star = input.parse()?;
-                    module = ModuleAttr::Unpacked;
+                    module = MockInterface::Unpacked;
                 } else {
-                    module = ModuleAttr::Ident(input.parse()?);
-                }
-            } else if input.peek(syn::token::As) {
-                let _: syn::token::As = input.parse()?;
-                let _: syn::token::Eq = input.parse()?;
-
-                if input.peek(syn::Ident) {
-                    let ident: syn::Ident = input.parse()?;
-                    let span = ident.span();
-                    mock_fn_idents = Some(WithSpan(MockFnIdents::Uniform(ident), span))
-                } else {
-                    let content;
-                    let _ = syn::bracketed!(content in input);
-
-                    let mut idents: Vec<syn::Ident> = vec![content.parse()?];
-                    while content.peek(syn::token::Comma) {
-                        let _: syn::token::Comma = content.parse()?;
-                        idents.push(content.parse()?);
-                    }
-                    mock_fn_idents =
-                        Some(WithSpan(MockFnIdents::PerMethod(idents), content.span()));
+                    module = MockInterface::Ident(input.parse()?);
                 }
             } else {
                 let keyword: syn::Ident = input.parse()?;
@@ -124,27 +95,24 @@ impl syn::parse::Parse for Attr {
 
         Ok(Self {
             prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
-            module,
+            no_mod,
+            mock_interface: module,
             unmocks,
-            mock_fn_idents,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             debug,
         })
     }
 }
 
-pub enum ModuleAttr {
+pub enum MockInterface {
+    // mod TraitMock { }...
+    MockMod(syn::Ident),
     // One module containing all MockFns
     Ident(syn::Ident),
     // One module per MockFn, with with same name as the fn
     Unpacked,
-    // No module
-    None,
-}
-
-pub enum MockFnIdents {
-    PerMethod(Vec<syn::Ident>),
-    Uniform(syn::Ident),
+    // Default: construct a MockFn
+    FromMethodAttr,
 }
 
 pub struct Unmock(Option<UnmockFn>);

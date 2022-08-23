@@ -1,11 +1,10 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use quote::ToTokens;
+use std::collections::HashMap;
 use syn::spanned::Spanned;
 
-use super::attr::MockFnIdents;
-use super::attr::ModuleAttr;
-use super::attr::WithSpan;
+use super::attr::MockInterface;
 use super::doc;
 use super::output;
 use super::Attr;
@@ -18,13 +17,51 @@ pub struct MockMethod<'t> {
     pub output_structure: output::OutputStructure<'t>,
 }
 
+#[derive(Default)]
+pub struct UnimockMethodAttrs {
+    struct_ident: Option<syn::Ident>,
+}
+
+impl UnimockMethodAttrs {
+    fn expect_struct_ident(&self, method: &syn::TraitItemMethod) -> syn::Result<&syn::Ident> {
+        self.struct_ident.as_ref().ok_or_else(|| {
+            syn::Error::new(method.span(), "Expected `#[unimock(struct = SomeStruct)`")
+        })
+    }
+}
+
+impl syn::parse::Parse for UnimockMethodAttrs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut struct_ident = None;
+
+        let content;
+        let _ = syn::parenthesized!(content in input);
+
+        while !content.is_empty() {
+            let lookahead = content.lookahead1();
+
+            if lookahead.peek(syn::token::Struct) {
+                let _ = content.parse::<syn::token::Struct>()?;
+                let _ = content.parse::<syn::token::Eq>()?;
+                struct_ident = Some(content.parse::<syn::Ident>()?);
+            } else {
+                return Err(lookahead.error());
+            }
+        }
+
+        Ok(UnimockMethodAttrs { struct_ident })
+    }
+}
+
 impl<'s> MockMethod<'s> {
     pub fn mock_fn_path(&self, method_ident: &syn::Ident, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
 
-        match (&attr.module, &self.non_generic_mock_entry_ident) {
-            (ModuleAttr::Ident(module), None) => quote! { #module::#mock_fn_ident },
-            (ModuleAttr::Unpacked, None) => quote! { #method_ident::#mock_fn_ident },
+        match (&attr.mock_interface, &self.non_generic_mock_entry_ident) {
+            (MockInterface::MockMod(ident) | MockInterface::Ident(ident), None) => {
+                quote! { #ident::#mock_fn_ident }
+            }
+            (MockInterface::Unpacked, None) => quote! { #method_ident::#mock_fn_ident },
             _ => quote! { #mock_fn_ident },
         }
     }
@@ -101,8 +138,61 @@ impl<'s> MockMethod<'s> {
     }
 }
 
+pub fn extract_method_attr_map(
+    item_trait: &mut syn::ItemTrait,
+) -> syn::Result<HashMap<usize, UnimockMethodAttrs>> {
+    let mut attr_map = HashMap::new();
+
+    let item_mut_iter = item_trait.items.iter_mut().filter_map(|item| match item {
+        syn::TraitItem::Method(method) => Some(method),
+        _ => None,
+    });
+
+    for (index, method) in item_mut_iter.enumerate() {
+        let mut attrs = vec![];
+        std::mem::swap(&mut attrs, &mut method.attrs);
+        for attr in attrs.into_iter() {
+            match MethodAttrParseResult::parse(attr) {
+                MethodAttrParseResult::UnimockMethodAttrs(attr) => {
+                    attr_map.insert(index, attr);
+                }
+                MethodAttrParseResult::Unrecognized(attr) => {
+                    method.attrs.push(attr);
+                }
+                MethodAttrParseResult::Error(err) => return Err(err),
+            }
+        }
+    }
+
+    Ok(attr_map)
+}
+
+enum MethodAttrParseResult {
+    UnimockMethodAttrs(UnimockMethodAttrs),
+    Error(syn::Error),
+    Unrecognized(syn::Attribute),
+}
+
+impl MethodAttrParseResult {
+    fn parse(attr: syn::Attribute) -> Self {
+        if attr.path.segments.len() != 1 {
+            return Self::Unrecognized(attr);
+        }
+        let segment = attr.path.segments.first().unwrap();
+        if segment.ident != "unimock" {
+            return Self::Unrecognized(attr);
+        }
+
+        match syn::parse2::<UnimockMethodAttrs>(attr.tokens) {
+            Ok(attrs) => Self::UnimockMethodAttrs(attrs),
+            Err(err) => Self::Error(err),
+        }
+    }
+}
+
 pub fn extract_methods<'s>(
     item_trait: &'s syn::ItemTrait,
+    mut attr_map: HashMap<usize, UnimockMethodAttrs>,
     is_type_generic: bool,
     attr: &Attr,
 ) -> syn::Result<Vec<Option<MockMethod<'s>>>> {
@@ -115,6 +205,8 @@ pub fn extract_methods<'s>(
         })
         .enumerate()
         .map(|(index, method)| {
+            let unimock_method_attrs = attr_map.remove(&index).unwrap_or_default();
+
             match determine_mockable(method) {
                 Mockable::Yes => {}
                 Mockable::Skip => return Ok(None),
@@ -141,18 +233,20 @@ pub fn extract_methods<'s>(
                 method,
                 non_generic_mock_entry_ident: if is_type_generic {
                     Some(generate_mock_fn_ident(
-                        item_trait, method, index, false, attr,
-                    ))
+                        method,
+                        &unimock_method_attrs,
+                        false,
+                        attr,
+                    )?)
                 } else {
                     None
                 },
                 mock_fn_ident: generate_mock_fn_ident(
-                    item_trait,
                     method,
-                    index,
+                    &unimock_method_attrs,
                     is_type_generic,
                     attr,
-                ),
+                )?,
                 mock_fn_name,
                 output_structure,
             }))
@@ -224,40 +318,36 @@ pub enum MockFnIdentKind {
 }
 
 fn generate_mock_fn_ident(
-    item_trait: &syn::ItemTrait,
     method: &syn::TraitItemMethod,
-    method_index: usize,
+    unimock_method_attrs: &UnimockMethodAttrs,
     generic: bool,
     attr: &Attr,
-) -> MockFnIdent {
-    let (mock_fn_ident_method_part, kind) = match &attr.mock_fn_idents {
-        Some(WithSpan(MockFnIdents::PerMethod(idents), _)) => idents
-            .get(method_index)
-            .map(|ident| (ident, MockFnIdentKind::Explicit))
-            .unwrap_or((&method.sig.ident, MockFnIdentKind::Inferred)),
-        Some(WithSpan(MockFnIdents::Uniform(ident), _)) => (ident, MockFnIdentKind::Explicit),
-        None => (&method.sig.ident, MockFnIdentKind::Inferred),
-    };
-
+) -> syn::Result<MockFnIdent> {
     if generic {
-        match &attr.module {
-            ModuleAttr::Ident(_) | ModuleAttr::Unpacked => {
-                MockFnIdent::new(quote::format_ident!("__Generic{}", method.sig.ident), kind)
+        match &attr.mock_interface {
+            MockInterface::MockMod(_) | MockInterface::Ident(_) | MockInterface::Unpacked => {
+                Ok(MockFnIdent::new(
+                    quote::format_ident!("__Generic{}", method.sig.ident),
+                    MockFnIdentKind::Inferred,
+                ))
             }
-            ModuleAttr::None => MockFnIdent::new(
-                quote::format_ident!("__Generic{}__{}", &item_trait.ident, method.sig.ident),
-                kind,
-            ),
+            MockInterface::FromMethodAttr => Ok(MockFnIdent::new(
+                quote::format_ident!(
+                    "__Generic{}",
+                    unimock_method_attrs.expect_struct_ident(method)?
+                ),
+                MockFnIdentKind::Explicit,
+            )),
         }
     } else {
-        match &attr.module {
-            ModuleAttr::Ident(_) | ModuleAttr::Unpacked => {
-                MockFnIdent::new(mock_fn_ident_method_part.clone(), kind)
-            }
-            ModuleAttr::None => MockFnIdent::new(
-                quote::format_ident!("{}__{}", &item_trait.ident, mock_fn_ident_method_part),
-                kind,
+        match &attr.mock_interface {
+            MockInterface::MockMod(_) | MockInterface::Ident(_) | MockInterface::Unpacked => Ok(
+                MockFnIdent::new(method.sig.ident.clone(), MockFnIdentKind::Inferred),
             ),
+            MockInterface::FromMethodAttr => Ok(MockFnIdent::new(
+                unimock_method_attrs.expect_struct_ident(method)?.clone(),
+                MockFnIdentKind::Explicit,
+            )),
         }
     }
 }
