@@ -502,7 +502,7 @@ where
     {
         // Opening for a new response, which will be non-exactly quantified unless otherwise specified, set the exactness to AtLeastPlusOne now.
         // The reason it is AtLeastPlusOne is the additive nature.
-        // We do not want to add anything to the number now, because it could be added to later in QuantifyResponse.
+        // We do not want to add anything to the number now, because it could be added to later in Quantify.
         // We just want to express that when using `then`, it should be called at least one time, if not `then` would be unnecessary.
         self.builder
             .get_mut()

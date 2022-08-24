@@ -74,7 +74,7 @@
 //! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 //! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`.
-//! 3. [`.in_any_order()`](crate::build::QuantifyResponse::in_any_order): this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it.
+//! 3. [`.in_any_order()`](crate::build::QuantifyValue::in_any_order): this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it.
 //!    In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
@@ -173,10 +173,10 @@
 //!
 //! ### Optional call count expectations in call patterns
 //! To make a call count expectation for a specific call pattern,
-//!    look at [`QuantifyResponse`](build::QuantifyResponse), which has methods like
-//!    [`once()`](build::QuantifyResponse::once),
-//!    [`n_times(n)`](build::QuantifyResponse::n_times) and
-//!    [`at_least_times(n)`](build::QuantifyResponse::at_least_times).
+//!    look at [`Quantify`](build::Quantify) or [`QuantifyValue`](build::QuantifyValue), which have methods like
+//!    [`once()`](build::QuantifyValue::once),
+//!    [`n_times(n)`](build::QuantifyValue::n_times) and
+//!    [`at_least_times(n)`](build::QuantifyValue::at_least_times).
 //!
 //! With exact quantification in place, we can produce output sequences by chaining output definitions:
 //!
