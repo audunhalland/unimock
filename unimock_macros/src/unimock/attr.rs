@@ -4,7 +4,6 @@ use super::trait_info::TraitInfo;
 pub struct Attr {
     /// Unimock's prefix, e.g. `::unimock`
     pub prefix: syn::Path,
-    pub no_mod: bool,
     /// Module to put the MockFn in
     pub mock_interface: MockInterface,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
@@ -43,7 +42,7 @@ impl Attr {
 impl syn::parse::Parse for Attr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut prefix: Option<syn::Path> = None;
-        let mut no_mod = false;
+        let mut mock_interface = MockInterface::Default;
         let mut unmocks = None;
         let mut debug = false;
 
@@ -51,10 +50,7 @@ impl syn::parse::Parse for Attr {
             if input.peek(syn::token::Mod) {
                 let _: syn::token::Mod = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
-                if input.peek(syn::token::Bang) {
-                    let _: syn::token::Bang = input.parse()?;
-                    no_mod = true;
-                }
+                mock_interface = MockInterface::MockMod(input.parse()?);
             } else {
                 let keyword: syn::Ident = input.parse()?;
                 let _: syn::token::Eq = input.parse()?;
@@ -62,7 +58,7 @@ impl syn::parse::Parse for Attr {
                     "prefix" => {
                         prefix = Some(input.parse()?);
                     }
-                    "unmocked" => {
+                    "unmock_with" => {
                         let content;
                         let _ = syn::bracketed!(content in input);
                         let mut unmocked: Vec<Unmock> = vec![content.parse()?];
@@ -72,6 +68,20 @@ impl syn::parse::Parse for Attr {
                             unmocked.push(content.parse()?);
                         }
                         unmocks = Some(WithSpan(unmocked, content.span()));
+                    }
+                    "flatten" => {
+                        let content;
+                        let _ = syn::bracketed!(content in input);
+                        let mut idents: Vec<syn::Ident> = vec![content.parse()?];
+
+                        while content.peek(syn::token::Comma) {
+                            let _: syn::token::Comma = content.parse()?;
+                            idents.push(content.parse()?);
+                        }
+                        mock_interface = MockInterface::Flattened(FlattenedMethods {
+                            span: content.span(),
+                            idents,
+                        });
                     }
                     "debug" => {
                         debug = input.parse::<syn::LitBool>()?.value;
@@ -89,8 +99,7 @@ impl syn::parse::Parse for Attr {
 
         Ok(Self {
             prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
-            no_mod,
-            mock_interface: MockInterface::FromMethodAttr,
+            mock_interface,
             unmocks,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             debug,
@@ -99,10 +108,28 @@ impl syn::parse::Parse for Attr {
 }
 
 pub enum MockInterface {
+    // Default, which will turn into MockMod
+    Default,
     // mod TraitMock { }...
     MockMod(syn::Ident),
-    // Default: construct a MockFn
-    FromMethodAttr,
+    // One top-level struct per method
+    Flattened(FlattenedMethods),
+}
+
+pub struct FlattenedMethods {
+    span: proc_macro2::Span,
+    idents: Vec<syn::Ident>,
+}
+
+impl FlattenedMethods {
+    pub fn get_mock_ident(&self, method_index: usize) -> syn::Result<&syn::Ident> {
+        self.idents.get(method_index).ok_or_else(|| {
+            syn::Error::new(
+                self.span,
+                format!("No flat mock provided for method index {method_index}"),
+            )
+        })
+    }
 }
 
 pub struct Unmock(Option<UnmockFn>);

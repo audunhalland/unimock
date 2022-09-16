@@ -131,9 +131,8 @@ mod async_generic {
 mod generic_without_module {
     use super::*;
 
-    #[unimock(mod=!)]
+    #[unimock(flatten=[Func])]
     trait WithModule<T: Debug> {
-        #[unimock(struct = Func)]
         fn func(&self) -> T;
     }
 
@@ -148,12 +147,12 @@ mod generic_without_module {
 mod generic_with_unmock {
     use super::*;
 
-    #[unimock(unmocked=[gen_default(self)])]
+    #[unimock(unmock_with=[gen_default(self)])]
     trait UnmockMe<T: Default> {
         fn unmock_me(&self) -> T;
     }
 
-    #[unimock(unmocked=[gen_default(self)])]
+    #[unimock(unmock_with=[gen_default(self)])]
     trait UnmockMeWhere<T>
     where
         T: Default,

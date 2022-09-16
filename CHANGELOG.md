@@ -10,13 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove the `Unmock` trait.
 - The generated `MockFn` structs are now put in a module called `TraitMock` where `Trait` is the name of the trait.
   The name of the generated structs are the same as the names of the methods.
+- Renamed the `unmocked=[..]` attribute option to `unmock_with=[..]`.
 ### Added
-- `[unimock(..)]` method attributes
-- `mod = !` trait attribute to opt-out of generating a wrapper module for `MockFn`s.
+- `mod=Name` attribute option for overriding the ident of the generated module.
+- `flatten=[..]` attribute option for opting out of generating an encapsulating module.
 ### Fixed
-- Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the type name with `as=Ident`.
+- Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the MockFn type names.
 ### Removed
-- `unmocked=function` attribute option at trait level.
 - `mod = *` attribute option at trait level.
 
 ## [0.3.14] - 2022-08-01

@@ -1,5 +1,4 @@
 #![cfg(feature = "nightly-tests")]
-#![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 
 use unimock::*;
@@ -8,7 +7,7 @@ mod without_unmock {
     use super::*;
 
     #[unimock]
-    trait WithoutUnmock {
+    trait Foo {
         type Fut<'a>: ::core::future::Future<Output = i32> + Send
         where
             Self: 'a;
@@ -18,7 +17,7 @@ mod without_unmock {
 
     #[tokio::test]
     async fn should_mock_without_unmock() {
-        let unimock = mock([WithoutUnmock__without_unmock
+        let unimock = mock([FooMock::without_unmock
             .each_call(matching!(10))
             .returns(20)
             .in_any_order()]);
@@ -32,8 +31,8 @@ mod without_unmock {
 mod with_unmock {
     use super::*;
 
-    #[unimock(unmocked=[do_unmock(arg)])]
-    trait WithUnmock {
+    #[unimock(unmock_with=[do_unmock(arg)])]
+    trait Foo {
         type Fut<'a>: ::core::future::Future<Output = i32> + Send
         where
             Self: 'a;
@@ -47,7 +46,7 @@ mod with_unmock {
 
     #[tokio::test]
     async fn should_mock_with_unmock() {
-        let unimock = mock([WithUnmock__with_unmock
+        let unimock = mock([FooMock::with_unmock
             .each_call(matching!(42))
             .unmocked()
             .in_any_order()]);
@@ -61,13 +60,14 @@ mod with_unmock {
 mod reference_argument_works_with_explicit_lifetime {
     use super::*;
 
-    struct Error;
+    pub struct Error;
 
     #[unimock]
     trait GetUsername {
         type Fut<'s, 'i1>: ::core::future::Future<Output = Result<String, Error>> + Send
         where
             Self: 's;
+
         fn get_username<'s, 'i1>(&'s self, id: u32, password: &'i1 str) -> Self::Fut<'s, 'i1>;
     }
 }

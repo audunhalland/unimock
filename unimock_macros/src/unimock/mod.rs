@@ -16,15 +16,14 @@ use self::method::MockFnIdent;
 
 pub fn generate(
     mut attr: Attr,
-    mut item_trait: syn::ItemTrait,
+    item_trait: syn::ItemTrait,
 ) -> syn::Result<proc_macro2::TokenStream> {
-    if !attr.no_mod {
+    if matches!(attr.mock_interface, attr::MockInterface::Default) {
         attr.mock_interface =
             attr::MockInterface::MockMod(format_ident!("{}Mock", item_trait.ident));
     }
 
-    let method_attr_map = method::extract_method_attr_map(&mut item_trait)?;
-    let trait_info = trait_info::TraitInfo::analyze(&item_trait, method_attr_map, &attr)?;
+    let trait_info = trait_info::TraitInfo::analyze(&item_trait, &attr)?;
     attr.validate(&trait_info)?;
 
     let prefix = &attr.prefix;
@@ -129,7 +128,7 @@ fn def_mock_fn(
         MockInterface::MockMod(_) => syn::Visibility::Public(syn::VisPublic {
             pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
         }),
-        MockInterface::FromMethodAttr => trait_info.item.vis.clone(),
+        _ => trait_info.item.vis.clone(),
     };
 
     let input_lifetime = &attr.input_lifetime;
@@ -195,7 +194,7 @@ fn def_mock_fn(
             .map(|_| util::UntypedPhantomData);
         let module_scope = match &attr.mock_interface {
             MockInterface::MockMod(ident) => Some(quote! { #ident:: }),
-            MockInterface::FromMethodAttr => None,
+            _ => None,
         };
         let allow_ident_attr = mock_fn_ident.allow_attr();
 

@@ -388,7 +388,7 @@ use std::sync::{Arc, Mutex};
 ///
 /// ```rust
 /// # use unimock::*;
-/// #[unimock(unmocked=[my_original(self, a)])]
+/// #[unimock(unmock_with=[my_original(self, a)])]
 /// trait DoubleNumber {
 ///     fn double_number(&self, a: i32) -> i32;
 /// }
@@ -410,7 +410,7 @@ use std::sync::{Arc, Mutex};
 ///
 /// ```rust
 /// # use unimock::*;
-/// #[unimock(unmocked=[my_factorial(self, input)])]
+/// #[unimock(unmock_with=[my_factorial(self, input)])]
 /// trait Factorial {
 ///     fn factorial(&self, input: u32) -> u32;
 /// }
@@ -437,10 +437,12 @@ use std::sync::{Arc, Mutex};
 /// # Arguments
 /// The unimock macro accepts a number of comma-separated key-value configuration parameters:
 ///
-/// * `#[unimock(mod=!)]`: Do not put [MockFn]s inside a module called `TraitMock`. Requires a `#[unimock(struct = StructName)]` attribute on each method to specify the struct to generate.
-/// * `#[unimock(unmocked=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
-///   The functions are assigned to the methods in the same order as the methods are listed in the trait.
-///   A value of `_` means _no unmock support_ for that method.
+/// * `#[unimock(mod=MyCustomMod)]`: Supply a custom name of the module which contains the mock interfaces.
+/// * `#[unimock(flatten=[A, B])`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
+///     with the names of those structs passed with array-like syntax in the same order as the methods appear in the trait definition.
+/// * `#[unimock(unmock_with=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
+///     The functions are assigned to the methods in the same order as the methods are listed in the trait.
+///     A value of `_` means _no unmock support_ for that method.
 /// * `#[unimock(prefix=path)]`: Makes unimock use a different path prefix than `::unimock`, in case the crate has been re-exported through another crate.
 pub use unimock_macros::unimock;
 
@@ -717,7 +719,7 @@ where
 /// ```rust
 /// # use unimock::*;
 ///
-/// #[unimock(unmocked=[real_foo])]
+/// #[unimock(unmock_with=[real_foo])]
 /// trait Trait {
 ///     fn foo(&self);
 /// }

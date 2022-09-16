@@ -373,14 +373,13 @@ fn borrowing_with_memory_leak() {
     );
 }
 
-mod without_module {
+mod custom_module {
     use unimock::*;
 
     pub struct MyType;
 
-    #[unimock(mod = !)]
+    #[unimock(mod = FakeSingle)]
     trait Single {
-        #[unimock(struct = Func)]
         fn func(&self) -> &MyType;
     }
 
@@ -390,7 +389,8 @@ mod without_module {
     )]
     fn test_without_module() {
         mock(Some(
-            Func.next_call(matching!(_))
+            FakeSingle::func
+                .next_call(matching!(_))
                 .returns_ref(MyType)
                 .once()
                 .in_order(),
@@ -402,11 +402,9 @@ mod unpacked_module {
     mod basic {
         use unimock::*;
 
-        #[unimock(mod=!)]
+        #[unimock(flatten=[Foo, Bar])]
         trait WithUnpackedModule {
-            #[unimock(struct = Foo)]
             fn foo(&self, input: String) -> i32;
-            #[unimock(struct = Bar)]
             fn bar(&self);
         }
 
@@ -420,11 +418,9 @@ mod unpacked_module {
     mod generics {
         use unimock::*;
 
-        #[unimock(mod=!)]
+        #[unimock(flatten=[Foo, Bar])]
         trait UnpackedGenerics<T> {
-            #[unimock(struct = Foo)]
             fn foo(&self, input: String) -> T;
-            #[unimock(struct = Bar)]
             fn bar(&self, input: &T);
         }
     }
@@ -432,9 +428,8 @@ mod unpacked_module {
     mod exports {
         mod inner {
             use unimock::*;
-            #[unimock(mod=!)]
+            #[unimock(flatten=[FooMock])]
             pub trait Trait {
-                #[unimock(struct = FooMock)]
                 fn foo(&self);
             }
         }

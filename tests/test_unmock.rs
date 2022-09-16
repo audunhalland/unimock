@@ -6,7 +6,7 @@ use std::any::Any;
 mod unmock_simple {
     use super::*;
 
-    #[unimock(unmocked=[repeat, concat])]
+    #[unimock(unmock_with=[repeat, concat])]
     trait Spyable {
         fn repeat(&self, arg: String) -> String;
         fn concat(&self, a: String, b: String) -> String;
@@ -78,7 +78,7 @@ mod unmock_simple {
 
 #[test]
 fn unmock_recursion() {
-    #[unimock(unmocked=[my_factorial])]
+    #[unimock(unmock_with=[my_factorial])]
     trait Factorial {
         fn factorial(&self, input: u32) -> u32;
     }
@@ -99,7 +99,7 @@ fn unmock_recursion() {
 
 #[tokio::test]
 async fn unmock_async() {
-    #[unimock(unmocked=[my_factorial])]
+    #[unimock(unmock_with=[my_factorial])]
     #[async_trait]
     trait AsyncFactorial {
         async fn factorial(&self, input: u32) -> u32;
@@ -138,7 +138,7 @@ async fn unmock_async() {
 mod unmock_with_custom_args {
     use super::*;
 
-    #[unimock(unmocked=[foo(b, a)])]
+    #[unimock(unmock_with=[foo(b, a)])]
     trait FlippedOrder {
         fn foo(&self, a: u8, b: u16) -> u32;
     }
