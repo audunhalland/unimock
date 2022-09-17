@@ -9,9 +9,9 @@ trait Test {
 fn test() {
     use mocknroll::MockFn;
 
-    let roll = mocknroll::mock(Some(TestMock::test.stub(|each| {
+    let roll = mocknroll::mock(TestMock::test.stub(|each| {
         each.call(mocknroll::matching!()).returns(());
-    })));
+    }));
 
     roll.test();
 }

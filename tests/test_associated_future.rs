@@ -17,10 +17,7 @@ mod without_unmock {
 
     #[tokio::test]
     async fn should_mock_without_unmock() {
-        let unimock = mock([FooMock::without_unmock
-            .each_call(matching!(10))
-            .returns(20)
-            .in_any_order()]);
+        let unimock = mock(FooMock::without_unmock.each_call(matching!(10)).returns(20));
 
         let answer = unimock.without_unmock(10).await;
 
@@ -46,10 +43,7 @@ mod with_unmock {
 
     #[tokio::test]
     async fn should_mock_with_unmock() {
-        let unimock = mock([FooMock::with_unmock
-            .each_call(matching!(42))
-            .unmocked()
-            .in_any_order()]);
+        let unimock = mock(FooMock::with_unmock.each_call(matching!(42)).unmocked());
 
         let answer = unimock.with_unmock(42).await;
 

@@ -16,15 +16,15 @@
 //!
 //! fn takes_foo(foo: impl Foo) {}
 //!
-//! takes_foo(mock(None));
+//! takes_foo(mock(()));
 //! ```
 //!
 //! 1. `trait Foo` is declared with the [`#[unimock]`](crate::unimock) attribute which makes its behaviour mockable.
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-//! 3. A mock instantiation by calling [`mock(None)`](crate::mock), which returns a [`Unimock`](crate::Unimock) value which is passed into `takes_foo`.
+//! 3. A mock instantiation by calling [`mock(())`](crate::mock), which returns a [`Unimock`](crate::Unimock) value which is passed into `takes_foo`.
 //!
-//! The [mock](crate::mock) function takes an argument, in this case the value `None`.
-//! The argument is _what behaviour are we mocking_, in this case `None` at all!
+//! The [mock](crate::mock) function takes an argument, in this case the unit value, `()`.
+//! The argument is _what behaviour are we mocking_, in this case nothing at all.
 //! `Foo` contains no methods, so there is no behaviour to mock.
 //!
 //! ## Methods and behaviour mocking
@@ -32,7 +32,7 @@
 //! In order to be somewhat useful, the traits we abstract over should contain some methods.
 //! In a unit test for some function, we'd like to mock the behaviour of that function's dependencies (expressed as trait bounds).
 //!
-//! `mock(clauses)` accepts a collection of [Clause](crate::Clause)s. Clauses carry the full recipe on how Unimock will behave once instantiated.
+//! `mock(clause)` accepts a collection of [Clause](crate::Clause)s. Clauses carry the full recipe on how Unimock will behave once instantiated.
 //!
 //! Given some trait,
 //!
@@ -64,17 +64,16 @@
 //!     foo.foo()
 //! }
 //!
-//! let clause = FooMock::foo.each_call(matching!()).returns(1337).in_any_order();
+//! let clause = FooMock::foo.each_call(matching!()).returns(1337);
 //!
-//! assert_eq!(1337, test_me(mock(Some(clause))));
+//! assert_eq!(1337, test_me(mock(clause)));
 //! ```
 //!
-//! `Clause` construction is a type-state machine that in this example goes through 3 steps:
+//! [Clause] construction is a type-state machine that in this example goes through 3 steps:
 //!
 //! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 //! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`.
-//! 3. [`.in_any_order()`](crate::build::QuantifyValue::in_any_order): this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it.
 //!    In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
@@ -93,7 +92,7 @@
 //! Different ways of specifying outputs are found in [`build::Match`](crate::build::Match).
 //!
 //! ## Combining clauses
-//! `mock()` accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
+//! `mock()` accepts as argument anything that implements [Clause], which includes long tuples, so that you can specify more than one kind of behaviour!
 //! An iterator has a specific order of items, and sometimes the order of clauses matters too. It will depend on the type of clause.
 //!
 //! Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
@@ -123,16 +122,14 @@
 //! assert_eq!(
 //!     42,
 //!     test_me(
-//!         &mock([
+//!         &mock((
 //!             FooMock::foo
 //!                 .each_call(matching!(_))
-//!                 .answers(|arg| arg * 3)
-//!                 .in_any_order(),
+//!                 .answers(|arg| arg * 3),
 //!             BarMock::bar
 //!                 .each_call(matching! {(arg) if *arg > 20})
-//!                 .answers(|arg| arg * 2)
-//!                 .in_any_order(),
-//!         ]),
+//!                 .answers(|arg| arg * 2),
+//!         )),
 //!         7
 //!     )
 //! );
@@ -142,7 +139,7 @@
 //! assert_eq!(
 //!     42,
 //!     test_me(
-//!         &mock([
+//!         &mock((
 //!             FooMock::foo.stub(|each| {
 //!                 each.call(matching!(1337)).returns(1024);
 //!                 each.call(matching!(_)).answers(|arg| arg * 3);
@@ -150,7 +147,7 @@
 //!             BarMock::bar.stub(|each| {
 //!                 each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
 //!             }),
-//!         ]),
+//!         )),
 //!         7
 //!     )
 //! );
@@ -184,11 +181,11 @@
 //! # use unimock::*;
 //! # #[unimock]
 //! # trait Hidden { fn hidden(&self, arg: i32) -> i32; }
-//! # let deps = mock([
+//! # let deps = mock((
 //! # HiddenMock::hidden.stub(|each| {
 //! each.call(matching!(_)).returns(1).n_times(2).then().returns(2).cloned();
 //! # })
-//! # ]);
+//! # ));
 //! # assert_eq!(1, deps.hidden(42));
 //! # assert_eq!(1, deps.hidden(42));
 //! # assert_eq!(2, deps.hidden(42));
@@ -201,7 +198,7 @@
 //!
 //! ### Verifying exact sequence of calls
 //! Exact call sequences may be expressed using _strictly ordered clauses_.
-//! Use [`next_call`](MockFn::next_call) to define a call pattern, and [`in_order`](build::QuantifiedResponse::in_order) to make it into a clause.
+//! Use [`next_call`](MockFn::next_call) to define a call pattern.
 //!
 //! ```rust
 //! # use unimock::*;
@@ -210,10 +207,10 @@
 //! # #[unimock]
 //! # trait Bar { fn bar(&self, arg: i32) -> i32; }
 //! # let deps =
-//! mock([
-//!     FooMock::foo.next_call(matching!(3)).returns(5).in_order(),
-//!     BarMock::bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
-//! ]);
+//! mock((
+//!     FooMock::foo.next_call(matching!(3)).returns(5),
+//!     BarMock::bar.next_call(matching!(8)).returns(7).n_times(2),
+//! ));
 //! # assert_eq!(5, deps.foo(3));
 //! # assert_eq!(7, deps.bar(8));
 //! # assert_eq!(7, deps.bar(8));
@@ -372,10 +369,10 @@ use std::sync::{Arc, Mutex};
 ///
 /// fn test() {
 ///     // Unimock now implements both traits:
-///     sum(mock(None)); // note: panics at runtime!
+///     sum(mock(())); // note: panics at runtime!
 ///
 ///     // Mock a single method (still panics, because all 3 must be mocked:):
-///     sum(mock(Some(Trait1Mock::a.next_call(|_| true).returns(0).in_order())));
+///     sum(mock(Trait1Mock::a.next_call(|_| true).returns(0)));
 /// }
 /// ```
 ///
@@ -423,12 +420,12 @@ use std::sync::{Arc, Mutex};
 /// assert_eq!(
 ///     120,
 ///     // well, not in the test, at least!
-///     mock([
+///     mock(
 ///         FactorialMock::factorial.stub(|each| {
 ///             each.call(matching! {(input) if *input <= 1}).returns(1_u32); // unimock controls the API call
 ///             each.call(matching!(_)).unmocked();
 ///         })
-///     ])
+///     )
 ///     .factorial(5)
 /// );
 /// ```
@@ -660,13 +657,13 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     ///
     /// For exact order verification, reach for [MockFn::next_call] instead.
     #[track_caller]
-    fn stub<E>(self, each_fn: E) -> Clause
+    fn stub<E>(self, each_fn: E) -> build::Each<Self>
     where
         E: FnOnce(&mut build::Each<Self>),
     {
         let mut each = build::Each::new();
         each_fn(&mut each);
-        each.into_clause()
+        each
     }
 
     /// Define a stub-like call pattern directly on the [MockFn].
@@ -679,12 +676,12 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     {
         build::Match::with_owned_builder(
             call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
+            fn_mocker::PatternMatchMode::InAnyOrder,
             property::InAnyOrder,
         )
     }
 
-    /// Initiate a call pattern builder intended to be used as a [Clause]
-    /// with exact order verification. The build sequence should end with [`in_order`](build::QuantifiedResponse::in_order).
+    /// Initiate a call pattern builder intended to be used as a [Clause] with exact order verification.
     ///
     /// This differens from [MockFn::stub], in that that a stub defines all call patterns without any
     /// specific required call order. This function takes only single input matcher, that MUST be
@@ -695,6 +692,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     {
         build::Match::with_owned_builder(
             call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
+            fn_mocker::PatternMatchMode::InOrder,
             property::InOrder,
         )
     }
@@ -703,12 +701,21 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 /// Construct a unimock instance that works like a mock or a stub, from a set of [Clause]es.
 ///
 /// Every call hitting the instance must be declared in advance as an input clause, or else panic will ensue.
-#[inline]
-pub fn mock<I>(clauses: I) -> Unimock
-where
-    I: IntoIterator<Item = Clause>,
-{
-    mock_from_iterator(&mut clauses.into_iter(), FallbackMode::Error)
+#[track_caller]
+pub fn mock(clause: impl Clause) -> Unimock {
+    let mut assembler = assemble::MockAssembler::new();
+    if let Err(error) = clause.assemble(&mut assembler) {
+        panic!("{error}");
+    }
+    Unimock {
+        original_instance: true,
+        shared_state: Arc::new(SharedState {
+            fallback_mode: FallbackMode::Error,
+            fn_mockers: assembler.fn_mockers,
+            next_ordered_call_index: AtomicUsize::new(0),
+            panic_reasons: Mutex::new(vec![]),
+        }),
+    }
 }
 
 /// Construct a unimock instance that works like a _spy_.
@@ -731,42 +738,26 @@ where
 ///     println!("real thing");
 /// }
 ///
-/// // Spy objects that spies on nothing:
-/// spy(None).foo();
-/// spy([]).foo();
+/// // A spy value that spies on nothing:
+/// spy(()).foo();
 /// // prints "real thing" x 2
 ///
-/// spy(Some(TraitMock::foo.next_call(matching!()).returns(()).in_order())).foo();
+/// spy(TraitMock::foo.next_call(matching!()).returns(())).foo();
 /// // does not print
 ///
 /// // spy object that prevents the real
 ///
 /// ```
-#[inline]
-pub fn spy<I>(clauses: I) -> Unimock
-where
-    I: IntoIterator<Item = Clause>,
-{
-    mock_from_iterator(&mut clauses.into_iter(), FallbackMode::Unmock)
-}
-
-fn mock_from_iterator(
-    clause_iterator: &mut dyn Iterator<Item = Clause>,
-    fallback_mode: FallbackMode,
-) -> Unimock {
+#[track_caller]
+pub fn spy(clause: impl Clause) -> Unimock {
     let mut assembler = assemble::MockAssembler::new();
-
-    for clause in clause_iterator {
-        match assembler.append_clause(clause) {
-            Ok(_) => {}
-            Err(error) => panic!("{}", error),
-        }
+    if let Err(error) = clause.assemble(&mut assembler) {
+        panic!("{error}");
     }
-
     Unimock {
         original_instance: true,
         shared_state: Arc::new(SharedState {
-            fallback_mode,
+            fallback_mode: FallbackMode::Unmock,
             fn_mockers: assembler.fn_mockers,
             next_ordered_call_index: AtomicUsize::new(0),
             panic_reasons: Mutex::new(vec![]),
@@ -774,13 +765,10 @@ fn mock_from_iterator(
     }
 }
 
-/// A clause from which unimock instances are created.
+/// A clause models a recipe for creating a unimock instance.
 ///
-/// There can be more than one clause for each [MockFn] instance, these will be combined together at construction time.
-///
-/// Clause is non-generic and uses dynamic dispatch internally.
-/// It also implements `From<I> where I: IntoIterator<Item = Clause>`, so one clause can contain several other clauses in a hierarchical manner.
-/// This means that clauses can be returned from helper functions and reused several times:
+/// There are _non-terminal_ and _terminal_ clauses.
+/// Terminal clauses are created with unimock's builder API, non-terminals/composites are created by using tuples.
 ///
 /// ```rust
 /// use unimock::*;
@@ -799,23 +787,24 @@ fn mock_from_iterator(
 ///     fn baz(&self, i: i32) -> i32;
 /// }
 ///
-/// // reusable function
-/// fn foo_bar_setup_clause() -> Clause {
-///     [
-///         FooMock::foo.each_call(matching!(_)).returns(1).in_any_order(),
-///         BarMock::bar.each_call(matching!(_)).returns(2).in_any_order(),
-///     ]
-///     .into()
+/// // A reusable function returning a composite clause from two terminals:
+/// fn foo_bar_setup_composite_clause() -> impl Clause {
+///     (
+///         FooMock::foo.each_call(matching!(_)).returns(1),
+///         BarMock::bar.each_call(matching!(_)).returns(2),
+///     )
 /// }
 ///
-/// let unimock = mock([
-///     foo_bar_setup_clause(),
-///     BazMock::baz.each_call(matching!(_)).returns(3).in_any_order()
-/// ]);
+/// let unimock = mock((
+///     foo_bar_setup_composite_clause(),
+///     BazMock::baz.each_call(matching!(_)).returns(3),
+/// ));
 /// assert_eq!(6, unimock.foo(0) + unimock.bar(0) + unimock.baz(0));
 /// ```
 #[must_use]
-pub struct Clause(pub(crate) clause::ClausePrivate);
+pub trait Clause: clause::SealedCompositeClause {}
+
+impl<T: clause::SealedCompositeClause> Clause for T {}
 
 #[derive(Clone)]
 pub(crate) struct DynMockFn {

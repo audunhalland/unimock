@@ -1,5 +1,9 @@
+use crate::assemble::Assemble;
 use crate::call_pattern::*;
 use crate::clause;
+use crate::clause::TerminalClause;
+use crate::clause::{SealedCompositeClause, TerminalKind};
+use crate::fn_mocker::PatternMatchMode;
 use crate::property::*;
 use crate::*;
 
@@ -7,6 +11,7 @@ use std::marker::PhantomData;
 use std::panic;
 
 pub(crate) struct DynCallPatternBuilder {
+    pub pattern_match_mode: PatternMatchMode,
     pub input_matcher: DynInputMatcher,
     pub responders: Vec<DynCallOrderResponder>,
     pub count_expectation: counter::CallCountExpectation,
@@ -14,12 +19,20 @@ pub(crate) struct DynCallPatternBuilder {
 }
 
 impl DynCallPatternBuilder {
-    pub fn new(input_matcher: DynInputMatcher) -> Self {
+    pub fn new(pattern_match_mode: PatternMatchMode, input_matcher: DynInputMatcher) -> Self {
         Self {
+            pattern_match_mode,
             input_matcher,
             responders: vec![],
             count_expectation: Default::default(),
             current_response_index: 0,
+        }
+    }
+
+    fn to_clause_leaf_kind(self) -> TerminalKind {
+        match self.pattern_match_mode {
+            PatternMatchMode::InAnyOrder => TerminalKind::InAnyOrder(self),
+            PatternMatchMode::InOrder => TerminalKind::InOrder(self),
         }
     }
 }
@@ -37,7 +50,15 @@ impl<'p> BuilderWrapper<'p> {
         stolen
     }
 
-    fn get_mut(&mut self) -> &mut DynCallPatternBuilder {
+    fn inner(&self) -> &DynCallPatternBuilder {
+        match self {
+            Self::Borrowed(builder) => *builder,
+            Self::Owned(builder) => builder,
+            Self::Stolen => panic!("builder stolen"),
+        }
+    }
+
+    fn inner_mut(&mut self) -> &mut DynCallPatternBuilder {
         match self {
             Self::Borrowed(builder) => *builder,
             Self::Owned(builder) => builder,
@@ -46,16 +67,16 @@ impl<'p> BuilderWrapper<'p> {
     }
 
     fn push_responder(&mut self, responder: DynResponder) {
-        let pattern_builder = self.get_mut();
-        pattern_builder.responders.push(DynCallOrderResponder {
-            response_index: pattern_builder.current_response_index,
+        let dyn_builder = self.inner_mut();
+        dyn_builder.responders.push(DynCallOrderResponder {
+            response_index: dyn_builder.current_response_index,
             responder,
         });
     }
 
     /// Note: must be called after `push_responder`
     fn quantify(&mut self, times: usize, exactness: counter::Exactness) {
-        let mut builder = self.get_mut();
+        let mut builder = self.inner_mut();
 
         builder.count_expectation.add_to_minimum(times, exactness);
         builder.current_response_index += times;
@@ -82,6 +103,7 @@ where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
         self.patterns.push(DynCallPatternBuilder::new(
+            PatternMatchMode::InAnyOrder,
             InputMatcher(Box::new(matching)).into_dyn(),
         ));
 
@@ -98,17 +120,21 @@ where
             mock_fn: PhantomData,
         }
     }
+}
 
-    #[track_caller]
-    pub(crate) fn into_clause(self) -> Clause {
+impl<F> SealedCompositeClause for Each<F>
+where
+    F: MockFn + 'static,
+{
+    fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
         if self.patterns.is_empty() {
-            panic!("Stub contained no call patterns");
+            return Err(format!("Stub contained no call patterns"));
         }
 
-        Clause(clause::ClausePrivate::Leaf(clause::ClauseLeaf {
+        assembler.append_terminal(TerminalClause {
             dyn_mock_fn: DynMockFn::new::<F>(),
-            kind: clause::ClauseLeafKind::Stub(self.patterns),
-        }))
+            kind: clause::TerminalKind::Stub(self.patterns),
+        })
     }
 }
 
@@ -125,9 +151,16 @@ where
     O: Ordering,
 {
     /// Create a new owned call pattern match.
-    pub(crate) fn with_owned_builder(input_matcher: DynInputMatcher, ordering: O) -> Self {
+    pub(crate) fn with_owned_builder(
+        input_matcher: DynInputMatcher,
+        pattern_match_mode: PatternMatchMode,
+        ordering: O,
+    ) -> Self {
         Match {
-            builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(input_matcher)),
+            builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(
+                pattern_match_mode,
+                input_matcher,
+            )),
             mock_fn: PhantomData,
             ordering,
         }
@@ -358,6 +391,7 @@ where
         }
     }
 
+    /*
     /// Quantify this to exactly once, and return an ordered clause.
     pub fn in_order(self) -> Clause
     where
@@ -365,7 +399,9 @@ where
     {
         self.once().in_order()
     }
+    */
 
+    /*
     /// Turn this unquantified call pattern into an unordered clause.
     ///
     /// The pattern will be callable any number of times, by returning a cloned value.
@@ -381,13 +417,25 @@ where
             .into_dyn_responder(),
         );
         match self.builder.steal() {
-            BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
+            BuilderWrapper::Owned(builder) => ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
                 kind: clause::ClauseLeafKind::InAnyOrder(builder),
             }
             .into(),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
+    }
+    */
+}
+
+impl<'p, F, O> SealedCompositeClause for QuantifyValue<'p, F, O>
+where
+    F: MockFn,
+    F::Output: Sized + Send + Sync,
+    O: Copy + Ordering,
+{
+    fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
+        self.once().assemble(assembler)
     }
 }
 
@@ -448,6 +496,7 @@ where
         }
     }
 
+    /*
     /// Quantify this to exactly once, and return an ordered clause.
     pub fn in_order(self) -> Clause
     where
@@ -455,14 +504,16 @@ where
     {
         self.once().in_order()
     }
+    */
 
+    /*
     /// Turn the call pattern into a stubbing clause, without any overall call order verification.
     pub fn in_any_order(self) -> Clause
     where
         O: Ordering<Kind = InAnyOrder>,
     {
         match self.builder {
-            BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
+            BuilderWrapper::Owned(builder) => ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
                 kind: clause::ClauseLeafKind::InAnyOrder(builder),
             }
@@ -470,6 +521,7 @@ where
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }
+    */
 
     fn into_exact(self) -> QuantifiedResponse<'p, F, O, Exact> {
         QuantifiedResponse {
@@ -477,6 +529,28 @@ where
             mock_fn: PhantomData,
             ordering: self.ordering,
             _repetition: Exact,
+        }
+    }
+}
+
+impl<'p, F, O> SealedCompositeClause for Quantify<'p, F, O>
+where
+    F: MockFn + 'static,
+    O: Ordering,
+{
+    fn assemble(mut self, assembler: &mut dyn Assemble) -> Result<(), String> {
+        match self.builder.inner().pattern_match_mode {
+            PatternMatchMode::InOrder => {
+                self.builder.quantify(1, counter::Exactness::Exact);
+            }
+            _ => {}
+        };
+        match self.builder {
+            BuilderWrapper::Owned(builder) => assembler.append_terminal(TerminalClause {
+                dyn_mock_fn: DynMockFn::new::<F>(),
+                kind: builder.to_clause_leaf_kind(),
+            }),
+            _ => panic!("Cannot expect a next call among group of call patterns"),
         }
     }
 }
@@ -506,7 +580,7 @@ where
         // We do not want to add anything to the number now, because it could be added to later in Quantify.
         // We just want to express that when using `then`, it should be called at least one time, if not `then` would be unnecessary.
         self.builder
-            .get_mut()
+            .inner_mut()
             .count_expectation
             .add_to_minimum(0, counter::Exactness::AtLeastPlusOne);
 
@@ -517,6 +591,7 @@ where
         }
     }
 
+    /*
     /// Turn this _exactly quantified_ definition into a [Clause] expectation.
     /// The clause can be included in a sequence of ordered clauses that specify calls to different functions that must be called in the exact order specified.
     ///
@@ -546,7 +621,7 @@ where
         R: Repetition<Kind = Exact>,
     {
         match self.builder {
-            BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
+            BuilderWrapper::Owned(builder) => ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
                 kind: clause::ClauseLeafKind::InOrder(builder),
             }
@@ -554,18 +629,38 @@ where
             _ => panic!(),
         }
     }
+    */
 
+    /*
     /// Turn the call pattern into a stubbing clause, without any overall call order verification.
     pub fn in_any_order(self) -> Clause
     where
         O: Ordering<Kind = InAnyOrder>,
     {
         match self.builder {
-            BuilderWrapper::Owned(builder) => clause::ClauseLeaf {
+            BuilderWrapper::Owned(builder) => ClauseLeaf {
                 dyn_mock_fn: DynMockFn::new::<F>(),
                 kind: clause::ClauseLeafKind::InAnyOrder(builder),
             }
             .into(),
+            _ => panic!(),
+        }
+    }
+    */
+}
+
+impl<'p, F, O, R> SealedCompositeClause for QuantifiedResponse<'p, F, O, R>
+where
+    F: MockFn + 'static,
+    O: Ordering,
+    R: Repetition,
+{
+    fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
+        match self.builder {
+            BuilderWrapper::Owned(builder) => assembler.append_terminal(TerminalClause {
+                dyn_mock_fn: DynMockFn::new::<F>(),
+                kind: builder.to_clause_leaf_kind(),
+            }),
             _ => panic!(),
         }
     }

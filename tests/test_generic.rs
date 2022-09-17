@@ -12,18 +12,16 @@ mod output {
 
     #[test]
     fn test_generic_return() {
-        let deps = mock([
+        let deps = mock((
             GenericOutputMock::generic_output
                 .with_types::<String>()
                 .each_call(matching!())
-                .returns("success".to_string())
-                .in_any_order(),
+                .returns("success".to_string()),
             GenericOutputMock::generic_output
                 .with_types::<i32>()
                 .each_call(matching!())
-                .returns(42)
-                .in_any_order(),
-        ]);
+                .returns(42),
+        ));
 
         let output = <Unimock as GenericOutput<String>>::generic_output(&deps);
         assert_eq!("success", output);
@@ -43,18 +41,16 @@ mod param {
 
     #[test]
     fn test_generic_param() {
-        let deps = mock([
+        let deps = mock((
             GenericParamMock::generic_param
                 .with_types::<&'static str>()
                 .each_call(matching!("foobar"))
-                .returns_static("a string")
-                .in_any_order(),
+                .returns_static("a string"),
             GenericParamMock::generic_param
                 .with_types::<i32>()
                 .each_call(matching!(42))
-                .returns_static("a number")
-                .in_any_order(),
-        ]);
+                .returns_static("a number"),
+        ));
 
         assert_eq!("a string", deps.generic_param("foobar"));
         assert_eq!("a number", deps.generic_param(42_i32));
@@ -66,13 +62,12 @@ mod param {
         expected = "GenericParam::generic_param(?): No matching call patterns."
     )]
     fn test_generic_param_panic_no_debug() {
-        let deps = mock(Some(
+        let deps = mock(
             GenericParamMock::generic_param
                 .with_types::<i32>()
                 .each_call(matching!(1337))
-                .returns_static("a number")
-                .in_any_order(),
-        ));
+                .returns_static("a number"),
+        );
 
         deps.generic_param(42_i32);
     }
@@ -88,13 +83,12 @@ mod param {
         expected = "GenericParamDebug::generic_param_debug(42): No matching call patterns."
     )]
     fn test_generic_param_panic_debug() {
-        let deps = mock(Some(
+        let deps = mock(
             GenericParamDebugMock::generic_param_debug
                 .with_types::<i32>()
                 .each_call(matching!(1337))
-                .returns_static("a number")
-                .in_any_order(),
-        ));
+                .returns_static("a number"),
+        );
 
         deps.generic_param_debug(42_i32);
     }

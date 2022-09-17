@@ -11,11 +11,7 @@ fn noarg_works() {
 
     assert_eq!(
         1_000_000,
-        mock([NoArgMock::no_arg
-            .next_call(matching!())
-            .returns(1_000_000)
-            .in_order()])
-        .no_arg()
+        mock(NoArgMock::no_arg.next_call(matching!()).returns(1_000_000)).no_arg()
     );
 }
 
@@ -47,13 +43,12 @@ fn owned_output_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &mock(Some(
+            &mock(
                 OwnedMock::foo
                     .next_call(matching!(_, _))
                     .answers(|(a, b)| format!("{a}{b}"))
                     .once()
-                    .in_order()
-            )),
+            ),
             "a",
             "b",
         )
@@ -61,9 +56,9 @@ fn owned_output_works() {
     assert_eq!(
         "lol",
         takes_owned(
-            &mock(Some(OwnedMock::foo.stub(|each| {
+            &mock(OwnedMock::foo.stub(|each| {
                 each.call(matching!(_, _)).returns("lol");
-            }))),
+            })),
             "a",
             "b",
         )
@@ -71,9 +66,9 @@ fn owned_output_works() {
     assert_eq!(
         "",
         takes_owned(
-            &mock(Some(OwnedMock::foo.stub(|each| {
+            &mock(OwnedMock::foo.stub(|each| {
                 each.call(matching!("a", "b")).returns_default();
-            }))),
+            })),
             "a",
             "b",
         )
@@ -101,12 +96,7 @@ mod exotic_self_types {
 
     #[test]
     fn rc_self() {
-        let deps = Rc::new(mock(Some(
-            RcSelfMock::rc_self
-                .each_call(matching!())
-                .returns(())
-                .in_any_order(),
-        )));
+        let deps = Rc::new(mock(RcSelfMock::rc_self.each_call(matching!()).returns(())));
 
         deps.rc_self();
     }
@@ -125,12 +115,7 @@ mod exotic_methods {
 
     #[test]
     fn test_provided() {
-        let deps = mock(Some(
-            ProvidedMock::provided
-                .each_call(matching!())
-                .returns(42)
-                .in_any_order(),
-        ));
+        let deps = mock(ProvidedMock::provided.each_call(matching!()).returns(42));
         assert_eq!(42, deps.provided());
     }
 
@@ -161,9 +146,9 @@ mod referenced {
         assert_eq!(
             "answer",
             takes_referenced(
-                &mock(vec![ReferencedMock::foo.stub(|each| {
+                &mock(ReferencedMock::foo.stub(|each| {
                     each.call(matching!("a")).returns_ref("answer".to_string());
-                })]),
+                })),
                 "a",
             )
         );
@@ -174,10 +159,10 @@ mod referenced {
         assert_eq!(
             "",
             takes_referenced(
-                &mock([ReferencedMock::foo.stub(|each| {
+                &mock(ReferencedMock::foo.stub(|each| {
                     each.call(matching!("Æ")).panics("Should not be called");
                     each.call(matching!("a")).returns_ref(String::new());
-                }),]),
+                })),
                 "a",
             )
         );
@@ -188,9 +173,9 @@ mod referenced {
         assert_eq!(
             "foobar",
             takes_referenced(
-                &mock([ReferencedMock::foo.stub(|each| {
+                &mock(ReferencedMock::foo.stub(|each| {
                     each.call(matching!("a")).returns_static("foobar");
-                }),]),
+                })),
                 "a",
             )
         );
@@ -209,13 +194,7 @@ mod no_clone_return {
 
     #[test]
     fn test_no_clone_return() {
-        let u = mock(Some(
-            FooMock::foo
-                .each_call(matching!())
-                .returns(NoClone(55))
-                .once()
-                .in_any_order(),
-        ));
+        let u = mock(FooMock::foo.each_call(matching!()).returns(NoClone(55)));
         assert_eq!(55, u.foo().0);
     }
 }
@@ -239,7 +218,7 @@ fn test_multiple() {
 
     assert_eq!(
         "success",
-        takes_single_multi(&mock([
+        takes_single_multi(&mock((
             SingleArgMock::method1.stub(|each| {
                 each.call(matching!("b"))
                     .returns_ref("B".to_string())
@@ -251,7 +230,7 @@ fn test_multiple() {
                     .returns_ref("success".to_string())
                     .once();
             })
-        ]))
+        )))
     );
 }
 
@@ -270,10 +249,10 @@ mod no_debug {
 
     #[test]
     fn can_match_a_non_debug_argument() {
-        match mock(Some(VeryPrimitiveMock::primitive.stub(|each| {
+        match mock(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
-        })))
+        }))
         .primitive(PrimitiveEnum::Bar, "")
         {
             PrimitiveEnum::Foo => {}
@@ -284,10 +263,10 @@ mod no_debug {
     #[test]
     #[should_panic(expected = "VeryPrimitive::primitive(?, \"\"): No matching call patterns.")]
     fn should_format_non_debug_input_with_a_question_mark() {
-        mock([VeryPrimitiveMock::primitive.stub(|each| {
+        mock(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
-        })])
+        }))
         .primitive(PrimitiveEnum::Foo, "");
     }
 }
@@ -325,12 +304,11 @@ fn should_be_able_to_borrow_a_returns_value() {
 
     assert_eq!(
         &Ret(42),
-        mock(Some(
+        mock(
             BorrowsRetMock::borrows_ret
                 .each_call(matching!())
                 .returns(Ret(42))
-                .in_any_order()
-        ))
+        )
         .borrows_ret()
     );
 }
@@ -348,26 +326,24 @@ fn borrowing_with_memory_leak() {
     assert_eq!(
         "foo",
         get_str(
-            &mock(Some(
+            &mock(
                 BorrowingMock::borrow
                     .next_call(matching!(_))
                     .returns_ref("foo".to_string())
                     .once()
-                    .in_order()
-            )),
+            ),
             ""
         )
     );
     assert_eq!(
         "yoyo",
         get_str(
-            &mock(Some(
+            &mock(
                 BorrowingMock::borrow
                     .next_call(matching!(_))
                     .answers_leaked_ref(|input| format!("{input}{input}"))
                     .once()
-                    .in_order()
-            )),
+            ),
             "yo"
         )
     );
@@ -388,13 +364,12 @@ mod custom_module {
         expected = "Single::func: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
-        mock(Some(
+        mock(
             FakeSingle::func
                 .next_call(matching!(_))
                 .returns_ref(MyType)
-                .once()
-                .in_order(),
-        ));
+                .once(),
+        );
     }
 }
 
@@ -410,8 +385,8 @@ mod unpacked_module {
 
         #[test]
         fn test_unpacked_module() {
-            let _ = Foo.each_call(matching!(_)).returns(33).in_any_order();
-            let _ = Bar.each_call(matching!(_)).returns(()).in_any_order();
+            let _ = Foo.each_call(matching!(_)).returns(33);
+            let _ = Bar.each_call(matching!(_)).returns(());
         }
     }
 
@@ -437,10 +412,7 @@ mod unpacked_module {
         #[test]
         fn test_inner() {
             use unimock::*;
-            let _ = inner::FooMock
-                .each_call(matching!())
-                .returns(())
-                .in_any_order();
+            let _ = inner::FooMock.each_call(matching!()).returns(());
         }
     }
 }
@@ -460,9 +432,9 @@ async fn test_async_trait() {
     assert_eq!(
         "42",
         takes_async(
-            &mock([AsyncMock::func.stub(|each| {
+            &mock(AsyncMock::func.stub(|each| {
                 each.call(matching!(_)).returns("42");
-            })]),
+            })),
             21
         )
         .await
@@ -485,9 +457,9 @@ fn test_cow() {
     assert_eq!(
         "output",
         takes(
-            &mock(Some(CowBasedMock::func.stub(|each| {
+            &mock(CowBasedMock::func.stub(|each| {
                 each.call(matching! {("input") | ("foo")}).returns("output");
-            }))),
+            })),
             "input".into()
         )
     )
@@ -520,9 +492,9 @@ fn newtype() {
     }
 
     let _ = takes(
-        &mock(Some(NewtypeStringMock::func.stub(|each| {
+        &mock(NewtypeStringMock::func.stub(|each| {
             each.call(matching!("input")).returns("output");
-        }))),
+        })),
         "input".into(),
     );
 }
@@ -545,8 +517,7 @@ fn intricate_lifetimes() {
 
     takes_intricate(&mock([Intricate__foo::nodebug_each_call(matching!(_))
         //.returns_leak(O("foobar".to_string().leak()))
-        .panics("fdsjkl")
-        .in_any_order()]));
+        .panics("fdsjkl");
 }
 */
 
@@ -566,27 +537,17 @@ fn clause_helpers() {
         fn m3(&self) -> i32;
     }
 
-    fn setup_foo_bar() -> Clause {
-        [
-            FooMock::m1
-                .each_call(matching!(_))
-                .returns(1)
-                .in_any_order(),
-            BarMock::m2
-                .each_call(matching!(_))
-                .returns(2)
-                .in_any_order(),
-        ]
-        .into()
+    fn setup_foo_bar() -> impl Clause {
+        (
+            FooMock::m1.each_call(matching!(_)).returns(1),
+            BarMock::m2.each_call(matching!(_)).returns(2),
+        )
     }
 
-    let unimock = mock([
+    let unimock = mock((
         setup_foo_bar(),
-        BazMock::m3
-            .each_call(matching!(_))
-            .returns(3)
-            .in_any_order(),
-    ]);
+        BazMock::m3.each_call(matching!(_)).returns(3),
+    ));
     assert_eq!(6, unimock.m1() + unimock.m2() + unimock.m3());
 }
 
@@ -598,7 +559,7 @@ mod responders_in_series {
         fn series(&self) -> i32;
     }
 
-    fn clause() -> Clause {
+    fn clause() -> impl Clause {
         SeriesMock::series
             .each_call(matching!())
             .returns(1)
@@ -608,12 +569,12 @@ mod responders_in_series {
             .n_times(2)
             .then()
             .returns(3)
-            .in_any_order()
+            .at_least_times(1)
     }
 
     #[test]
     fn responder_series_should_work() {
-        let a = mock(Some(clause()));
+        let a = mock(clause());
 
         assert_eq!(1, a.series());
         assert_eq!(2, a.series());
@@ -630,7 +591,7 @@ mod responders_in_series {
         expected = "Series::series: Expected call pattern #0 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
-        let b = mock(Some(clause()));
+        let b = mock(clause());
 
         assert_eq!(1, b.series());
         assert_eq!(2, b.series());
@@ -651,13 +612,11 @@ trait BorrowStatic {
 fn borrow_static_should_not_work_with_returns_ref() {
     assert_eq!(
         "foo",
-        mock(Some(
+        mock(
             BorrowStaticMock::static_str
                 .next_call(matching!(_))
                 .returns_ref("foo")
-                .once()
-                .in_order()
-        ))
+        )
         .static_str(33)
     );
 }
@@ -666,13 +625,11 @@ fn borrow_static_should_not_work_with_returns_ref() {
 fn borrow_static_should_work_with_returns_static() {
     assert_eq!(
         "foo",
-        mock(Some(
+        mock(
             BorrowStaticMock::static_str
                 .next_call(matching!(_))
                 .returns_static("foo")
-                .once()
-                .in_order()
-        ))
+        )
         .static_str(33)
     );
 }
@@ -688,12 +645,11 @@ mod async_argument_borrowing {
 
     #[tokio::test]
     async fn test_argument_borrowing() {
-        let unimock = mock(Some(
+        let unimock = mock(
             BorrowParamMock::borrow_param
                 .each_call(matching!(_))
-                .returns_static("foobar")
-                .in_any_order(),
-        ));
+                .returns_static("foobar"),
+        );
 
         assert_eq!("foobar", unimock.borrow_param("input").await);
     }
@@ -703,12 +659,11 @@ mod async_argument_borrowing {
         expected = "BorrowParam::borrow_param(\"input\"): Cannot borrow output value from a parameter for call pattern #0. Consider using Match::returns_static() or Match::answers_leaked_ref()."
     )]
     async fn test_argument_borrowing_error() {
-        let unimock = mock(Some(
+        let unimock = mock(
             BorrowParamMock::borrow_param
                 .each_call(matching!(_))
-                .returns_ref("foobar")
-                .in_any_order(),
-        ));
+                .returns_ref("foobar"),
+        );
 
         unimock.borrow_param("input").await;
     }
@@ -740,12 +695,11 @@ mod lifetime_constrained_output_type {
 
     #[test]
     fn test_borrow() {
-        let deps = mock(Some(
+        let deps = mock(
             BorrowSyncMock::borrow_sync_explicit2
                 .each_call(matching!("foobar"))
-                .returns(Borrowing2("a", "b"))
-                .in_any_order(),
-        ));
+                .returns(Borrowing2("a", "b")),
+        );
 
         let result = deps.borrow_sync_explicit2("foobar");
         assert_eq!(result.0, "a");
