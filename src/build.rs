@@ -99,6 +99,7 @@ where
         }
     }
 
+    #[track_caller]
     pub(crate) fn into_clause(self) -> Clause {
         if self.patterns.is_empty() {
             panic!("Stub contained no call patterns");

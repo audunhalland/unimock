@@ -27,6 +27,7 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
+#[track_caller]
 pub fn eval<'i, F>(
     unimock: &Unimock,
     inputs: <F as MockInputs<'i>>::Inputs,
@@ -39,6 +40,7 @@ where
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
+#[track_caller]
 pub fn eval_borrowed<'u, 'i, F>(
     unimock: &'u Unimock,
     inputs: <F as MockInputs<'i>>::Inputs,
@@ -52,6 +54,7 @@ where
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from a parameter that is not self.
+#[track_caller]
 pub fn eval_borrowed_param<'u, 'i, F>(
     unimock: &'u Unimock,
     inputs: <F as MockInputs<'i>>::Inputs,
@@ -66,6 +69,7 @@ where
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
+#[track_caller]
 pub fn eval_static_ref<'i, F>(
     unimock: &Unimock,
     inputs: <F as MockInputs<'i>>::Inputs,

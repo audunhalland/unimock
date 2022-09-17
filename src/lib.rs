@@ -536,6 +536,7 @@ struct SharedState {
 }
 
 impl Unimock {
+    #[track_caller]
     fn handle_error<T>(&self, result: Result<T, error::MockError>) -> T {
         match result {
             Ok(value) => value,
@@ -580,6 +581,7 @@ impl Drop for Unimock {
             panic!("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.");
         }
 
+        #[track_caller]
         fn panic_if_nonempty(errors: &[error::MockError]) {
             if errors.is_empty() {
                 return;
@@ -657,6 +659,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// A stub sets up call patterns on a single function, that can be matched in any order.
     ///
     /// For exact order verification, reach for [MockFn::next_call] instead.
+    #[track_caller]
     fn stub<E>(self, each_fn: E) -> Clause
     where
         E: FnOnce(&mut build::Each<Self>),

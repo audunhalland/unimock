@@ -298,6 +298,7 @@ fn def_method_impl(
     };
 
     quote! {
+        #[track_caller]
         #method_sig {
             #body
         }
