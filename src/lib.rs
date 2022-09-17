@@ -698,24 +698,27 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     }
 }
 
-/// Construct a unimock instance that works like a mock or a stub, from a set of [Clause]es.
+/// Construct a unimock instance that works like a mock or a stub, from a [Clause].
 ///
-/// Every call hitting the instance must be declared in advance as an input clause, or else panic will ensue.
+/// Every call hitting the instance must be declared in advance as a terminal clause, or else panic will ensue.
+///
+/// # Example
+/// ```rust
+/// # use unimock::*;
+/// #[unimock]
+/// trait Trait {
+///     fn foo(&self) -> &'static str;
+/// }
+///
+/// assert_eq!("mocked", mock(TraitMock::foo.each_call(matching!()).returns_static("mocked")).foo());
+/// ```
 #[track_caller]
 pub fn mock(clause: impl Clause) -> Unimock {
     let mut assembler = assemble::MockAssembler::new();
     if let Err(error) = clause.assemble(&mut assembler) {
         panic!("{error}");
     }
-    Unimock {
-        original_instance: true,
-        shared_state: Arc::new(SharedState {
-            fallback_mode: FallbackMode::Error,
-            fn_mockers: assembler.fn_mockers,
-            next_ordered_call_index: AtomicUsize::new(0),
-            panic_reasons: Mutex::new(vec![]),
-        }),
-    }
+    assembler.into_unimock(FallbackMode::Error)
 }
 
 /// Construct a unimock instance that works like a _spy_.
@@ -728,25 +731,21 @@ pub fn mock(clause: impl Clause) -> Unimock {
 /// # Example
 /// ```rust
 /// # use unimock::*;
-///
 /// #[unimock(unmock_with=[real_foo])]
 /// trait Trait {
-///     fn foo(&self);
+///     fn foo(&self) -> &'static str;
 /// }
 ///
-/// fn real_foo<T: std::any::Any>(_: &T) {
-///     println!("real thing");
+/// fn real_foo(_: &impl std::any::Any) -> &'static str {
+///     "real thing"
 /// }
 ///
 /// // A spy value that spies on nothing:
-/// spy(()).foo();
-/// // prints "real thing" x 2
+/// assert_eq!("real thing", spy(()).foo());
 ///
-/// spy(TraitMock::foo.next_call(matching!()).returns(())).foo();
-/// // does not print
-///
-/// // spy object that prevents the real
-///
+/// // A spy that overrides the behaviour of `TraitMock::foo`:
+/// let clause = TraitMock::foo.next_call(matching!()).returns_static("mocked");
+/// assert_eq!("mocked", spy(clause).foo());
 /// ```
 #[track_caller]
 pub fn spy(clause: impl Clause) -> Unimock {
@@ -754,21 +753,13 @@ pub fn spy(clause: impl Clause) -> Unimock {
     if let Err(error) = clause.assemble(&mut assembler) {
         panic!("{error}");
     }
-    Unimock {
-        original_instance: true,
-        shared_state: Arc::new(SharedState {
-            fallback_mode: FallbackMode::Unmock,
-            fn_mockers: assembler.fn_mockers,
-            next_ordered_call_index: AtomicUsize::new(0),
-            panic_reasons: Mutex::new(vec![]),
-        }),
-    }
+    assembler.into_unimock(FallbackMode::Unmock)
 }
 
-/// A clause models a recipe for creating a unimock instance.
+/// A clause represents a recipe for creating a unimock instance.
 ///
-/// There are _non-terminal_ and _terminal_ clauses.
-/// Terminal clauses are created with unimock's builder API, non-terminals/composites are created by using tuples.
+/// Clauses may be _terminal_ and _non-terminal_.
+/// Terminal clauses are created with unimock's builder API, non-terminals/composites are created by grouping other clauses in tuples.
 ///
 /// ```rust
 /// use unimock::*;
@@ -787,8 +778,8 @@ pub fn spy(clause: impl Clause) -> Unimock {
 ///     fn baz(&self, i: i32) -> i32;
 /// }
 ///
-/// // A reusable function returning a composite clause from two terminals:
-/// fn foo_bar_setup_composite_clause() -> impl Clause {
+/// // A reusable function returning a composite clause from two terminals, by tupling them:
+/// fn foo_bar_composite_clause() -> impl Clause {
 ///     (
 ///         FooMock::foo.each_call(matching!(_)).returns(1),
 ///         BarMock::bar.each_call(matching!(_)).returns(2),
@@ -796,7 +787,7 @@ pub fn spy(clause: impl Clause) -> Unimock {
 /// }
 ///
 /// let unimock = mock((
-///     foo_bar_setup_composite_clause(),
+///     foo_bar_composite_clause(),
 ///     BazMock::baz.each_call(matching!(_)).returns(3),
 /// ));
 /// assert_eq!(6, unimock.foo(0) + unimock.bar(0) + unimock.baz(0));

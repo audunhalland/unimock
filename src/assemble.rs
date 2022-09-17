@@ -1,12 +1,14 @@
 use crate::build::DynCallPatternBuilder;
 use crate::call_pattern::CallPattern;
-use crate::clause;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::DynMockFn;
+use crate::{clause, FallbackMode, Unimock};
+use crate::{DynMockFn, SharedState};
 
 use std::any::TypeId;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, Mutex};
 
 pub trait Assemble {
     fn append_terminal(&mut self, terminal: clause::TerminalClause) -> Result<(), String>;
@@ -58,6 +60,18 @@ impl Assemble for MockAssembler {
 }
 
 impl MockAssembler {
+    pub fn into_unimock(self, fallback_mode: FallbackMode) -> Unimock {
+        Unimock {
+            original_instance: true,
+            shared_state: Arc::new(SharedState {
+                fallback_mode,
+                fn_mockers: self.fn_mockers,
+                next_ordered_call_index: AtomicUsize::new(0),
+                panic_reasons: Mutex::new(vec![]),
+            }),
+        }
+    }
+
     fn build_call_pattern(
         &mut self,
         builder: DynCallPatternBuilder,
