@@ -31,7 +31,7 @@ takes_foo(mock(()));
 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
 3. A mock instantiation by calling `mock(())`, which returns a `Unimock` value which is passed into `takes_foo`.
 
-The mock function takes an argument, in this case the unit value, `()`.
+The mock function takes an argument of type `impl Clause`, in this case the unit value `()`.
 The argument is _what behaviour are we mocking_, in this case nothing at all.
 `Foo` contains no methods, so there is no behaviour to mock.
 
@@ -39,8 +39,6 @@ The argument is _what behaviour are we mocking_, in this case nothing at all.
 
 In order to be somewhat useful, the traits we abstract over should contain some methods.
 In a unit test for some function, we'd like to mock the behaviour of that function's dependencies (expressed as trait bounds).
-
-`mock(clause)` accepts a collection of Clauses. Clauses carry the full recipe on how Unimock will behave once instantiated.
 
 Given some trait,
 
@@ -58,7 +56,7 @@ Therefore, the unimock macro creates a surrogate type to represent it. By defaul
 
 `FooMock::foo`.
 
-This type will implement `MockFn`, which is the entrypoint for creating clauses:
+This type will implement `MockFn`, which is the entrypoint for creating a Clause:
 
 ```rust
 #[unimock]
@@ -75,7 +73,7 @@ let clause = FooMock::foo.some_call(matching!()).returns(1337);
 assert_eq!(1337, test_me(mock(clause)));
 ```
 
-[Clause] construction is a type-state machine that in this example goes through 3 steps:
+Clause construction is a type-state machine that in this example goes through two steps:
 
 1. `FooMock::foo.some_call(matching!())`: Define a _call pattern_.
    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
@@ -104,7 +102,7 @@ There are different constraints acting on return values based on how the mock is
 
 ## Combining clauses
 `mock()` accepts as argument anything that implements [Clause], which includes long tuples, so that you can specify more than one kind of behaviour!
-An iterator has a specific order of items, and sometimes the order of clauses matters too. It will depend on the type of clause.
+A tuple has a specific order of elements, and sometimes the order of sub-clauses matters too. It will depend on the type of clause.
 
 Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
 
