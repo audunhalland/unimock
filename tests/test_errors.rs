@@ -114,7 +114,7 @@ fn multithread_error_reporting_works() {
 
 #[test]
 #[should_panic(
-    expected = "Foo::foo(2): Cannot return value more than once for call pattern #0, because of implicit quantification to `once()`. Try adding `.cloned()` or similar."
+    expected = "Foo::foo(2): Cannot return value more than once for call pattern #0, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
 )]
 fn should_complain_when_returning_unquantified_value_more_then_once() {
     #[unimock]
@@ -122,9 +122,7 @@ fn should_complain_when_returning_unquantified_value_more_then_once() {
         fn foo(&self, arg: i32) -> i32;
     }
 
-    let unimock = mock(FooMock::foo.stub(|each| {
-        each.call(matching!(_)).returns(42);
-    }));
+    let unimock = mock(FooMock::foo.some_call(matching!(_)).returns(42));
 
     assert_eq!(42, unimock.foo(1));
     unimock.foo(2);

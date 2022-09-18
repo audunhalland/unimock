@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Changed
-- Do not require a `Clone` bound immediately when using the `.returns(value)` builder combinator. This is only necessary when returning multiple times.
+- New mock entry point `some_call` which does not require return value to implement `Clone`. `next_call` now also uses this API.
 - Remove the `Unmock` trait.
 - The generated `MockFn` structs are now put in a module called `TraitMock` where `Trait` is the name of the trait.
   The name of the generated structs are the same as the names of the methods.

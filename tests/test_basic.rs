@@ -194,8 +194,24 @@ mod no_clone_return {
 
     #[test]
     fn test_no_clone_return() {
-        let u = mock(FooMock::foo.each_call(matching!()).returns(NoClone(55)));
+        let u = mock(FooMock::foo.some_call(matching!()).returns(NoClone(55)));
         assert_eq!(55, u.foo().0);
+    }
+}
+
+mod each_call_implicitly_clones {
+    use unimock::*;
+
+    #[unimock]
+    trait Foo {
+        fn foo(&self) -> i32;
+    }
+
+    #[test]
+    fn each_call_implicit_clone() {
+        let u = mock(FooMock::foo.each_call(matching!()).returns(55));
+        assert_eq!(55, u.foo());
+        assert_eq!(55, u.foo());
     }
 }
 
@@ -539,7 +555,7 @@ fn clause_helpers() {
 
     fn setup_foo_bar() -> impl Clause {
         (
-            FooMock::m1.each_call(matching!(_)).returns(1),
+            FooMock::m1.some_call(matching!(_)).returns(1),
             BarMock::m2.each_call(matching!(_)).returns(2),
         )
     }
@@ -697,7 +713,7 @@ mod lifetime_constrained_output_type {
     fn test_borrow() {
         let deps = mock(
             BorrowSyncMock::borrow_sync_explicit2
-                .each_call(matching!("foobar"))
+                .some_call(matching!("foobar"))
                 .returns(Borrowing2("a", "b")),
         );
 

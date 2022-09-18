@@ -64,16 +64,16 @@
 //!     foo.foo()
 //! }
 //!
-//! let clause = FooMock::foo.each_call(matching!()).returns(1337);
+//! let clause = FooMock::foo.some_call(matching!()).returns(1337);
 //!
 //! assert_eq!(1337, test_me(mock(clause)));
 //! ```
 //!
 //! [Clause] construction is a type-state machine that in this example goes through 3 steps:
 //!
-//! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
+//! 1. [`FooMock::foo.some_call(matching!())`](crate::MockFn::some_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
-//! 2. [`.returs(1337)`](crate::build::Match::returns): Each matching call will return the value `1337`.
+//! 2. [`.returs(1337)`](crate::build::DefineResponse::returns): Each matching call will return the value `1337`.
 //!    In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
@@ -87,9 +87,14 @@
 //!
 //! Inputs being matched is a condition that needs to be fulfilled in order for the rest of the call pattern to be evaluated.
 //!
-//! ### Specifying outputs
-//! Specifying outputs can be done in several ways. The simplest one is [`returns(something)`](crate::build::Match::returns).
-//! Different ways of specifying outputs are found in [`build::Match`](crate::build::Match).
+//! ### Specifying outputs (responses)
+//! Specifying outputs can be done in several ways. The simplest one is [`returns(some_value)`](crate::build::DefineResponse::returns).
+//! Different ways of specifying outputs are found in [`build::DefineResponse`](crate::build::DefineResponse).
+//!
+//! There are different constraints acting on return values based on how the mock is initialized.
+//! * [some_call](crate::MockFn::some_call) is tailored for calls that will happen once. Return values have no [Clone] constraint.
+//! * [each_call](crate::MockFn::each_call) is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
+//! * [next_call](crate::MockFn::next_call) is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
 //!
 //! ## Combining clauses
 //! `mock()` accepts as argument anything that implements [Clause], which includes long tuples, so that you can specify more than one kind of behaviour!
@@ -124,10 +129,10 @@
 //!     test_me(
 //!         &mock((
 //!             FooMock::foo
-//!                 .each_call(matching!(_))
+//!                 .some_call(matching!(_))
 //!                 .answers(|arg| arg * 3),
 //!             BarMock::bar
-//!                 .each_call(matching! {(arg) if *arg > 20})
+//!                 .some_call(matching! {(arg) if *arg > 20})
 //!                 .answers(|arg| arg * 2),
 //!         )),
 //!         7
@@ -170,10 +175,10 @@
 //!
 //! ### Optional call count expectations in call patterns
 //! To make a call count expectation for a specific call pattern,
-//!    look at [`Quantify`](build::Quantify) or [`QuantifyValue`](build::QuantifyValue), which have methods like
-//!    [`once()`](build::QuantifyValue::once),
-//!    [`n_times(n)`](build::QuantifyValue::n_times) and
-//!    [`at_least_times(n)`](build::QuantifyValue::at_least_times).
+//!    look at [`Quantify`](build::Quantify) or [`QuantifyReturnValue`](build::QuantifyReturnValue), which have methods like
+//!    [`once()`](build::Quantify::once),
+//!    [`n_times(n)`](build::Quantify::n_times) and
+//!    [`at_least_times(n)`](build::Quantify::at_least_times).
 //!
 //! With exact quantification in place, we can produce output sequences by chaining output definitions:
 //!
@@ -183,7 +188,7 @@
 //! # trait Hidden { fn hidden(&self, arg: i32) -> i32; }
 //! # let deps = mock((
 //! # HiddenMock::hidden.stub(|each| {
-//! each.call(matching!(_)).returns(1).n_times(2).then().returns(2).cloned();
+//! each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
 //! # })
 //! # ));
 //! # assert_eq!(1, deps.hidden(42));
@@ -670,11 +675,36 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
     /// that needs to be specified on this MockFn.
-    fn each_call<M>(self, matching: M) -> build::Match<'static, Self, property::InAnyOrder>
+    ///
+    /// As the method name suggests, this will not only configure mock behaviour, but also functions as an assertion that the call _must happen_.
+    ///
+    /// This call pattern variant supports return values that do not implement [Clone],
+    /// therefore the call pattern can only be matched a single time.
+    fn some_call<M>(self, matching: M) -> build::DefineResponse<'static, Self, property::InAnyOrder>
     where
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        build::Match::with_owned_builder(
+        build::DefineResponse::with_owned_builder(
+            call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
+            fn_mocker::PatternMatchMode::InAnyOrder,
+            property::InAnyOrder,
+        )
+    }
+
+    /// Define a stub-like call pattern directly on the [MockFn].
+    ///
+    /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
+    /// that needs to be specified on this MockFn.
+    ///
+    /// This variant is specialized for functions called multiple times.
+    fn each_call<M>(
+        self,
+        matching: M,
+    ) -> build::DefineMultipleResponses<'static, Self, property::InAnyOrder>
+    where
+        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
+    {
+        build::DefineMultipleResponses::with_owned_builder(
             call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
             fn_mocker::PatternMatchMode::InAnyOrder,
             property::InAnyOrder,
@@ -686,11 +716,11 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// This differens from [MockFn::stub], in that that a stub defines all call patterns without any
     /// specific required call order. This function takes only single input matcher, that MUST be
     /// matched in the order specified, relative to other next calls.
-    fn next_call<M>(self, matching: M) -> build::Match<'static, Self, property::InOrder>
+    fn next_call<M>(self, matching: M) -> build::DefineResponse<'static, Self, property::InOrder>
     where
         M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
-        build::Match::with_owned_builder(
+        build::DefineResponse::with_owned_builder(
             call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
             fn_mocker::PatternMatchMode::InOrder,
             property::InOrder,
@@ -710,7 +740,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 ///     fn foo(&self) -> &'static str;
 /// }
 ///
-/// assert_eq!("mocked", mock(TraitMock::foo.each_call(matching!()).returns_static("mocked")).foo());
+/// assert_eq!("mocked", mock(TraitMock::foo.some_call(matching!()).returns_static("mocked")).foo());
 /// ```
 #[track_caller]
 pub fn mock(clause: impl Clause) -> Unimock {
@@ -781,14 +811,14 @@ pub fn spy(clause: impl Clause) -> Unimock {
 /// // A reusable function returning a composite clause from two terminals, by tupling them:
 /// fn foo_bar_composite_clause() -> impl Clause {
 ///     (
-///         FooMock::foo.each_call(matching!(_)).returns(1),
-///         BarMock::bar.each_call(matching!(_)).returns(2),
+///         FooMock::foo.some_call(matching!(_)).returns(1),
+///         BarMock::bar.some_call(matching!(_)).returns(2),
 ///     )
 /// }
 ///
 /// let unimock = mock((
 ///     foo_bar_composite_clause(),
-///     BazMock::baz.each_call(matching!(_)).returns(3),
+///     BazMock::baz.some_call(matching!(_)).returns(3),
 /// ));
 /// assert_eq!(6, unimock.foo(0) + unimock.bar(0) + unimock.baz(0));
 /// ```

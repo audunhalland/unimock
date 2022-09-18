@@ -97,8 +97,8 @@ where
     ///
     /// The new call pattern will be matched after any previously defined call patterns on the same [Each] instance.
     ///
-    /// The method returns a [Match], which is used to define how unimock responds to the matched call.
-    pub fn call<'e, M>(&'e mut self, matching: M) -> Match<'e, F, InAnyOrder>
+    /// The method returns a [DefineMultipleResponses], which is used to define how unimock responds to the matched call.
+    pub fn call<'e, M>(&'e mut self, matching: M) -> DefineMultipleResponses<'e, F, InAnyOrder>
     where
         M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
     {
@@ -107,7 +107,7 @@ where
             InputMatcher(Box::new(matching)).into_dyn(),
         ));
 
-        Match {
+        DefineMultipleResponses {
             builder: BuilderWrapper::Borrowed(self.patterns.last_mut().unwrap()),
             mock_fn: PhantomData,
             ordering: InAnyOrder,
@@ -138,168 +138,211 @@ where
     }
 }
 
-/// A matched call pattern, ready for setting up a response.
-pub struct Match<'p, F: MockFn, O: Ordering> {
+/// A matched call pattern, ready for defining a single response.
+pub struct DefineResponse<'p, F: MockFn, O: Ordering> {
     builder: BuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
     ordering: O,
 }
 
-impl<'p, F, O> Match<'p, F, O>
+impl<'p, F, O> DefineResponse<'p, F, O>
 where
     F: MockFn + 'static,
     O: Ordering,
 {
-    /// Create a new owned call pattern match.
-    pub(crate) fn with_owned_builder(
-        input_matcher: DynInputMatcher,
-        pattern_match_mode: PatternMatchMode,
-        ordering: O,
-    ) -> Self {
-        Match {
-            builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(
-                pattern_match_mode,
-                input_matcher,
-            )),
-            mock_fn: PhantomData,
-            ordering,
-        }
-    }
-
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
     ///
-    /// Unless explicitly configured on the returned [QuantifyValue], the return value specified here
+    /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
     /// To be able to return this value multiple times, call `.cloned()`, or quantify it explicitly.
-    pub fn returns<V: Into<F::Output>>(self, value: V) -> QuantifyValue<'p, F, O>
+    pub fn returns<V: Into<F::Output>>(self, value: V) -> QuantifyReturnValue<'p, F, O>
     where
         F::Output: Send + Sync + Sized + 'static,
     {
-        QuantifyValue {
+        QuantifyReturnValue {
             builder: self.builder,
             value: Some(value.into()),
             mock_fn: self.mock_fn,
             ordering: self.ordering,
         }
     }
+}
 
-    /// Specify the output of the call pattern by calling `Default::default()`.
-    pub fn returns_default(mut self) -> Quantify<'p, F, O>
+/// A matched call pattern, ready for defining multiple response, requiring return values to implement [Clone].
+pub struct DefineMultipleResponses<'p, F: MockFn, O: Ordering> {
+    builder: BuilderWrapper<'p>,
+    mock_fn: PhantomData<F>,
+    ordering: O,
+}
+
+impl<'p, F, O> DefineMultipleResponses<'p, F, O>
+where
+    F: MockFn + 'static,
+    O: Ordering,
+{
+    /// Specify the output of the call pattern by providing a value.
+    /// The output type cannot contain non-static references.
+    /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
+    pub fn returns<V: Into<F::Output>>(mut self, value: V) -> Quantify<'p, F, O>
     where
-        F::Output: Default,
+        F::Output: Clone + Send + Sync + Sized + 'static,
     {
+        let value = value.into();
         self.builder.push_responder(
-            ClosureResponder::<F> {
-                func: Box::new(|_| Default::default()),
+            ValueResponder::<F> {
+                stored_value: Box::new(StoredValueSlot(value)),
             }
             .into_dyn_responder(),
         );
         self.quantify()
-    }
-
-    /// Specify the output of the call to be a borrow of the provided value.
-    /// This works well when the lifetime of the returned reference is the same as `self`.
-    /// Using this for `'static` references will produce a runtime error. For static references, use [Match::returns_static].
-    pub fn returns_ref<T>(mut self, value: T) -> Quantify<'p, F, O>
-    where
-        T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
-    {
-        self.builder.push_responder(
-            BorrowableResponder::<F> {
-                borrowable: Box::new(value),
-            }
-            .into_dyn_responder(),
-        );
-        self.quantify()
-    }
-
-    /// Specify the output of the call to be a reference to static value.
-    /// This must be used when the returned reference in the mocked trait is `'static`.
-    pub fn returns_static(mut self, value: &'static F::Output) -> Quantify<'p, F, O>
-    where
-        F::Output: Send + Sync + 'static,
-    {
-        self.builder.push_responder(
-            StaticRefClosureResponder::<F> {
-                func: Box::new(move |_| value),
-            }
-            .into_dyn_responder(),
-        );
-        self.quantify()
-    }
-
-    /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
-    pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
-    where
-        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
-        R: Into<F::Output>,
-        F::Output: Sized,
-    {
-        self.builder.push_responder(
-            ClosureResponder::<F> {
-                func: Box::new(move |inputs| func(inputs).into()),
-            }
-            .into_dyn_responder(),
-        );
-        self.quantify()
-    }
-
-    /// Specify the output of the call pattern to be a static reference to leaked memory.
-    ///
-    /// The value may be based on the value of input parameters.
-    ///
-    /// This version will produce a new memory leak for _every invocation_ of the answer function.
-    ///
-    /// This method should only be used when computing a reference based
-    /// on input parameters is necessary, which should not be a common use case.
-    pub fn answers_leaked_ref<A, R>(mut self, func: A) -> Quantify<'p, F, O>
-    where
-        A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
-        R: std::borrow::Borrow<F::Output> + 'static,
-        F::Output: Sized,
-    {
-        self.builder.push_responder(
-            StaticRefClosureResponder::<F> {
-                func: Box::new(move |inputs| {
-                    let value = func(inputs);
-                    let leaked_ref = Box::leak(Box::new(value));
-                    <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
-                }),
-            }
-            .into_dyn_responder(),
-        );
-        self.quantify()
-    }
-
-    /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
-    pub fn panics(mut self, message: impl Into<String>) -> Quantify<'p, F, O> {
-        self.builder
-            .push_responder(DynResponder::Panic(message.into()));
-        self.quantify()
-    }
-
-    /// Instruct this call pattern to invoke its corresponding `unmocked` function.
-    ///
-    /// For this to work, the mocked trait must be configured with an `unmock_with=[..]` parameter.
-    /// If unimock doesn't find a way to unmock the function, this will panic when the function is called.
-    pub fn unmocked(mut self) -> Quantify<'p, F, O> {
-        self.builder.push_responder(DynResponder::Unmock);
-        self.quantify()
-    }
-
-    fn quantify(self) -> Quantify<'p, F, O> {
-        Quantify {
-            builder: self.builder,
-            mock_fn: PhantomData,
-            ordering: self.ordering,
-        }
     }
 }
 
+macro_rules! define_response_common_impl {
+    ($typename:ident) => {
+        impl<'p, F, O> $typename<'p, F, O>
+        where
+            F: MockFn + 'static,
+            O: Ordering,
+        {
+            /// Create a new owned call pattern match.
+            pub(crate) fn with_owned_builder(
+                input_matcher: DynInputMatcher,
+                pattern_match_mode: PatternMatchMode,
+                ordering: O,
+            ) -> Self {
+                Self {
+                    builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(
+                        pattern_match_mode,
+                        input_matcher,
+                    )),
+                    mock_fn: PhantomData,
+                    ordering,
+                }
+            }
+
+            /// Specify the output of the call pattern by calling `Default::default()`.
+            pub fn returns_default(mut self) -> Quantify<'p, F, O>
+            where
+                F::Output: Default,
+            {
+                self.builder.push_responder(
+                    ClosureResponder::<F> {
+                        func: Box::new(|_| Default::default()),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
+            /// Specify the output of the call to be a borrow of the provided value.
+            /// This works well when the lifetime of the returned reference is the same as `self`.
+            /// Using this for `'static` references will produce a runtime error. For static references, use [DefineResponse::returns_static].
+            pub fn returns_ref<T>(mut self, value: T) -> Quantify<'p, F, O>
+            where
+                T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
+            {
+                self.builder.push_responder(
+                    BorrowableResponder::<F> {
+                        borrowable: Box::new(value),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
+            /// Specify the output of the call to be a reference to static value.
+            /// This must be used when the returned reference in the mocked trait is `'static`.
+            pub fn returns_static(mut self, value: &'static F::Output) -> Quantify<'p, F, O>
+            where
+                F::Output: Send + Sync + 'static,
+            {
+                self.builder.push_responder(
+                    StaticRefClosureResponder::<F> {
+                        func: Box::new(move |_| value),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
+            /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
+            pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
+            where
+                A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
+                R: Into<F::Output>,
+                F::Output: Sized,
+            {
+                self.builder.push_responder(
+                    ClosureResponder::<F> {
+                        func: Box::new(move |inputs| func(inputs).into()),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
+            /// Specify the output of the call pattern to be a static reference to leaked memory.
+            ///
+            /// The value may be based on the value of input parameters.
+            ///
+            /// This version will produce a new memory leak for _every invocation_ of the answer function.
+            ///
+            /// This method should only be used when computing a reference based
+            /// on input parameters is necessary, which should not be a common use case.
+            pub fn answers_leaked_ref<A, R>(mut self, func: A) -> Quantify<'p, F, O>
+            where
+                A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
+                R: std::borrow::Borrow<F::Output> + 'static,
+                F::Output: Sized,
+            {
+                self.builder.push_responder(
+                    StaticRefClosureResponder::<F> {
+                        func: Box::new(move |inputs| {
+                            let value = func(inputs);
+                            let leaked_ref = Box::leak(Box::new(value));
+                            <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
+                        }),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
+            /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
+            pub fn panics(mut self, message: impl Into<String>) -> Quantify<'p, F, O> {
+                self.builder
+                    .push_responder(DynResponder::Panic(message.into()));
+                self.quantify()
+            }
+
+            /// Instruct this call pattern to invoke its corresponding `unmocked` function.
+            ///
+            /// For this to work, the mocked trait must be configured with an `unmock_with=[..]` parameter.
+            /// If unimock doesn't find a way to unmock the function, this will panic when the function is called.
+            pub fn unmocked(mut self) -> Quantify<'p, F, O> {
+                self.builder.push_responder(DynResponder::Unmock);
+                self.quantify()
+            }
+
+            fn quantify(self) -> Quantify<'p, F, O> {
+                Quantify {
+                    builder: self.builder,
+                    mock_fn: PhantomData,
+                    ordering: self.ordering,
+                }
+            }
+        }
+    };
+}
+
+define_response_common_impl!(DefineResponse);
+define_response_common_impl!(DefineMultipleResponses);
+
 /// Builder for defining how a call pattern with an explicit return value gets verified with regards to quantification/counting.
-pub struct QuantifyValue<'p, F, O>
+pub struct QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
     F::Output: Sized + Send + Sync,
@@ -310,28 +353,12 @@ where
     ordering: O,
 }
 
-impl<'p, F, O> QuantifyValue<'p, F, O>
+impl<'p, F, O> QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
     F::Output: Sized + Send + Sync,
     O: Copy,
 {
-    /// Keep this value unquantified, but configure it to be cloned before it gets returned.
-    /// This way it can be returned more than once.
-    ///
-    /// This method returns nothing, because there is no more processing that can be done on an unquantified return value.
-    pub fn cloned(mut self)
-    where
-        F::Output: Clone,
-    {
-        self.builder.push_responder(
-            ValueResponder::<F> {
-                stored_value: Box::new(StoredValueSlot(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
-        );
-    }
-
     /// Expect this call pattern to be called exactly once.
     ///
     /// This is the only quantifier that works together with return values that don't implement [Clone].
@@ -390,45 +417,9 @@ where
             _repetition: AtLeast,
         }
     }
-
-    /*
-    /// Quantify this to exactly once, and return an ordered clause.
-    pub fn in_order(self) -> Clause
-    where
-        O: Ordering<Kind = InOrder>,
-    {
-        self.once().in_order()
-    }
-    */
-
-    /*
-    /// Turn this unquantified call pattern into an unordered clause.
-    ///
-    /// The pattern will be callable any number of times, by returning a cloned value.
-    pub fn in_any_order(mut self) -> Clause
-    where
-        F::Output: Clone,
-        O: Ordering<Kind = InAnyOrder>,
-    {
-        self.builder.push_responder(
-            ValueResponder::<F> {
-                stored_value: Box::new(StoredValueSlot(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
-        );
-        match self.builder.steal() {
-            BuilderWrapper::Owned(builder) => ClauseLeaf {
-                dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InAnyOrder(builder),
-            }
-            .into(),
-            _ => panic!("Cannot expect a next call among group of call patterns"),
-        }
-    }
-    */
 }
 
-impl<'p, F, O> SealedCompositeClause for QuantifyValue<'p, F, O>
+impl<'p, F, O> SealedCompositeClause for QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
     F::Output: Sized + Send + Sync,
@@ -444,7 +435,7 @@ where
 ///
 /// In that case, it is only able to return once, because no [Clone] bound has been
 /// part of any construction step.
-impl<'p, F, O> Drop for QuantifyValue<'p, F, O>
+impl<'p, F, O> Drop for QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
     F::Output: Sized + Send + Sync,
@@ -496,33 +487,6 @@ where
         }
     }
 
-    /*
-    /// Quantify this to exactly once, and return an ordered clause.
-    pub fn in_order(self) -> Clause
-    where
-        O: Ordering<Kind = InOrder>,
-    {
-        self.once().in_order()
-    }
-    */
-
-    /*
-    /// Turn the call pattern into a stubbing clause, without any overall call order verification.
-    pub fn in_any_order(self) -> Clause
-    where
-        O: Ordering<Kind = InAnyOrder>,
-    {
-        match self.builder {
-            BuilderWrapper::Owned(builder) => ClauseLeaf {
-                dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InAnyOrder(builder),
-            }
-            .into(),
-            _ => panic!("Cannot expect a next call among group of call patterns"),
-        }
-    }
-    */
-
     fn into_exact(self) -> QuantifiedResponse<'p, F, O, Exact> {
         QuantifiedResponse {
             builder: self.builder,
@@ -571,7 +535,7 @@ where
 {
     /// Prepare to set up a new response, which will take effect after the current response has been yielded.
     /// In order to make an output sequence, the preceding output must be exactly quantified.
-    pub fn then(mut self) -> Match<'p, F, O>
+    pub fn then(mut self) -> DefineMultipleResponses<'p, F, O>
     where
         R: Repetition<Kind = Exact>,
     {
@@ -584,69 +548,12 @@ where
             .count_expectation
             .add_to_minimum(0, counter::Exactness::AtLeastPlusOne);
 
-        Match {
+        DefineMultipleResponses {
             builder: self.builder,
             mock_fn: PhantomData,
             ordering: self.ordering,
         }
     }
-
-    /*
-    /// Turn this _exactly quantified_ definition into a [Clause] expectation.
-    /// The clause can be included in a sequence of ordered clauses that specify calls to different functions that must be called in the exact order specified.
-    ///
-    /// # Example
-    /// ```rust
-    /// use unimock::*;
-    ///
-    /// #[unimock]
-    /// trait Trait {
-    ///     fn method(&self, arg: i32) -> &'static str;
-    /// }
-    ///
-    /// let m = mock([
-    ///     // the first call MUST be method(1) and it will return "a"
-    ///     TraitMock::method.next_call(matching!(1)).returns_static("a").once().in_order(),
-    ///     // the second call MUST be method(2) and it will return "b"
-    ///     TraitMock::method.next_call(matching!(2)).returns_static("b").once().in_order(),
-    ///     // there may be no more calls to this mock, as it has no stubs in it
-    /// ]);
-    ///
-    /// assert_eq!("a", m.method(1));
-    /// assert_eq!("b", m.method(2));
-    /// ```
-    pub fn in_order(self) -> Clause
-    where
-        O: Ordering<Kind = InOrder>,
-        R: Repetition<Kind = Exact>,
-    {
-        match self.builder {
-            BuilderWrapper::Owned(builder) => ClauseLeaf {
-                dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InOrder(builder),
-            }
-            .into(),
-            _ => panic!(),
-        }
-    }
-    */
-
-    /*
-    /// Turn the call pattern into a stubbing clause, without any overall call order verification.
-    pub fn in_any_order(self) -> Clause
-    where
-        O: Ordering<Kind = InAnyOrder>,
-    {
-        match self.builder {
-            BuilderWrapper::Owned(builder) => ClauseLeaf {
-                dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: clause::ClauseLeafKind::InAnyOrder(builder),
-            }
-            .into(),
-            _ => panic!(),
-        }
-    }
-    */
 }
 
 impl<'p, F, O, R> SealedCompositeClause for QuantifiedResponse<'p, F, O, R>

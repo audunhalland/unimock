@@ -147,7 +147,7 @@ impl std::fmt::Display for MockError {
                 fn_call,
                 pat_index,
             } => {
-                write!(f, "{fn_call}: Cannot return value more than once for call pattern {pat_index}, because of implicit quantification to `once()`. Try adding `.cloned()` or similar.")
+                write!(f, "{fn_call}: Cannot return value more than once for call pattern {pat_index}, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response.")
             },
             Self::FailedVerification(message) => write!(f, "{message}"),
             Self::CannotUnmock { name } => {

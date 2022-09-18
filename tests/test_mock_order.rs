@@ -19,7 +19,7 @@ fn two_fns_in_incorrect_order_should_fail_and_presence_of_a_stub_should_not_infl
     let m = mock((
         T1Mock::a.next_call(matching!(0)).returns(0),
         T1Mock::b.stub(|each| {
-            each.call(matching!(_)).returns(0).cloned();
+            each.call(matching!(_)).returns(0);
         }),
         T2Mock::c.next_call(matching!(0)).returns(0),
         T1Mock::a.next_call(matching!(0)).returns(0),
