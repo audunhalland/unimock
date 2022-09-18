@@ -24,15 +24,15 @@ trait Foo {}
 
 fn takes_foo(foo: impl Foo) {}
 
-takes_foo(mock(None));
+takes_foo(mock(()));
 ```
 
 1. `trait Foo` is declared with the `#[unimock]` attribute which makes its behaviour mockable.
 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-3. A mock instantiation by calling `mock(None)`, which returns a `Unimock` value which is passed into `takes_foo`.
+3. A mock instantiation by calling `mock(())`, which returns a `Unimock` value which is passed into `takes_foo`.
 
-The mock function takes an argument, in this case the value `None`.
-The argument is _what behaviour are we mocking_, in this case `None` at all!
+The mock function takes an argument, in this case the unit value, `()`.
+The argument is _what behaviour are we mocking_, in this case nothing at all.
 `Foo` contains no methods, so there is no behaviour to mock.
 
 ## Methods and behaviour mocking
@@ -40,7 +40,7 @@ The argument is _what behaviour are we mocking_, in this case `None` at all!
 In order to be somewhat useful, the traits we abstract over should contain some methods.
 In a unit test for some function, we'd like to mock the behaviour of that function's dependencies (expressed as trait bounds).
 
-`mock(clauses)` accepts a collection of Clauses. Clauses carry the full recipe on how Unimock will behave once instantiated.
+`mock(clause)` accepts a collection of Clauses. Clauses carry the full recipe on how Unimock will behave once instantiated.
 
 Given some trait,
 
@@ -70,17 +70,16 @@ fn test_me(foo: impl Foo) -> i32 {
     foo.foo()
 }
 
-let clause = FooMock::foo.each_call(matching!()).returns(1337).in_any_order();
+let clause = FooMock::foo.some_call(matching!()).returns(1337);
 
-assert_eq!(1337, test_me(mock(Some(clause))));
+assert_eq!(1337, test_me(mock(clause)));
 ```
 
-`Clause` construction is a type-state machine that in this example goes through 3 steps:
+[Clause] construction is a type-state machine that in this example goes through 3 steps:
 
-1. `FooMock::foo.each_call(matching!())`: Define a _call pattern_.
+1. `FooMock::foo.some_call(matching!())`: Define a _call pattern_.
    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 2. `.returs(1337)`: Each matching call will return the value `1337`.
-3. `.in_any_order()`: this directive describes how the resulting Clause behaves in relation to other clauses in the behaviour description, and returns it.
    In this example there is only one clause.
 
 ### Call patterns (matching inputs)
@@ -94,12 +93,17 @@ It has a syntax inspired by the [`std::matches`](https://doc.rust-lang.org/std/m
 
 Inputs being matched is a condition that needs to be fulfilled in order for the rest of the call pattern to be evaluated.
 
-### Specifying outputs
-Specifying outputs can be done in several ways. The simplest one is `returns(something)`.
-Different ways of specifying outputs are found in `build::Match`.
+### Specifying outputs (responses)
+Specifying outputs can be done in several ways. The simplest one is `returns(some_value)`.
+Different ways of specifying outputs are found in `build::DefineResponse`.
+
+There are different constraints acting on return values based on how the mock is initialized.
+* some_call is tailored for calls that will happen once. Return values have no [Clone] constraint.
+* each_call is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
+* next_call is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
 
 ## Combining clauses
-`mock()` accepts as argument anything that can be converted to a clause iterator, so that you can specify more than one kind of behaviour!
+`mock()` accepts as argument anything that implements [Clause], which includes long tuples, so that you can specify more than one kind of behaviour!
 An iterator has a specific order of items, and sometimes the order of clauses matters too. It will depend on the type of clause.
 
 Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
@@ -128,16 +132,14 @@ fn test_me(deps: &(impl Foo + Bar), arg: i32) -> i32 {
 assert_eq!(
     42,
     test_me(
-        &mock([
+        &mock((
             FooMock::foo
-                .each_call(matching!(_))
-                .answers(|arg| arg * 3)
-                .in_any_order(),
+                .some_call(matching!(_))
+                .answers(|arg| arg * 3),
             BarMock::bar
-                .each_call(matching! {(arg) if *arg > 20})
-                .answers(|arg| arg * 2)
-                .in_any_order(),
-        ]),
+                .some_call(matching! {(arg) if *arg > 20})
+                .answers(|arg| arg * 2),
+        )),
         7
     )
 );
@@ -147,7 +149,7 @@ assert_eq!(
 assert_eq!(
     42,
     test_me(
-        &mock([
+        &mock((
             FooMock::foo.stub(|each| {
                 each.call(matching!(1337)).returns(1024);
                 each.call(matching!(_)).answers(|arg| arg * 3);
@@ -155,7 +157,7 @@ assert_eq!(
             BarMock::bar.stub(|each| {
                 each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
             }),
-        ]),
+        )),
         7
     )
 );
@@ -178,15 +180,15 @@ Every unimock verification happens automatically in `drop`.
 
 ### Optional call count expectations in call patterns
 To make a call count expectation for a specific call pattern,
-   look at [`QuantifyResponse`](build::QuantifyResponse), which has methods like
-   [`once()`](build::QuantifyResponse::once),
-   [`n_times(n)`](build::QuantifyResponse::n_times) and
-   [`at_least_times(n)`](build::QuantifyResponse::at_least_times).
+   look at [`Quantify`](build::Quantify) or [`QuantifyReturnValue`](build::QuantifyReturnValue), which have methods like
+   [`once()`](build::Quantify::once),
+   [`n_times(n)`](build::Quantify::n_times) and
+   [`at_least_times(n)`](build::Quantify::at_least_times).
 
 With exact quantification in place, we can produce output sequences by chaining output definitions:
 
 ```rust
-each.call(matching!(_)).returns(1).n_times(2).then().returns(2).cloned();
+each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
 ```
 
 The output sequence will be `[1, 1, 2, 2, 2, ..]`.
@@ -195,13 +197,13 @@ A call pattern like this is _expected_ to be called at least 3 times.
 
 ### Verifying exact sequence of calls
 Exact call sequences may be expressed using _strictly ordered clauses_.
-Use [`next_call`](MockFn::next_call) to define a call pattern, and [`in_order`](build::QuantifiedResponse::in_order) to make it into a clause.
+Use [`next_call`](MockFn::next_call) to define a call pattern.
 
 ```rust
-mock([
-    FooMock::foo.next_call(matching!(3)).returns(5).in_order(),
-    BarMock::bar.next_call(matching!(8)).returns(7).n_times(2).in_order(),
-]);
+mock((
+    FooMock::foo.next_call(matching!(3)).returns(5),
+    BarMock::bar.next_call(matching!(8)).returns(7).n_times(2),
+));
 ```
 
 Order-sensitive clauses and order-insensitive clauses (like [`stub`](MockFn::stub)) do not interfere with each other.
