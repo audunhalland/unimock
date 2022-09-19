@@ -16,15 +16,15 @@
 //!
 //! fn takes_foo(foo: impl Foo) {}
 //!
-//! takes_foo(mock(()));
+//! takes_foo(Unimock::new(()));
 //! ```
 //!
 //! 1. `trait Foo` is declared with the [`#[unimock]`](crate::unimock) attribute which makes its behaviour mockable.
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-//! 3. A mock instantiation by calling [`mock(())`](crate::mock), which returns a [`Unimock`](crate::Unimock) value which is passed into `takes_foo`.
+//! 3. A mock instantiation by calling [`Unimock::new(())`](crate::Unimock::new), which crates a [`Unimock`](crate::Unimock) value which is passed into `takes_foo`.
 //!
-//! The [mock](crate::mock) function takes an argument of type `impl Clause`, in this case the unit value `()`.
-//! The argument is _what behaviour are we mocking_, in this case nothing at all.
+//! The [new](crate::Unimock::new) function takes an argument called `setup` (implementing [Clause](crate::Clause)), in this case the unit value `()`.
+//! The setup argument is _what behaviour is being mocked_, in this case nothing at all.
 //! `Foo` contains no methods, so there is no behaviour to mock.
 //!
 //! ## Methods and behaviour mocking
@@ -62,16 +62,16 @@
 //!     foo.foo()
 //! }
 //!
-//! let clause = FooMock::foo.some_call(matching!()).returns(1337);
+//! let clause = FooMock::foo.each_call(matching!()).returns(1337);
 //!
-//! assert_eq!(1337, test_me(mock(clause)));
+//! assert_eq!(1337, test_me(Unimock::new(clause)));
 //! ```
 //!
 //! Clause construction is a type-state machine that in this example goes through two steps:
 //!
-//! 1. [`FooMock::foo.some_call(matching!())`](crate::MockFn::some_call): Define a _call pattern_.
+//! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
-//! 2. [`.returs(1337)`](crate::build::DefineResponse::returns): Each matching call will return the value `1337`.
+//! 2. [`.returns(1337)`](crate::build::DefineResponse::returns): Each matching call will return the value `1337`.
 //!    In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
@@ -89,22 +89,15 @@
 //! Specifying outputs can be done in several ways. The simplest one is [`returns(some_value)`](crate::build::DefineResponse::returns).
 //! Different ways of specifying outputs are found in [`build::DefineResponse`](crate::build::DefineResponse).
 //!
-//! There are different constraints acting on return values based on how the mock is initialized.
+//! There are different constraints acting on return values based on how the clause gets initialized:
+//!
 //! * [some_call](crate::MockFn::some_call) is tailored for calls that will happen once. Return values have no [Clone] constraint.
 //! * [each_call](crate::MockFn::each_call) is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
 //! * [next_call](crate::MockFn::next_call) is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
 //!
-//! ## Combining clauses
-//! `mock()` accepts as argument anything that implements [Clause], which includes long tuples, so that you can specify more than one kind of behaviour!
-//! A tuple has a specific order of elements, and sometimes the order of sub-clauses matters too. It will depend on the type of clause.
-//!
-//! Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
-//!
-//! * _Mock_: A test double where every valid interaction must be declared up front.
-//! * _Spy_: A test double which behaves as release code, unless behaviour is overridden.
-//! * _Stub_: Defined behaviour for a single function, where the order of calls does not matter.
-//!
-//! Now that terminology is in place for unimock, let's look at various ways to combine clauses.
+//! ## Combining setup clauses
+//! `Unimock::new()` accepts as argument anything that implements [Clause].
+//! Basic setup clauses can be combined into composite clauses by using _tuples_:
 //!
 //! ```rust
 //! # use unimock::*;
@@ -125,7 +118,7 @@
 //! assert_eq!(
 //!     42,
 //!     test_me(
-//!         &mock((
+//!         &Unimock::new((
 //!             FooMock::foo
 //!                 .some_call(matching!(_))
 //!                 .answers(|arg| arg * 3),
@@ -142,7 +135,7 @@
 //! assert_eq!(
 //!     42,
 //!     test_me(
-//!         &mock((
+//!         &Unimock::new((
 //!             FooMock::foo.stub(|each| {
 //!                 each.call(matching!(1337)).returns(1024);
 //!                 each.call(matching!(_)).answers(|arg| arg * 3);
@@ -160,16 +153,20 @@
 //! In order for unimock to find the correct response, call patterns will be matched in the sequence they were defined.
 //!
 //! ## Interaction verifications
+//! Unimock performs interaction verifications using a declarative approach.
+//! Expected interactions are configured at construction time, using [Clause]s.
+//! Rust makes it possible to automatically verify things because of RAII and the [drop] method, which Unimock implements.
+//! When a Unimock instance goes out of scope, Rust automatically runs its verification rules.
 //!
-//! Unimock has one built-in verification that is always enabled:
+//! One verification is always enabled in unimock:
 //!
-//! _Every [MockFn](crate::MockFn) that is introduced in some clause, *must* be called at least once._
+//! _Each [MockFn](crate::MockFn) mentioned in some clause must be interacted with at least once._
 //!
 //! If this requirement is not met, Unimock will panic inside its Drop implementation.
 //! The reason is to help avoiding "bit rot" accumulating over time inside test code.
 //! When refactoring release code, tests should always follow along and not be overly generic.
 //!
-//! Every unimock verification happens automatically in [`drop`](crate::Unimock::drop).
+//! In general, clauses do not only encode what behaviour is _allowed_ to happen, but also that this behaviour necessarily _must happen_.
 //!
 //! ### Optional call count expectations in call patterns
 //! To make a call count expectation for a specific call pattern,
@@ -178,30 +175,30 @@
 //!    [`n_times(n)`](build::Quantify::n_times) and
 //!    [`at_least_times(n)`](build::Quantify::at_least_times).
 //!
-//! With exact quantification in place, we can produce output sequences by chaining output definitions:
+//! With exact quantification in place, _output sequence_ verifications can be constructed by chaining combinators:
 //!
 //! ```rust
 //! # use unimock::*;
 //! # #[unimock]
 //! # trait Hidden { fn hidden(&self, arg: i32) -> i32; }
-//! # let deps = mock((
+//! # let mocked = Unimock::new((
 //! # HiddenMock::hidden.stub(|each| {
 //! each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
 //! # })
 //! # ));
-//! # assert_eq!(1, deps.hidden(42));
-//! # assert_eq!(1, deps.hidden(42));
-//! # assert_eq!(2, deps.hidden(42));
-//! # assert_eq!(2, deps.hidden(42));
+//! # assert_eq!(1, mocked.hidden(42));
+//! # assert_eq!(1, mocked.hidden(42));
+//! # assert_eq!(2, mocked.hidden(42));
+//! # assert_eq!(2, mocked.hidden(42));
 //! ```
 //!
 //! The output sequence will be `[1, 1, 2, 2, 2, ..]`.
-//! A call pattern like this is _expected_ to be called at least 3 times.
+//! A call pattern like this _must_ be called at least 3 times.
 //! 2 times because of the first exact output sequence, then at least one time because of the [`.then()`](build::QuantifiedResponse::then) combinator.
 //!
 //! ### Verifying exact sequence of calls
 //! Exact call sequences may be expressed using _strictly ordered clauses_.
-//! Use [`next_call`](MockFn::next_call) to define a call pattern.
+//! Use [`next_call`](MockFn::next_call) to define this kind of call pattern.
 //!
 //! ```rust
 //! # use unimock::*;
@@ -209,17 +206,19 @@
 //! # trait Foo { fn foo(&self, arg: i32) -> i32; }
 //! # #[unimock]
 //! # trait Bar { fn bar(&self, arg: i32) -> i32; }
-//! # let deps =
-//! mock((
+//! # let mocked =
+//! Unimock::new((
 //!     FooMock::foo.next_call(matching!(3)).returns(5),
 //!     BarMock::bar.next_call(matching!(8)).returns(7).n_times(2),
 //! ));
-//! # assert_eq!(5, deps.foo(3));
-//! # assert_eq!(7, deps.bar(8));
-//! # assert_eq!(7, deps.bar(8));
+//! # assert_eq!(5, mocked.foo(3));
+//! # assert_eq!(7, mocked.bar(8));
+//! # assert_eq!(7, mocked.bar(8));
 //! ```
 //!
-//! Order-sensitive clauses and order-insensitive clauses (like [`stub`](MockFn::stub)) do not interfere with each other.
+//! All clauses constructed by `next_call` are expected to be evaluated in the exact sequence they appear in the clause tuple.
+//!
+//! Order-sensitive clauses and order-insensitive clauses (like [`some_call`](MockFn::some_call)) do not interfere with each other.
 //! However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 //!
 //! ## Application architecture
@@ -269,11 +268,11 @@
 //! It shows that unimock is merely a piece in a larger picture.
 //! To wire all of this together into a full-fledged runtime solution, without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
 //!
-//! ### Combining release code and mocks: Spying
+//! ### Combining release code and mocks: Partial mocks
 //! Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 //! For that to work, unimock needs to know how to call the "real" implementation of traits.
 //!
-//! See the documentation of [spy](crate::spy) to see how this works.
+//! See the documentation of [new_partial](crate::Unimock::new_partial) to see how this works.
 //!
 //! Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
 //!
@@ -346,6 +345,7 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
+use assemble::MockAssembler;
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
@@ -372,10 +372,10 @@ use std::sync::{Arc, Mutex};
 ///
 /// fn test() {
 ///     // Unimock now implements both traits:
-///     sum(mock(())); // note: panics at runtime!
+///     sum(Unimock::new(())); // note: panics at runtime!
 ///
 ///     // Mock a single method (still panics, because all 3 must be mocked:):
-///     sum(mock(Trait1Mock::a.next_call(|_| true).returns(0)));
+///     sum(Unimock::new(Trait1Mock::a.next_call(|_| true).returns(0)));
 /// }
 /// ```
 ///
@@ -423,7 +423,7 @@ use std::sync::{Arc, Mutex};
 /// assert_eq!(
 ///     120,
 ///     // well, not in the test, at least!
-///     mock(
+///     Unimock::new(
 ///         FactorialMock::factorial.stub(|each| {
 ///             each.call(matching! {(input) if *input <= 1}).returns(1_u32); // unimock controls the API call
 ///             each.call(matching!(_)).unmocked();
@@ -536,6 +536,85 @@ struct SharedState {
 }
 
 impl Unimock {
+    /// Construct a unimock instance which strictly adheres to the description in the passed [Clause].
+    ///
+    /// Every call hitting the instance must be declared in advance as a clause, or else panic will ensue.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unimock::*;
+    /// #[unimock]
+    /// trait Trait {
+    ///     fn foo(&self) -> &'static str;
+    /// }
+    ///
+    /// let mocked = Unimock::new(TraitMock::foo.some_call(matching!()).returns_static("mocked"));
+    ///
+    /// assert_eq!("mocked", mocked.foo());
+    /// ```
+    #[track_caller]
+    pub fn new(setup: impl Clause) -> Self {
+        Self::from_assembler(
+            assemble::MockAssembler::try_from_clause(setup),
+            FallbackMode::Error,
+        )
+    }
+
+    /// Construct a unimock instance using _partial mocking_.
+    ///
+    /// In a partially mocked environment, every clause acts as an override over the default behaviour, which is to hit "real world" code.
+    /// Trait methods which support the `unmock` feature get this behaviour automatically in a partial mock, unless explicitly overridden in the passed [Clause].
+    ///
+    /// Methods that cannot be unmocked still need to be explicitly mocked with a clause.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unimock::*;
+    /// #[unimock(unmock_with=[real_foo])]
+    /// trait Trait {
+    ///     fn foo(&self) -> &'static str;
+    /// }
+    ///
+    /// fn real_foo(_: &impl std::any::Any) -> &'static str {
+    ///     "real thing"
+    /// }
+    ///
+    /// // A partial mock with no overrides:
+    /// assert_eq!("real thing", Unimock::new_partial(()).foo());
+    ///
+    /// // A partial mock that overrides the behaviour of `Trait::foo`:
+    /// let clause = TraitMock::foo.next_call(matching!()).returns_static("mocked");
+    /// assert_eq!("mocked", Unimock::new_partial(clause).foo());
+    /// ```
+    #[track_caller]
+    pub fn new_partial(setup: impl Clause) -> Self {
+        Self::from_assembler(
+            assemble::MockAssembler::try_from_clause(setup),
+            FallbackMode::Unmock,
+        )
+    }
+
+    #[track_caller]
+    fn from_assembler(
+        assembler_result: Result<MockAssembler, String>,
+        fallback_mode: FallbackMode,
+    ) -> Self {
+        let fn_mockers = match assembler_result {
+            Ok(assembler) => assembler.finish(),
+            Err(error) => panic!("{error}"),
+        };
+
+        Self {
+            original_instance: true,
+            shared_state: Arc::new(SharedState {
+                fallback_mode,
+                fn_mockers,
+                next_ordered_call_index: AtomicUsize::new(0),
+                panic_reasons: Mutex::new(vec![]),
+            }),
+        }
+    }
+
     #[track_caller]
     fn handle_error<T>(&self, result: Result<T, error::MockError>) -> T {
         match result {
@@ -669,7 +748,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         each
     }
 
-    /// Define a stub-like call pattern directly on the [MockFn].
+    /// Define a stub-like call pattern directly on this [MockFn].
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
     /// that needs to be specified on this MockFn.
@@ -689,7 +768,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
         )
     }
 
-    /// Define a stub-like call pattern directly on the [MockFn].
+    /// Define a stub-like call pattern directly on this [MockFn].
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
     /// that needs to be specified on this MockFn.
@@ -726,67 +805,9 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     }
 }
 
-/// Construct a unimock instance that works like a mock or a stub, from a [Clause].
-///
-/// Every call hitting the instance must be declared in advance as a terminal clause, or else panic will ensue.
-///
-/// # Example
-/// ```rust
-/// # use unimock::*;
-/// #[unimock]
-/// trait Trait {
-///     fn foo(&self) -> &'static str;
-/// }
-///
-/// assert_eq!("mocked", mock(TraitMock::foo.some_call(matching!()).returns_static("mocked")).foo());
-/// ```
-#[track_caller]
-pub fn mock(clause: impl Clause) -> Unimock {
-    let mut assembler = assemble::MockAssembler::new();
-    if let Err(error) = clause.assemble(&mut assembler) {
-        panic!("{error}");
-    }
-    assembler.into_unimock(FallbackMode::Error)
-}
-
-/// Construct a unimock instance that works like a _spy_.
-///
-/// In a spy, every clause acts as an override over the default behaviour, which is to hit "real world" code.
-/// Traits that are mocked using the `unmock` option get unmocked automatically in a spy.
-///
-/// Traits that lack an `unmock` specifier will still need to be explicitly mocked using clauses.
-///
-/// # Example
-/// ```rust
-/// # use unimock::*;
-/// #[unimock(unmock_with=[real_foo])]
-/// trait Trait {
-///     fn foo(&self) -> &'static str;
-/// }
-///
-/// fn real_foo(_: &impl std::any::Any) -> &'static str {
-///     "real thing"
-/// }
-///
-/// // A spy value that spies on nothing:
-/// assert_eq!("real thing", spy(()).foo());
-///
-/// // A spy that overrides the behaviour of `TraitMock::foo`:
-/// let clause = TraitMock::foo.next_call(matching!()).returns_static("mocked");
-/// assert_eq!("mocked", spy(clause).foo());
-/// ```
-#[track_caller]
-pub fn spy(clause: impl Clause) -> Unimock {
-    let mut assembler = assemble::MockAssembler::new();
-    if let Err(error) = clause.assemble(&mut assembler) {
-        panic!("{error}");
-    }
-    assembler.into_unimock(FallbackMode::Unmock)
-}
-
 /// A clause represents a recipe for creating a unimock instance.
 ///
-/// Clauses may be _terminal_ and _non-terminal_.
+/// Clauses may be _terminal_ (basic) and _non-terminal_ (composite).
 /// Terminal clauses are created with unimock's builder API, non-terminals/composites are created by grouping other clauses in tuples.
 ///
 /// ```rust
@@ -807,18 +828,19 @@ pub fn spy(clause: impl Clause) -> Unimock {
 /// }
 ///
 /// // A reusable function returning a composite clause from two terminals, by tupling them:
-/// fn foo_bar_composite_clause() -> impl Clause {
+/// fn setup_foo_and_bar() -> impl Clause {
 ///     (
 ///         FooMock::foo.some_call(matching!(_)).returns(1),
 ///         BarMock::bar.some_call(matching!(_)).returns(2),
 ///     )
 /// }
 ///
-/// let unimock = mock((
-///     foo_bar_composite_clause(),
+/// // Basic and composite clauses may be recombined again to make new tuples:
+/// let mocked = Unimock::new((
+///     setup_foo_and_bar(),
 ///     BazMock::baz.some_call(matching!(_)).returns(3),
 /// ));
-/// assert_eq!(6, unimock.foo(0) + unimock.bar(0) + unimock.baz(0));
+/// assert_eq!(6, mocked.foo(0) + mocked.bar(0) + mocked.baz(0));
 /// ```
 #[must_use]
 pub trait Clause: clause::SealedCompositeClause {}

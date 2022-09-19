@@ -20,18 +20,21 @@ mod unmock_simple {
     }
 
     #[test]
-    fn works_with_empty_spy() {
-        assert_eq!("ab", spy(()).concat("a".to_string(), "b".to_string()));
+    fn works_with_empty_partial() {
+        assert_eq!(
+            "ab",
+            Unimock::new_partial(()).concat("a".to_string(), "b".to_string())
+        );
     }
 
     #[test]
     #[should_panic(
         expected = "Mock for Spyable::concat was never called. Dead mocks should be removed."
     )]
-    fn works_with_a_spy_having_a_stub_with_non_matching_pattern() {
+    fn works_with_a_partial_having_a_stub_with_non_matching_pattern() {
         assert_eq!(
             "ab",
-            spy(SpyableMock::concat.stub(|each| {
+            Unimock::new_partial(SpyableMock::concat.stub(|each| {
                 each.call(matching!("something", "else"))
                     .panics("not matched");
             }))
@@ -43,7 +46,7 @@ mod unmock_simple {
     fn returns_the_matched_pattern_if_overridden() {
         assert_eq!(
             "42",
-            spy(SpyableMock::concat.stub(|each| {
+            Unimock::new_partial(SpyableMock::concat.stub(|each| {
                 each.call(matching!("a", "b")).returns("42");
             }))
             .concat("a".to_string(), "b".to_string())
@@ -54,8 +57,8 @@ mod unmock_simple {
     fn works_on_a_mock_instance_with_explicit_unmock_setup() {
         assert_eq!(
             "ab",
-            mock(SpyableMock::concat.stub(|each| {
-                each.call(matching!("a", "b")).unmocked().once();
+            Unimock::new(SpyableMock::concat.stub(|each| {
+                each.call(matching!("a", "b")).unmocked();
             }))
             .concat("a".to_string(), "b".to_string())
         );
@@ -66,7 +69,7 @@ mod unmock_simple {
         expected = "Spyable::concat: Expected call pattern #0 to match at least 1 call, but it actually matched no calls."
     )]
     fn unmatched_pattern_still_panics() {
-        mock(SpyableMock::concat.stub(|each| {
+        Unimock::new(SpyableMock::concat.stub(|each| {
             each.call(matching!("", ""))
                 .returns("foobar")
                 .at_least_times(1);
@@ -89,7 +92,7 @@ fn unmock_recursion() {
 
     assert_eq!(
         120,
-        mock(FactorialMock::factorial.stub(|each| {
+        Unimock::new(FactorialMock::factorial.stub(|each| {
             each.call(matching! {(input) if *input <= 1}).returns(1u32);
             each.call(matching!(_)).unmocked();
         }))
@@ -111,9 +114,11 @@ async fn unmock_async() {
 
     assert_eq!(
         120,
-        spy(AsyncFactorialMock::factorial
-            .each_call(matching!(1))
-            .returns(1_u32))
+        Unimock::new_partial(
+            AsyncFactorialMock::factorial
+                .each_call(matching!(1))
+                .returns(1_u32)
+        )
         .factorial(5)
         .await,
         "works using spy"
@@ -121,7 +126,7 @@ async fn unmock_async() {
 
     assert_eq!(
         120,
-        mock(AsyncFactorialMock::factorial.stub(|each| {
+        Unimock::new(AsyncFactorialMock::factorial.stub(|each| {
             each.call(matching! {(input) if *input <= 1 })
                 .returns(1_u32);
             each.call(matching!(_)).unmocked();

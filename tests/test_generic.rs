@@ -12,7 +12,7 @@ mod output {
 
     #[test]
     fn test_generic_return() {
-        let deps = mock((
+        let deps = Unimock::new((
             GenericOutputMock::generic_output
                 .with_types::<String>()
                 .each_call(matching!())
@@ -41,7 +41,7 @@ mod param {
 
     #[test]
     fn test_generic_param() {
-        let deps = mock((
+        let deps = Unimock::new((
             GenericParamMock::generic_param
                 .with_types::<&'static str>()
                 .each_call(matching!("foobar"))
@@ -62,7 +62,7 @@ mod param {
         expected = "GenericParam::generic_param(?): No matching call patterns."
     )]
     fn test_generic_param_panic_no_debug() {
-        let deps = mock(
+        let deps = Unimock::new(
             GenericParamMock::generic_param
                 .with_types::<i32>()
                 .each_call(matching!(1337))
@@ -83,7 +83,7 @@ mod param {
         expected = "GenericParamDebug::generic_param_debug(42): No matching call patterns."
     )]
     fn test_generic_param_panic_debug() {
-        let deps = mock(
+        let deps = Unimock::new(
             GenericParamDebugMock::generic_param_debug
                 .with_types::<i32>()
                 .each_call(matching!(1337))

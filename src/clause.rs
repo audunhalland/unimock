@@ -11,30 +11,7 @@ pub trait SealedCompositeClause: Sized {
 #[doc(hidden)]
 pub struct TerminalClause {
     pub(crate) dyn_mock_fn: DynMockFn,
-    pub(crate) kind: clause::TerminalKind,
-}
-
-pub(crate) enum TerminalKind {
-    Stub(Vec<DynCallPatternBuilder>),
-    InAnyOrder(DynCallPatternBuilder),
-    InOrder(DynCallPatternBuilder),
-}
-
-impl TerminalKind {
-    pub fn pattern_match_mode(&self) -> fn_mocker::PatternMatchMode {
-        match self {
-            Self::Stub(_) | Self::InAnyOrder(_) => fn_mocker::PatternMatchMode::InAnyOrder,
-            Self::InOrder(_) => fn_mocker::PatternMatchMode::InOrder,
-        }
-    }
-
-    pub fn into_pattern_builders(self) -> Vec<DynCallPatternBuilder> {
-        match self {
-            Self::Stub(builders) => builders,
-            Self::InAnyOrder(builder) => vec![builder],
-            Self::InOrder(builder) => vec![builder],
-        }
-    }
+    pub(crate) builder: DynCallPatternBuilder,
 }
 
 impl SealedCompositeClause for () {

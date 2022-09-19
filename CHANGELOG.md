@@ -6,18 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Changed
-- New mock entry point `some_call` which does not require return value to implement `Clone`. `next_call` now also uses this API.
-- Remove the `Unmock` trait.
+- `Unimock::new(setup)` replaces `mock(clause)`.
+- `Unimock::new_partial(setup)` replaces `spy(clause)`.
+- `Clause` is now a trait instead of a type.
+- Clause composition is now done using tuples instead of `impl IntoIterator`, because clauses now have non-uniform types.
 - The generated `MockFn` structs are now put in a module called `TraitMock` where `Trait` is the name of the trait.
   The name of the generated structs are the same as the names of the methods.
 - Renamed the `unmocked=[..]` attribute option to `unmock_with=[..]`.
 ### Added
+- New mock entry point `some_call` which does not require return value to implement `Clone`. `next_call` now also uses this API.
 - `mod=Name` attribute option for overriding the ident of the generated module.
 - `flatten=[..]` attribute option for opting out of generating an encapsulating module.
 ### Fixed
 - Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the MockFn type names.
 ### Removed
 - `mod = *` attribute option at trait level.
+- The `.in_any_order()` and `.in_order()` builder methods. Those types instead just implement `Clause`.
+- The `Unmock` trait.
 
 ## [0.3.14] - 2022-08-01
 ### Added

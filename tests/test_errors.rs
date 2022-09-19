@@ -8,7 +8,7 @@ trait SingleArg {
 #[test]
 #[should_panic(expected = "No mock implementation found for SingleArg::method1")]
 fn should_panic_for_nonexisting_mock() {
-    mock(()).method1("hoi");
+    Unimock::new(()).method1("hoi");
 }
 
 #[test]
@@ -16,7 +16,7 @@ fn should_panic_for_nonexisting_mock() {
     expected = "Mock for SingleArg::method1 was never called. Dead mocks should be removed."
 )]
 fn should_panic_for_unused_stub() {
-    mock(SingleArgMock::method1.stub(|each| {
+    Unimock::new(SingleArgMock::method1.stub(|each| {
         each.call(matching!(_));
     }));
 }
@@ -26,7 +26,7 @@ fn should_panic_for_unused_stub() {
     expected = "A clause for SingleArg::method1 has already been registered as InAnyOrder, but got re-registered as InOrder. They cannot be mixed for the same MockFn."
 )]
 fn should_complain_about_mismatched_modes() {
-    mock((
+    Unimock::new((
         SingleArgMock::method1
             .each_call(matching!(_))
             .returns_ref("a"),
@@ -40,7 +40,7 @@ fn should_complain_about_mismatched_modes() {
 #[test]
 #[should_panic(expected = "Stub contained no call patterns")]
 fn should_panic_for_empty_stub_closure() {
-    let _ = mock(SingleArgMock::method1.stub(|_| {}));
+    let _ = Unimock::new(SingleArgMock::method1.stub(|_| {}));
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn should_panic_for_empty_stub_closure() {
     expected = "SingleArg::method1(\"whatever\"): No output available for matching call pattern #0"
 )]
 fn call_pattern_without_output_factory_should_crash() {
-    mock(SingleArgMock::method1.stub(|each| {
+    Unimock::new(SingleArgMock::method1.stub(|each| {
         each.call(matching!(_));
     }))
     .method1("whatever");
@@ -57,7 +57,7 @@ fn call_pattern_without_output_factory_should_crash() {
 #[test]
 #[should_panic(expected = "SingleArg::method1(\"anything\"): No matching call patterns.")]
 fn should_panic_if_no_call_patterns_in_stub_are_matched() {
-    mock(SingleArgMock::method1.stub(|each| {
+    Unimock::new(SingleArgMock::method1.stub(|each| {
         each.call(matching!("something"));
     }))
     .method1("anything");
@@ -68,7 +68,7 @@ fn should_panic_if_no_call_patterns_in_stub_are_matched() {
     expected = "SingleArg::method1: Expected call pattern #0 to match exactly 1 call, but it actually matched no calls."
 )]
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
-    mock(SingleArgMock::method1.stub(|each| {
+    Unimock::new(SingleArgMock::method1.stub(|each| {
         each.call(matching!("a")).returns_ref(String::new()).once();
         each.call(matching!(_)).returns_ref(String::new());
     }))
@@ -78,7 +78,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
 #[test]
 #[should_panic(expected = "SingleArg::method1(\"b\"): Explicit panic for call pattern #0: foobar!")]
 fn should_panic_with_explicit_message() {
-    mock(SingleArgMock::method1.stub(|each| {
+    Unimock::new(SingleArgMock::method1.stub(|each| {
         each.call(matching!(_)).panics("foobar!");
     }))
     .method1("b");
@@ -90,7 +90,7 @@ fn should_panic_with_explicit_message() {
 )]
 fn should_crash_when_the_original_instance_disappears_before_the_clone() {
     let _ = {
-        let original = mock(());
+        let original = Unimock::new(());
         let clone = original.clone();
         drop(original);
         clone
@@ -100,7 +100,7 @@ fn should_crash_when_the_original_instance_disappears_before_the_clone() {
 #[test]
 #[should_panic(expected = "No mock implementation found for SingleArg::method1")]
 fn multithread_error_reporting_works() {
-    let unimock = mock(());
+    let unimock = Unimock::new(());
 
     #[allow(clippy::redundant_clone)]
     let clone = unimock.clone();
@@ -122,7 +122,7 @@ fn should_complain_when_returning_unquantified_value_more_then_once() {
         fn foo(&self, arg: i32) -> i32;
     }
 
-    let unimock = mock(FooMock::foo.some_call(matching!(_)).returns(42));
+    let unimock = Unimock::new(FooMock::foo.some_call(matching!(_)).returns(42));
 
     assert_eq!(42, unimock.foo(1));
     unimock.foo(2);

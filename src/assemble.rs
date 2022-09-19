@@ -1,37 +1,50 @@
-use crate::build::DynCallPatternBuilder;
 use crate::call_pattern::CallPattern;
+use crate::clause::TerminalClause;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::{clause, FallbackMode, Unimock};
-use crate::{DynMockFn, SharedState};
+use crate::Clause;
 
 use std::any::TypeId;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, Mutex};
 
 pub trait Assemble {
-    fn append_terminal(&mut self, terminal: clause::TerminalClause) -> Result<(), String>;
+    fn append_terminal(&mut self, terminal: TerminalClause) -> Result<(), String>;
 }
 
 pub(crate) struct MockAssembler {
-    pub fn_mockers: HashMap<TypeId, FnMocker>,
-    pub current_call_index: usize,
+    fn_mockers: HashMap<TypeId, FnMocker>,
+    current_call_index: usize,
+}
+
+impl MockAssembler {
+    #[inline]
+    #[track_caller]
+    pub fn try_from_clause(clause: impl Clause) -> Result<Self, String> {
+        let mut assembler = Self::new();
+        clause.assemble(&mut assembler).map(|_| assembler)
+    }
+
+    fn new() -> Self {
+        Self {
+            fn_mockers: HashMap::new(),
+            current_call_index: 0,
+        }
+    }
+
+    pub fn finish(self) -> HashMap<TypeId, FnMocker> {
+        self.fn_mockers
+    }
 }
 
 impl Assemble for MockAssembler {
-    fn append_terminal(&mut self, terminal: clause::TerminalClause) -> Result<(), String> {
-        let pattern_match_mode = terminal.kind.pattern_match_mode();
-        let mut call_patterns = terminal
-            .kind
-            .into_pattern_builders()
-            .into_iter()
-            .map(|builder| {
-                self.build_call_pattern(builder, &terminal.dyn_mock_fn, pattern_match_mode)
-            })
-            .collect::<Result<Vec<_>, String>>()?;
+    fn append_terminal(&mut self, terminal: TerminalClause) -> Result<(), String> {
+        let pattern_match_mode = terminal.builder.pattern_match_mode;
+        let mock_name = terminal.dyn_mock_fn.name;
+        let mock_type_id = terminal.dyn_mock_fn.type_id;
 
-        match self.fn_mockers.entry(terminal.dyn_mock_fn.type_id) {
+        let call_pattern = self.new_call_pattern(terminal)?;
+
+        match self.fn_mockers.entry(mock_type_id) {
             Entry::Occupied(mut entry) => {
                 if entry.get().pattern_match_mode != pattern_match_mode {
                     return Err(
@@ -44,12 +57,12 @@ impl Assemble for MockAssembler {
                     );
                 }
 
-                entry.get_mut().call_patterns.append(&mut call_patterns);
+                entry.get_mut().call_patterns.push(call_pattern);
             }
             Entry::Vacant(entry) => {
                 entry.insert(FnMocker {
-                    call_patterns,
-                    name: terminal.dyn_mock_fn.name,
+                    call_patterns: vec![call_pattern],
+                    name: mock_name,
                     pattern_match_mode,
                 });
             }
@@ -60,31 +73,16 @@ impl Assemble for MockAssembler {
 }
 
 impl MockAssembler {
-    pub fn into_unimock(self, fallback_mode: FallbackMode) -> Unimock {
-        Unimock {
-            original_instance: true,
-            shared_state: Arc::new(SharedState {
-                fallback_mode,
-                fn_mockers: self.fn_mockers,
-                next_ordered_call_index: AtomicUsize::new(0),
-                panic_reasons: Mutex::new(vec![]),
-            }),
-        }
-    }
+    fn new_call_pattern(&mut self, terminal: TerminalClause) -> Result<CallPattern, String> {
+        let builder = terminal.builder;
 
-    fn build_call_pattern(
-        &mut self,
-        builder: DynCallPatternBuilder,
-        dyn_mock_fn: &DynMockFn,
-        pattern_match_mode: PatternMatchMode,
-    ) -> Result<CallPattern, String> {
         let mut ordered_call_index_range: std::ops::Range<usize> = Default::default();
 
-        if pattern_match_mode == PatternMatchMode::InOrder {
+        if builder.pattern_match_mode == PatternMatchMode::InOrder {
             let exact_calls = builder.count_expectation.exact_calls().ok_or_else(|| {
                 format!(
                     "{name} mock has no exact count expectation, which is needed for a mock.",
-                    name = dyn_mock_fn.name
+                    name = terminal.dyn_mock_fn.name
                 )
             })?;
 
@@ -100,14 +98,5 @@ impl MockAssembler {
             ordered_call_index_range,
             call_counter: builder.count_expectation.into_counter(),
         })
-    }
-}
-
-impl MockAssembler {
-    pub fn new() -> Self {
-        Self {
-            fn_mockers: HashMap::new(),
-            current_call_index: 0,
-        }
     }
 }

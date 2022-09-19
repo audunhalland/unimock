@@ -1,8 +1,7 @@
 use crate::assemble::Assemble;
 use crate::call_pattern::*;
-use crate::clause;
+use crate::clause::SealedCompositeClause;
 use crate::clause::TerminalClause;
-use crate::clause::{SealedCompositeClause, TerminalKind};
 use crate::fn_mocker::PatternMatchMode;
 use crate::property::*;
 use crate::*;
@@ -26,13 +25,6 @@ impl DynCallPatternBuilder {
             responders: vec![],
             count_expectation: Default::default(),
             current_response_index: 0,
-        }
-    }
-
-    fn to_clause_leaf_kind(self) -> TerminalKind {
-        match self.pattern_match_mode {
-            PatternMatchMode::InAnyOrder => TerminalKind::InAnyOrder(self),
-            PatternMatchMode::InOrder => TerminalKind::InOrder(self),
         }
     }
 }
@@ -131,10 +123,14 @@ where
             return Err(format!("Stub contained no call patterns"));
         }
 
-        assembler.append_terminal(TerminalClause {
-            dyn_mock_fn: DynMockFn::new::<F>(),
-            kind: clause::TerminalKind::Stub(self.patterns),
-        })
+        for builder in self.patterns.into_iter() {
+            assembler.append_terminal(TerminalClause {
+                dyn_mock_fn: DynMockFn::new::<F>(),
+                builder,
+            })?;
+        }
+
+        Ok(())
     }
 }
 
@@ -156,7 +152,7 @@ where
     ///
     /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
-    /// To be able to return this value multiple times, call `.cloned()`, or quantify it explicitly.
+    /// To be able to return this value multiple times, quantify it explicitly.
     pub fn returns<V: Into<F::Output>>(self, value: V) -> QuantifyReturnValue<'p, F, O>
     where
         F::Output: Send + Sync + Sized + 'static,
@@ -512,7 +508,7 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => assembler.append_terminal(TerminalClause {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: builder.to_clause_leaf_kind(),
+                builder,
             }),
             _ => panic!("Cannot expect a next call among group of call patterns"),
         }
@@ -566,7 +562,7 @@ where
         match self.builder {
             BuilderWrapper::Owned(builder) => assembler.append_terminal(TerminalClause {
                 dyn_mock_fn: DynMockFn::new::<F>(),
-                kind: builder.to_clause_leaf_kind(),
+                builder,
             }),
             _ => panic!(),
         }
