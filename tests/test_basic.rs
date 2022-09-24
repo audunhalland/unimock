@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 #[test]
 fn noarg_works() {
-    #[unimock]
+    #[unimock(api=NoArgMock)]
     trait NoArg {
         fn no_arg(&self) -> i32;
     }
@@ -31,7 +31,7 @@ mod trailing_comma_in_args {
 
 #[test]
 fn owned_output_works() {
-    #[unimock]
+    #[unimock(api=OwnedMock)]
     trait Owned {
         fn foo(&self, a: String, b: String) -> String;
     }
@@ -89,7 +89,7 @@ mod exotic_self_types {
         fn foo(&mut self);
     }
 
-    #[unimock]
+    #[unimock(api=RcSelfMock)]
     trait RcSelf {
         fn rc_self(self: Rc<Self>);
     }
@@ -107,7 +107,7 @@ mod exotic_self_types {
 mod exotic_methods {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=ProvidedMock)]
     trait Provided {
         fn not_provided(&self);
         fn provided(&self) -> i32 {
@@ -133,7 +133,7 @@ mod exotic_methods {
 mod referenced {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=ReferencedMock)]
     trait Referenced {
         fn foo(&self, a: &str) -> &str;
         fn bar(&self, a: &str, b: &str) -> &str;
@@ -189,7 +189,7 @@ mod no_clone_return {
 
     pub struct NoClone(i32);
 
-    #[unimock]
+    #[unimock(api=FooMock)]
     trait Foo {
         fn foo(&self) -> NoClone;
     }
@@ -204,7 +204,7 @@ mod no_clone_return {
 mod each_call_implicitly_clones {
     use unimock::*;
 
-    #[unimock]
+    #[unimock(api=FooMock)]
     trait Foo {
         fn foo(&self) -> i32;
     }
@@ -217,12 +217,12 @@ mod each_call_implicitly_clones {
     }
 }
 
-#[unimock]
+#[unimock(api=SingleArgMock)]
 trait SingleArg {
     fn method1<'i>(&'i self, a: &'i str) -> &'i str;
 }
 
-#[unimock]
+#[unimock(api=MultiArgMock)]
 trait MultiArg {
     fn method2(&self, a: &str, b: &str) -> &str;
 }
@@ -260,7 +260,7 @@ mod no_debug {
         Bar,
     }
 
-    #[unimock]
+    #[unimock(api=VeryPrimitiveMock)]
     trait VeryPrimitive {
         fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
     }
@@ -315,7 +315,7 @@ fn should_be_able_to_borrow_a_returns_value() {
     #[derive(Eq, PartialEq, Debug, Clone)]
     pub struct Ret(i32);
 
-    #[unimock]
+    #[unimock(api=BorrowsRetMock)]
     trait BorrowsRet {
         fn borrows_ret(&self) -> &Ret;
     }
@@ -333,7 +333,7 @@ fn should_be_able_to_borrow_a_returns_value() {
 
 #[test]
 fn borrowing_with_memory_leak() {
-    #[unimock]
+    #[unimock(api=BorrowingMock)]
     trait Borrowing {
         fn borrow(&self, input: String) -> &String;
     }
@@ -367,12 +367,12 @@ fn borrowing_with_memory_leak() {
     );
 }
 
-mod custom_module {
+mod custom_api_module {
     use unimock::*;
 
     pub struct MyType;
 
-    #[unimock(mod = FakeSingle)]
+    #[unimock(api=FakeSingle)]
     trait Single {
         fn func(&self) -> &MyType;
     }
@@ -391,11 +391,11 @@ mod custom_module {
     }
 }
 
-mod unpacked_module {
+mod flattened_module {
     mod basic {
         use unimock::*;
 
-        #[unimock(flatten=[Foo, Bar])]
+        #[unimock(api=[Foo, Bar])]
         trait WithUnpackedModule {
             fn foo(&self, input: String) -> i32;
             fn bar(&self);
@@ -411,7 +411,7 @@ mod unpacked_module {
     mod generics {
         use unimock::*;
 
-        #[unimock(flatten=[Foo, Bar])]
+        #[unimock(api=[Foo, Bar])]
         trait UnpackedGenerics<T> {
             fn foo(&self, input: String) -> T;
             fn bar(&self, input: &T);
@@ -421,7 +421,7 @@ mod unpacked_module {
     mod exports {
         mod inner {
             use unimock::*;
-            #[unimock(flatten=[FooMock])]
+            #[unimock(api=[FooMock])]
             pub trait Trait {
                 fn foo(&self);
             }
@@ -435,7 +435,7 @@ mod unpacked_module {
     }
 }
 
-#[unimock]
+#[unimock(api=AsyncMock)]
 #[async_trait]
 trait Async {
     async fn func(&self, arg: i32) -> String;
@@ -461,7 +461,7 @@ async fn test_async_trait() {
 
 use std::borrow::Cow;
 
-#[unimock]
+#[unimock(api=CowBasedMock)]
 trait CowBased {
     fn func(&self, arg: Cow<'static, str>) -> Cow<'static, str>;
 }
@@ -500,7 +500,7 @@ fn newtype() {
         }
     }
 
-    #[unimock]
+    #[unimock(api=NewtypeStringMock)]
     trait NewtypeString {
         fn func(&self, arg: MyString) -> MyString;
     }
@@ -541,16 +541,16 @@ fn intricate_lifetimes() {
 
 #[test]
 fn clause_helpers() {
-    #[unimock]
+    #[unimock(api=FooMock)]
     trait Foo {
         fn m1(&self) -> i32;
     }
 
-    #[unimock]
+    #[unimock(api=BarMock)]
     trait Bar {
         fn m2(&self) -> i32;
     }
-    #[unimock]
+    #[unimock(api=BazMock)]
     trait Baz {
         fn m3(&self) -> i32;
     }
@@ -572,7 +572,7 @@ fn clause_helpers() {
 mod responders_in_series {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=SeriesMock)]
     trait Series {
         fn series(&self) -> i32;
     }
@@ -618,7 +618,7 @@ mod responders_in_series {
     }
 }
 
-#[unimock]
+#[unimock(api=BorrowStaticMock)]
 trait BorrowStatic {
     fn static_str(&self, arg: i32) -> &'static str;
 }
@@ -655,7 +655,7 @@ fn borrow_static_should_work_with_returns_static() {
 mod async_argument_borrowing {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=BorrowParamMock)]
     #[async_trait]
     trait BorrowParam {
         async fn borrow_param<'a>(&self, arg: &'a str) -> &'a str;
@@ -696,7 +696,7 @@ mod lifetime_constrained_output_type {
     #[derive(Clone)]
     pub struct Borrowing2<'a, 'b>(&'a str, &'b str);
 
-    #[unimock]
+    #[unimock(api=BorrowSyncMock)]
     trait BorrowSync {
         fn borrow_sync_elided(&self) -> Borrowing1<'_>;
         fn borrow_sync_explicit(&self) -> Borrowing1<'_>;

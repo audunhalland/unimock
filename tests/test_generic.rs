@@ -5,7 +5,7 @@ use std::fmt::Debug;
 mod output {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=GenericOutputMock)]
     trait GenericOutput<T> {
         fn generic_output(&self) -> T;
     }
@@ -34,7 +34,7 @@ mod output {
 mod param {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=GenericParamMock)]
     trait GenericParam<T> {
         fn generic_param(&self, param: T) -> &'static str;
     }
@@ -72,7 +72,7 @@ mod param {
         deps.generic_param(42_i32);
     }
 
-    #[unimock]
+    #[unimock(api=GenericParamDebugMock)]
     trait GenericParamDebug<T: Debug> {
         fn generic_param_debug(&self, param: T) -> &'static str;
     }
@@ -125,7 +125,7 @@ mod async_generic {
 mod generic_without_module {
     use super::*;
 
-    #[unimock(flatten=[Func])]
+    #[unimock(api=[Func])]
     trait WithModule<T: Debug> {
         fn func(&self) -> T;
     }

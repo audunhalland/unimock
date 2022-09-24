@@ -5,7 +5,7 @@ pub struct Attr {
     /// Unimock's prefix, e.g. `::unimock`
     pub prefix: syn::Path,
     /// Module to put the MockFn in
-    pub mock_interface: MockInterface,
+    pub mock_api: MockApi,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
     pub input_lifetime: syn::Lifetime,
     pub debug: bool,
@@ -42,34 +42,16 @@ impl Attr {
 impl syn::parse::Parse for Attr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut prefix: Option<syn::Path> = None;
-        let mut mock_interface = MockInterface::Default;
+        let mut mock_api = MockApi::Hidden;
         let mut unmocks = None;
         let mut debug = false;
 
         while !input.is_empty() {
-            if input.peek(syn::token::Mod) {
-                let _: syn::token::Mod = input.parse()?;
-                let _: syn::token::Eq = input.parse()?;
-                mock_interface = MockInterface::MockMod(input.parse()?);
-            } else {
-                let keyword: syn::Ident = input.parse()?;
-                let _: syn::token::Eq = input.parse()?;
-                match keyword.to_string().as_str() {
-                    "prefix" => {
-                        prefix = Some(input.parse()?);
-                    }
-                    "unmock_with" => {
-                        let content;
-                        let _ = syn::bracketed!(content in input);
-                        let mut unmocked: Vec<Unmock> = vec![content.parse()?];
-
-                        while content.peek(syn::token::Comma) {
-                            let _: syn::token::Comma = content.parse()?;
-                            unmocked.push(content.parse()?);
-                        }
-                        unmocks = Some(WithSpan(unmocked, content.span()));
-                    }
-                    "flatten" => {
+            let keyword: syn::Ident = input.parse()?;
+            let _: syn::token::Eq = input.parse()?;
+            match keyword.to_string().as_str() {
+                "api" => {
+                    mock_api = if input.peek(syn::token::Bracket) {
                         let content;
                         let _ = syn::bracketed!(content in input);
                         let mut idents: Vec<syn::Ident> = vec![content.parse()?];
@@ -78,17 +60,33 @@ impl syn::parse::Parse for Attr {
                             let _: syn::token::Comma = content.parse()?;
                             idents.push(content.parse()?);
                         }
-                        mock_interface = MockInterface::Flattened(FlattenedMethods {
+                        MockApi::Flattened(FlattenedMethods {
                             span: content.span(),
                             idents,
-                        });
+                        })
+                    } else {
+                        MockApi::MockMod(input.parse()?)
+                    };
+                }
+                "prefix" => {
+                    prefix = Some(input.parse()?);
+                }
+                "unmock_with" => {
+                    let content;
+                    let _ = syn::bracketed!(content in input);
+                    let mut unmocked: Vec<Unmock> = vec![content.parse()?];
+
+                    while content.peek(syn::token::Comma) {
+                        let _: syn::token::Comma = content.parse()?;
+                        unmocked.push(content.parse()?);
                     }
-                    "debug" => {
-                        debug = input.parse::<syn::LitBool>()?.value;
-                    }
-                    _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
-                };
-            }
+                    unmocks = Some(WithSpan(unmocked, content.span()));
+                }
+                "debug" => {
+                    debug = input.parse::<syn::LitBool>()?.value;
+                }
+                _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
+            };
 
             if input.peek(syn::token::Comma) {
                 let _: syn::token::Comma = input.parse()?;
@@ -99,7 +97,7 @@ impl syn::parse::Parse for Attr {
 
         Ok(Self {
             prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
-            mock_interface,
+            mock_api,
             unmocks,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             debug,
@@ -107,10 +105,11 @@ impl syn::parse::Parse for Attr {
     }
 }
 
-pub enum MockInterface {
-    // Default, which will turn into MockMod
-    Default,
-    // mod TraitMock { }...
+pub enum MockApi {
+    // User did not provide a mock api,
+    // Unimock will still implement the trait but no MockFn types can be named by the user
+    Hidden,
+    // mod #ident { ..MockFns }
     MockMod(syn::Ident),
     // One top-level struct per method
     Flattened(FlattenedMethods),

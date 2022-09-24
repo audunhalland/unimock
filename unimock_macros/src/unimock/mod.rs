@@ -1,4 +1,4 @@
-use quote::{format_ident, quote};
+use quote::quote;
 
 mod attr;
 mod doc;
@@ -7,22 +7,12 @@ mod output;
 mod trait_info;
 mod util;
 
-pub use attr::{Attr, MockInterface};
+pub use attr::{Attr, MockApi};
 use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
-use self::method::MockFnIdent;
-
-pub fn generate(
-    mut attr: Attr,
-    item_trait: syn::ItemTrait,
-) -> syn::Result<proc_macro2::TokenStream> {
-    if matches!(attr.mock_interface, attr::MockInterface::Default) {
-        attr.mock_interface =
-            attr::MockInterface::MockMod(format_ident!("{}Mock", item_trait.ident));
-    }
-
+pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let trait_info = trait_info::TraitInfo::analyze(&item_trait, &attr)?;
     attr.validate(&trait_info)?;
 
@@ -59,45 +49,56 @@ pub fn generate(
         .map(|(index, method)| def_method_impl(index, method.as_ref(), &trait_info, &attr));
 
     let where_clause = &trait_info.item.generics.where_clause;
-    let mock_fns_public = mock_fn_defs
+    let mock_fn_struct_items = mock_fn_defs
         .iter()
         .filter_map(Option::as_ref)
-        .map(|def| &def.public);
-    let mock_fns_private = mock_fn_defs
+        .map(|def| &def.mock_fn_struct_item);
+    let mock_fn_impl_details = mock_fn_defs
         .iter()
         .filter_map(Option::as_ref)
-        .map(|def| &def.private);
+        .map(|def| &def.impl_details);
     let generic_params = util::Generics::params(&trait_info);
     let generic_args = util::Generics::args(&trait_info);
 
-    let mock_fns_public = match &attr.mock_interface {
-        MockInterface::MockMod(module_ident) => {
+    let (opt_mock_interface_public, opt_mock_interface_private) = match &attr.mock_api {
+        MockApi::Hidden => (
+            None,
+            Some(quote! {
+                #(#mock_fn_struct_items)*
+            }),
+        ),
+        MockApi::MockMod(module_ident) => {
             let doc_string = format!("Unimock setup module for `{}`", trait_info.item.ident);
             let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
             let vis = &trait_info.item.vis;
-            quote! {
-                #[doc = #doc_lit_str]
-                #[allow(non_snake_case)]
-                #vis mod #module_ident {
-                    #(#mock_fns_public)*
-                }
-            }
+            (
+                Some(quote! {
+                    #[doc = #doc_lit_str]
+                    #[allow(non_snake_case)]
+                    #vis mod #module_ident {
+                        #(#mock_fn_struct_items)*
+                    }
+                }),
+                None,
+            )
         }
-        _ => {
-            quote! {
-                #(#mock_fns_public)*
-            }
-        }
+        MockApi::Flattened(_) => (
+            Some(quote! {
+                #(#mock_fn_struct_items)*
+            }),
+            None,
+        ),
     };
 
     Ok(quote! {
         #item_trait
-        #mock_fns_public
+        #opt_mock_interface_public
 
         // private part:
         const _: () = {
-            #(#mock_fns_private)*
+            #opt_mock_interface_private
+            #(#mock_fn_impl_details)*
 
             #(#impl_attributes)*
             impl #generic_params #trait_ident #generic_args for #prefix::Unimock #where_clause {
@@ -109,8 +110,8 @@ pub fn generate(
 }
 
 struct MockFnDef {
-    public: proc_macro2::TokenStream,
-    private: proc_macro2::TokenStream,
+    mock_fn_struct_item: proc_macro2::TokenStream,
+    impl_details: proc_macro2::TokenStream,
 }
 
 fn def_mock_fn(
@@ -124,8 +125,8 @@ fn def_mock_fn(
     let mock_fn_path = method.mock_fn_path(attr);
     let mock_fn_name = &method.mock_fn_name;
 
-    let mock_visibility = match &attr.mock_interface {
-        MockInterface::MockMod(_) => syn::Visibility::Public(syn::VisPublic {
+    let mock_visibility = match &attr.mock_api {
+        MockApi::MockMod(_) => syn::Visibility::Public(syn::VisPublic {
             pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
         }),
         _ => trait_info.item.vis.clone(),
@@ -154,7 +155,11 @@ fn def_mock_fn(
     let generic_args = util::Generics::args(trait_info);
     let where_clause = &trait_info.item.generics.where_clause;
 
-    let doc_attrs = method.mockfn_doc_attrs(trait_info.ident());
+    let doc_attrs = if matches!(attr.mock_api, attr::MockApi::Hidden) {
+        vec![]
+    } else {
+        method.mockfn_doc_attrs(trait_info.ident())
+    };
 
     let output = match &method.output_structure.ty {
         Some(ty) => quote! { #ty },
@@ -163,11 +168,9 @@ fn def_mock_fn(
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
-    let gen_public_defs = |non_generic_ident: &MockFnIdent| {
-        let allow_ident_attr = non_generic_ident.allow_attr();
-
+    let gen_mock_fn_struct_item = |non_generic_ident: &syn::Ident| {
         quote! {
-            #allow_ident_attr
+            #[allow(non_camel_case_types)]
             #(#doc_attrs)*
             #mock_visibility struct #non_generic_ident;
         }
@@ -192,15 +195,14 @@ fn def_mock_fn(
         let untyped_phantoms = trait_info
             .generic_type_params()
             .map(|_| util::UntypedPhantomData);
-        let module_scope = match &attr.mock_interface {
-            MockInterface::MockMod(ident) => Some(quote! { #ident:: }),
+        let module_scope = match &attr.mock_api {
+            MockApi::MockMod(ident) => Some(quote! { #ident:: }),
             _ => None,
         };
-        let allow_ident_attr = mock_fn_ident.allow_attr();
 
         MockFnDef {
-            public: gen_public_defs(non_generic_ident),
-            private: quote! {
+            mock_fn_struct_item: gen_mock_fn_struct_item(non_generic_ident),
+            impl_details: quote! {
                 impl #module_scope #non_generic_ident {
                     pub fn with_types #generic_params(
                         self
@@ -212,7 +214,7 @@ fn def_mock_fn(
                     }
                 }
 
-                #allow_ident_attr
+                #[allow(non_camel_case_types)]
                 struct #mock_fn_ident #generic_args #phantoms_tuple;
 
                 #impl_blocks
@@ -220,8 +222,8 @@ fn def_mock_fn(
         }
     } else {
         MockFnDef {
-            public: gen_public_defs(mock_fn_ident),
-            private: impl_blocks,
+            mock_fn_struct_item: gen_mock_fn_struct_item(mock_fn_ident),
+            impl_details: impl_blocks,
         }
     };
 

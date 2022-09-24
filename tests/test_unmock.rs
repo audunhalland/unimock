@@ -6,7 +6,7 @@ use std::any::Any;
 mod unmock_simple {
     use super::*;
 
-    #[unimock(unmock_with=[repeat, concat])]
+    #[unimock(api=SpyableMock, unmock_with=[repeat, concat])]
     trait Spyable {
         fn repeat(&self, arg: String) -> String;
         fn concat(&self, a: String, b: String) -> String;
@@ -81,7 +81,7 @@ mod unmock_simple {
 
 #[test]
 fn unmock_recursion() {
-    #[unimock(unmock_with=[my_factorial])]
+    #[unimock(api=FactorialMock, unmock_with=[my_factorial])]
     trait Factorial {
         fn factorial(&self, input: u32) -> u32;
     }
@@ -102,7 +102,7 @@ fn unmock_recursion() {
 
 #[tokio::test]
 async fn unmock_async() {
-    #[unimock(unmock_with=[my_factorial])]
+    #[unimock(api=AsyncFactorialMock, unmock_with=[my_factorial])]
     #[async_trait]
     trait AsyncFactorial {
         async fn factorial(&self, input: u32) -> u32;
@@ -148,4 +148,15 @@ mod unmock_with_custom_args {
     fn foo(b: u16, a: u8) -> u32 {
         u32::from(b) + u32::from(a)
     }
+}
+
+mod unmock_without_api_should_not_have_shadowing_problems_wrt_unmock_fns {
+    use super::*;
+
+    #[unimock(unmock_with=[foo])]
+    trait Spyable {
+        fn foo(&self);
+    }
+
+    fn foo(_: &impl std::any::Any) {}
 }

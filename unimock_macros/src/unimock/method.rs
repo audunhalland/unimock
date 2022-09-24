@@ -1,17 +1,15 @@
-use proc_macro2::TokenStream;
 use quote::quote;
-use quote::ToTokens;
 use syn::spanned::Spanned;
 
-use super::attr::MockInterface;
+use super::attr::MockApi;
 use super::doc;
 use super::output;
 use super::Attr;
 
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemMethod,
-    pub non_generic_mock_entry_ident: Option<MockFnIdent>,
-    pub mock_fn_ident: MockFnIdent,
+    pub non_generic_mock_entry_ident: Option<syn::Ident>,
+    pub mock_fn_ident: syn::Ident,
     pub mock_fn_name: syn::LitStr,
     pub output_structure: output::OutputStructure<'t>,
 }
@@ -20,8 +18,8 @@ impl<'s> MockMethod<'s> {
     pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
 
-        match (&attr.mock_interface, &self.non_generic_mock_entry_ident) {
-            (MockInterface::MockMod(ident), None) => {
+        match (&attr.mock_api, &self.non_generic_mock_entry_ident) {
+            (MockApi::MockMod(ident), None) => {
                 quote! { #ident::#mock_fn_ident }
             }
             _ => quote! { #mock_fn_ident },
@@ -185,62 +183,27 @@ fn determine_mockable(method: &syn::TraitItemMethod) -> Mockable {
     }
 }
 
-pub struct MockFnIdent {
-    ident: syn::Ident,
-    kind: MockFnIdentKind,
-}
-
-impl MockFnIdent {
-    fn new(ident: syn::Ident, kind: MockFnIdentKind) -> Self {
-        Self { ident, kind }
-    }
-
-    pub fn allow_attr(&self) -> Option<TokenStream> {
-        match self.kind {
-            MockFnIdentKind::Inferred => Some(quote! { #[allow(non_camel_case_types)] }),
-            MockFnIdentKind::Explicit => None,
-        }
-    }
-}
-
-impl ToTokens for MockFnIdent {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        self.ident.to_tokens(tokens);
-    }
-}
-
-pub enum MockFnIdentKind {
-    Inferred,
-    Explicit,
-}
-
 fn generate_mock_fn_ident(
     method: &syn::TraitItemMethod,
     method_index: usize,
     generic: bool,
     attr: &Attr,
-) -> syn::Result<MockFnIdent> {
+) -> syn::Result<syn::Ident> {
     if generic {
-        match &attr.mock_interface {
-            MockInterface::Flattened(flat_mocks) => Ok(MockFnIdent::new(
-                quote::format_ident!("__Generic{}", flat_mocks.get_mock_ident(method_index)?),
-                MockFnIdentKind::Explicit,
+        match &attr.mock_api {
+            MockApi::Flattened(flat_mocks) => Ok(quote::format_ident!(
+                "__Generic{}",
+                flat_mocks.get_mock_ident(method_index)?
             )),
-            MockInterface::MockMod(_) | MockInterface::Default => Ok(MockFnIdent::new(
-                quote::format_ident!("__Generic{}", method.sig.ident),
-                MockFnIdentKind::Inferred,
-            )),
+            MockApi::MockMod(_) | MockApi::Hidden => {
+                Ok(quote::format_ident!("__Generic{}", method.sig.ident))
+            }
         }
     } else {
-        match &attr.mock_interface {
-            MockInterface::Flattened(flat_mocks) => Ok(MockFnIdent::new(
-                flat_mocks.get_mock_ident(method_index)?.clone(),
-                MockFnIdentKind::Explicit,
-            )),
-            MockInterface::MockMod(_) | MockInterface::Default => Ok(MockFnIdent::new(
-                method.sig.ident.clone(),
-                MockFnIdentKind::Inferred,
-            )),
+        match &attr.mock_api {
+            MockApi::Flattened(flat_mocks) => Ok(flat_mocks.get_mock_ident(method_index)?.clone()),
+            MockApi::MockMod(_) => Ok(method.sig.ident.clone()),
+            MockApi::Hidden => Ok(quote::format_ident!("UnimockHidden__{}", method.sig.ident)),
         }
     }
 }

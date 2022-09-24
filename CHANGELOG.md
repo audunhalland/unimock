@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Changed
+- `#[unimock]` is now more hygienic and does not autogenerate a mock api identifier by default.
+    Instead, the user-facing mock API is opt-in by specifying `api=my_ident`.
 - `Unimock::new(setup)` replaces `mock(clause)`.
 - `Unimock::new_partial(setup)` replaces `spy(clause)`.
 - `Clause` is now a trait instead of a type.
@@ -15,8 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the `unmocked=[..]` attribute option to `unmock_with=[..]`.
 ### Added
 - New mock entry point `some_call` which does not require return value to implement `Clone`. `next_call` now also uses this API.
-- `mod=Name` attribute option for overriding the ident of the generated module.
-- `flatten=[..]` attribute option for opting out of generating an encapsulating module.
+- `api=[..]` attribute option for opting out of generating an encapsulating module.
 ### Fixed
 - Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the MockFn type names.
 ### Removed

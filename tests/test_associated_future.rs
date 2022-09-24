@@ -6,7 +6,7 @@ use unimock::*;
 mod without_unmock {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=FooMock)]
     trait Foo {
         type Fut<'a>: ::core::future::Future<Output = i32> + Send
         where
@@ -28,7 +28,7 @@ mod without_unmock {
 mod with_unmock {
     use super::*;
 
-    #[unimock(unmock_with=[do_unmock(arg)])]
+    #[unimock(api=FooMock, unmock_with=[do_unmock(arg)])]
     trait Foo {
         type Fut<'a>: ::core::future::Future<Output = i32> + Send
         where

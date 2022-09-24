@@ -1,6 +1,6 @@
 use unimock::*;
 
-#[unimock]
+#[unimock(api=SingleArgMock)]
 trait SingleArg {
     fn method1<'s>(&'s self, a: &'s str) -> &'s str;
 }
@@ -23,7 +23,7 @@ fn should_panic_for_unused_stub() {
 
 #[test]
 #[should_panic(
-    expected = "A clause for SingleArg::method1 has already been registered as InAnyOrder, but got re-registered as InOrder. They cannot be mixed for the same MockFn."
+    expected = "A clause for SingleArg::method1 has already been registered as InAnyOrder, but got re-registered as InOrder. They cannot be mixed for the same MockFna."
 )]
 fn should_complain_about_mismatched_modes() {
     Unimock::new((
@@ -117,7 +117,7 @@ fn multithread_error_reporting_works() {
     expected = "Foo::foo(2): Cannot return value more than once for call pattern #0, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
 )]
 fn should_complain_when_returning_unquantified_value_more_then_once() {
-    #[unimock]
+    #[unimock(api=FooMock)]
     trait Foo {
         fn foo(&self, arg: i32) -> i32;
     }

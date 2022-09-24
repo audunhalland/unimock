@@ -1,12 +1,12 @@
 use unimock::*;
 
-#[unimock]
+#[unimock(api=T1Mock)]
 trait T1 {
     fn a(&self, i: i32) -> i32;
     fn b(&self, i: i32) -> i32;
 }
 
-#[unimock]
+#[unimock(api=T2Mock)]
 trait T2 {
     fn c(&self, i: i32) -> i32;
 }

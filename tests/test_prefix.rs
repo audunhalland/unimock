@@ -1,6 +1,6 @@
 use unimock as mocknroll;
 
-#[mocknroll::unimock(prefix = mocknroll)]
+#[mocknroll::unimock(api=TestMock, prefix=mocknroll)]
 trait Test {
     fn test(&self);
 }

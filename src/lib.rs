@@ -42,18 +42,20 @@
 //! }
 //! ```
 //!
-//! we would like to tell unimock what `FooMock::foo`'s behaviour will be, i.e. what it will return.
+//! we would like to tell unimock what `Foo::foo`'s behaviour will be, i.e. what it will return.
 //! In order to do that, we first need to refer to the method.
 //! In Rust, trait methods aren't reified entities, they are not types nor values, so they cannot be referred to in code.
-//! Therefore, the unimock macro creates a surrogate type to represent it. By default, this type will be called
+//! We need to tell unimock to expose a separate mocking API.
+//! This API will be created in form of a new module, which is named by passing `(api=my_mock_api)` to the unimock macro invocation.
+//! Each of the trait's original methods will get exported as mock config entrypoints through this module, e.g.
 //!
-//! `FooMock::foo`.
+//! `my_mock_api::foo`.
 //!
-//! This type will implement [`MockFn`](crate::MockFn), which is the entrypoint for creating a [Clause](crate::Clause):
+//! `foo` is a type that will implement [`MockFn`](crate::MockFn), which is the entrypoint for creating a [Clause](crate::Clause):
 //!
 //! ```rust
 //! # use unimock::*;
-//! #[unimock]
+//! #[unimock(api=my_mock_api)]
 //! trait Foo {
 //!     fn foo(&self) -> i32;
 //! }
@@ -62,14 +64,14 @@
 //!     foo.foo()
 //! }
 //!
-//! let clause = FooMock::foo.each_call(matching!()).returns(1337);
+//! let clause = my_mock_api::foo.each_call(matching!()).returns(1337);
 //!
 //! assert_eq!(1337, test_me(Unimock::new(clause)));
 //! ```
 //!
 //! Clause construction is a type-state machine that in this example goes through two steps:
 //!
-//! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
+//! 1. [`my_mock_api::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 //! 2. [`.returns(1337)`](crate::build::DefineResponse::returns): Each matching call will return the value `1337`.
 //!    In this example there is only one clause.
@@ -95,18 +97,33 @@
 //! * [each_call](crate::MockFn::each_call) is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
 //! * [next_call](crate::MockFn::next_call) is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
 //!
+//! ### Selecting a name for the mock api
+//! Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
+//!     unimock tries to avoid autogenerating any new identifiers that might accidentally create undesired namespace collisions.
+//! The name of the mocking API therefore has to be user-supplied.
+//! Although the user is free to choose any name, unimock suggests following a naming convention.
+//!
+//! The entity being mocked is a trait, but the mocking API is a module.
+//! This introduces a conflict in naming convention style, since traits use CamelCase but modules use snake_case.
+//!
+//! _The suggested naming convention is using the name of the trait (e.g. `Trait`) postfixed with `Mock`: The resulting module should be called `TraitMock`._
+//!
+//! This will make it easier to discover the API, as it shares a common prefix with the name of the trait.
+//!
+//!
+//!
 //! ## Combining setup clauses
 //! `Unimock::new()` accepts as argument anything that implements [Clause].
 //! Basic setup clauses can be combined into composite clauses by using _tuples_:
 //!
 //! ```rust
 //! # use unimock::*;
-//! #[unimock]
+//! #[unimock(api=FooMock)]
 //! trait Foo {
 //!     fn foo(&self, arg: i32) -> i32;
 //! }
 //!
-//! #[unimock]
+//! #[unimock(api=BarMock)]
 //! trait Bar {
 //!     fn bar(&self, arg: i32) -> i32;
 //! }
@@ -179,7 +196,7 @@
 //!
 //! ```rust
 //! # use unimock::*;
-//! # #[unimock]
+//! # #[unimock(api=HiddenMock)]
 //! # trait Hidden { fn hidden(&self, arg: i32) -> i32; }
 //! # let mocked = Unimock::new((
 //! # HiddenMock::hidden.stub(|each| {
@@ -202,9 +219,9 @@
 //!
 //! ```rust
 //! # use unimock::*;
-//! # #[unimock]
+//! # #[unimock(api=FooMock)]
 //! # trait Foo { fn foo(&self, arg: i32) -> i32; }
-//! # #[unimock]
+//! # #[unimock(api=BarMock)]
 //! # trait Bar { fn bar(&self, arg: i32) -> i32; }
 //! # let mocked =
 //! Unimock::new((
@@ -355,7 +372,7 @@ use assemble::MockAssembler;
 /// ```rust
 /// use unimock::*;
 ///
-/// #[unimock]
+/// #[unimock(api=Trait1Mock)]
 /// trait Trait1 {
 ///     fn a(&self) -> i32;
 ///     fn b(&self) -> i32;
@@ -410,7 +427,7 @@ use assemble::MockAssembler;
 ///
 /// ```rust
 /// # use unimock::*;
-/// #[unimock(unmock_with=[my_factorial(self, input)])]
+/// #[unimock(api=FactorialMock, unmock_with=[my_factorial(self, input)])]
 /// trait Factorial {
 ///     fn factorial(&self, input: u32) -> u32;
 /// }
@@ -437,8 +454,8 @@ use assemble::MockAssembler;
 /// # Arguments
 /// The unimock macro accepts a number of comma-separated key-value configuration parameters:
 ///
-/// * `#[unimock(mod=MyCustomMod)]`: Supply a custom name of the module which contains the mock interfaces.
-/// * `#[unimock(flatten=[A, B])`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
+/// * `#[unimock(api=#ident)]`: Export a mocking API as a module with the given name
+/// * `#[unimock(api=[A, B])`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
 ///     with the names of those structs passed with array-like syntax in the same order as the methods appear in the trait definition.
 /// * `#[unimock(unmock_with=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
 ///     The functions are assigned to the methods in the same order as the methods are listed in the trait.
@@ -543,7 +560,7 @@ impl Unimock {
     /// # Example
     /// ```rust
     /// # use unimock::*;
-    /// #[unimock]
+    /// #[unimock(api=TraitMock)]
     /// trait Trait {
     ///     fn foo(&self) -> &'static str;
     /// }
@@ -570,7 +587,7 @@ impl Unimock {
     /// # Example
     /// ```rust
     /// # use unimock::*;
-    /// #[unimock(unmock_with=[real_foo])]
+    /// #[unimock(api=TraitMock, unmock_with=[real_foo])]
     /// trait Trait {
     ///     fn foo(&self) -> &'static str;
     /// }
@@ -812,17 +829,17 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 ///
 /// ```rust
 /// use unimock::*;
-/// #[unimock]
+/// #[unimock(api=FooMock)]
 /// trait Foo {
 ///     fn foo(&self, i: i32) -> i32;
 /// }
 ///
-/// #[unimock]
+/// #[unimock(api=BarMock)]
 /// trait Bar {
 ///     fn bar(&self, i: i32) -> i32;
 /// }
 ///
-/// #[unimock]
+/// #[unimock(api=BazMock)]
 /// trait Baz {
 ///     fn baz(&self, i: i32) -> i32;
 /// }
