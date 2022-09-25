@@ -46,16 +46,14 @@
 //! In order to do that, we first need to refer to the method.
 //! In Rust, trait methods aren't reified entities, they are not types nor values, so they cannot be referred to in code.
 //! We need to tell unimock to expose a separate mocking API.
-//! This API will be created in form of a new module, which is named by passing `(api=my_mock_api)` to the unimock macro invocation.
-//! Each of the trait's original methods will get exported as mock config entrypoints through this module, e.g.
+//! This API will be created in form of a new module, [which is named](#selecting-a-name-for-the-mock-api) by passing e.g. `api=TraitMock` to the unimock macro invocation.
 //!
-//! `my_mock_api::foo`.
-//!
-//! `foo` is a type that will implement [`MockFn`](crate::MockFn), which is the entrypoint for creating a [Clause](crate::Clause):
+//! Each of the trait's original methods will get exported as mock config entrypoints through this module: For example `TraitMock::method`.
+//! `method` is a type that will implement [`MockFn`](crate::MockFn), which is the entrypoint for creating a [Clause](crate::Clause):
 //!
 //! ```rust
 //! # use unimock::*;
-//! #[unimock(api=my_mock_api)]
+//! #[unimock(api=FooMock)]
 //! trait Foo {
 //!     fn foo(&self) -> i32;
 //! }
@@ -64,7 +62,7 @@
 //!     foo.foo()
 //! }
 //!
-//! let clause = my_mock_api::foo.each_call(matching!()).returns(1337);
+//! let clause = FooMock::foo.each_call(matching!()).returns(1337);
 //!
 //! assert_eq!(1337, test_me(Unimock::new(clause)));
 //! ```
@@ -96,19 +94,6 @@
 //! * [some_call](crate::MockFn::some_call) is tailored for calls that will happen once. Return values have no [Clone] constraint.
 //! * [each_call](crate::MockFn::each_call) is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
 //! * [next_call](crate::MockFn::next_call) is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
-//!
-//! ### Selecting a name for the mock api
-//! Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
-//!     unimock tries to avoid autogenerating any new identifiers that might accidentally create undesired namespace collisions.
-//! The name of the mocking API therefore has to be user-supplied.
-//! Although the user is free to choose any name, unimock suggests following a naming convention.
-//!
-//! The entity being mocked is a trait, but the mocking API is a module.
-//! This introduces a conflict in naming convention style, since traits use CamelCase but modules use snake_case.
-//!
-//! _The suggested naming convention is using the name of the trait (e.g. `Trait`) postfixed with `Mock`: The resulting module should be called `TraitMock`._
-//!
-//! This will make it easier to discover the API, as it shares a common prefix with the name of the trait.
 //!
 //!
 //!
@@ -310,6 +295,21 @@
 //! * Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
 //! * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
 //!
+//! ### Selecting a name for the mock `api`
+//! Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
+//!     unimock tries to avoid autogenerating any new identifiers that might accidentally create undesired namespace collisions.
+//! To avoid user confusion through conjuring up new identifier names out of thin air, the name of the mocking API therefore has to be user-supplied.
+//! Although the user is free to choose any name, unimock suggests following a naming convention.
+//!
+//! The entity being mocked is a trait, but the mocking API is a module.
+//! This introduces a conflict in naming convention style, since traits use CamelCase but modules use snake_case.
+//!
+//! _The suggested naming convention is using the name of the trait (e.g. `Trait`) postfixed with `Mock`: The resulting module should be called `TraitMock`._
+//!
+//! This will make it easier to discover the API, as it shares a common prefix with the name of the trait.
+//!
+//!
+//!
 //! ## Project goals
 //! #### Use only safe Rust
 //! Unimock respects the memory safety and soundness provided by Rust.
@@ -455,7 +455,7 @@ use assemble::MockAssembler;
 /// The unimock macro accepts a number of comma-separated key-value configuration parameters:
 ///
 /// * `#[unimock(api=#ident)]`: Export a mocking API as a module with the given name
-/// * `#[unimock(api=[A, B])`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
+/// * `#[unimock(api=[method1, method2, ..])`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
 ///     with the names of those structs passed with array-like syntax in the same order as the methods appear in the trait definition.
 /// * `#[unimock(unmock_with=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
 ///     The functions are assigned to the methods in the same order as the methods are listed in the trait.
