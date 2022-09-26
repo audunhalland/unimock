@@ -39,7 +39,7 @@ impl MockAssembler {
 impl Assemble for MockAssembler {
     fn append_terminal(&mut self, terminal: TerminalClause) -> Result<(), String> {
         let pattern_match_mode = terminal.builder.pattern_match_mode;
-        let mock_name = terminal.dyn_mock_fn.name;
+        let dyn_mock_fn = terminal.dyn_mock_fn.clone();
         let mock_type_id = terminal.dyn_mock_fn.type_id;
 
         let call_pattern = self.new_call_pattern(terminal)?;
@@ -50,7 +50,7 @@ impl Assemble for MockAssembler {
                     return Err(
                         format!(
                             "A clause for {name} has already been registered as {old_mode:?}, but got re-registered as {new_mode:?}. They cannot be mixed for the same MockFn.",
-                            name = entry.get().name,
+                            name = entry.get().dyn_mock_fn.name,
                             old_mode = entry.get().pattern_match_mode,
                             new_mode = pattern_match_mode,
                         ),
@@ -61,9 +61,9 @@ impl Assemble for MockAssembler {
             }
             Entry::Vacant(entry) => {
                 entry.insert(FnMocker {
-                    call_patterns: vec![call_pattern],
-                    name: mock_name,
+                    dyn_mock_fn,
                     pattern_match_mode,
+                    call_patterns: vec![call_pattern],
                 });
             }
         }

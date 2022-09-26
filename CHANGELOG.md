@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New mock entry point `some_call` which does not require return value to implement `Clone`. `next_call` now also uses this API.
 - `api=[..]` attribute option for opting out of generating an encapsulating module.
+- Better mismatch debugging with improved `matching!` API under the hood.
 ### Fixed
 - Avoid spitting out `#[allow(non_camel_case_types)]` when the user supplied the MockFn type names.
 ### Removed

@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod doc;
 mod matching;
 mod unimock;
 

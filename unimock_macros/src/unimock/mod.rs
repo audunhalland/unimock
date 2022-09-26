@@ -1,7 +1,6 @@
 use quote::quote;
 
 mod attr;
-mod doc;
 mod method;
 mod output;
 mod trait_info;

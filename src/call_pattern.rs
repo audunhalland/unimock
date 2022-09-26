@@ -1,8 +1,10 @@
+use crate::debug;
 use crate::error::{MockError, MockResult};
 use crate::*;
 
 use std::any::Any;
 use std::borrow::Borrow;
+use std::sync::Mutex;
 
 #[derive(Clone, Copy)]
 pub(crate) struct PatIndex(pub usize);
@@ -13,7 +15,7 @@ impl std::fmt::Display for PatIndex {
     }
 }
 
-type AnyBox = Box<dyn Any + Send + Sync + 'static>;
+pub(crate) type AnyBox = Box<dyn Any + Send + Sync + 'static>;
 
 fn downcast_box<'b, T: 'static>(any_box: &'b AnyBox, name: &'static str) -> MockResult<&'b T> {
     any_box.downcast_ref().ok_or(MockError::Downcast { name })
@@ -31,9 +33,18 @@ impl CallPattern {
         &self,
         inputs: &<F as MockInputs<'_>>::Inputs,
     ) -> MockResult<bool> {
-        let input_matcher: &InputMatcher<F> = downcast_box(&self.input_matcher.0, F::NAME)?;
+        let func: &MatchingFn<F> =
+            downcast_box(self.input_matcher.get_dyn_matching_fn(F::NAME)?, F::NAME)?;
 
-        Ok((input_matcher.0)(inputs))
+        Ok((func.0)(inputs))
+    }
+
+    pub fn debug_location(&self, pat_index: PatIndex) -> debug::CallPatternLocation {
+        if let Some(debug) = self.input_matcher.pat_debug {
+            debug::CallPatternLocation::Debug(debug)
+        } else {
+            debug::CallPatternLocation::PatIndex(pat_index)
+        }
     }
 
     pub fn next_responder(&self) -> Option<&DynResponder> {
@@ -41,18 +52,39 @@ impl CallPattern {
     }
 }
 
-pub(crate) struct DynInputMatcher(AnyBox);
+pub(crate) struct DynInputMatcher {
+    pub(crate) func: Option<AnyBox>,
+    pub(crate) pat_debug: Option<debug::InputMatcherDebug>,
+}
 
-pub(crate) struct InputMatcher<F: MockFn>(
+impl DynInputMatcher {
+    pub fn from_matching_fn<F: MockFn>(matching_fn: &dyn Fn(&mut Matching<F>)) -> Self {
+        let mut builder = Matching::new();
+        matching_fn(&mut builder);
+
+        Self {
+            func: match builder.matching_fn {
+                Some(matching_fn) => Some(Box::new(matching_fn)),
+                None => None,
+            },
+            pat_debug: builder.pat_debug,
+        }
+    }
+
+    fn get_dyn_matching_fn(&self, name: &'static str) -> MockResult<&AnyBox> {
+        match &self.func {
+            Some(any_box) => Ok(any_box),
+            None => Err(MockError::NoMatcherFunction { name }),
+        }
+    }
+}
+
+pub(crate) struct MatchingFn<F: MockFn>(
     #[allow(clippy::type_complexity)]
     pub  Box<dyn (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync>,
 );
 
-impl<F: MockFn> InputMatcher<F> {
-    pub fn into_dyn(self) -> DynInputMatcher {
-        DynInputMatcher(Box::new(self))
-    }
-}
+impl<F: MockFn> MatchingFn<F> {}
 
 pub(crate) struct DynCallOrderResponder {
     pub response_index: usize,

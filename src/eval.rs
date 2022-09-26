@@ -1,16 +1,30 @@
 use crate::call_pattern::{CallPattern, DynResponder, PatIndex};
+use crate::debug;
 use crate::error;
 use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::Evaluation;
-use crate::{DynMockFn, SharedState};
+use crate::state::SharedState;
+use crate::DynMockFn;
 use crate::{FallbackMode, MockFn, MockInputs};
 
 use std::borrow::Borrow;
 
 enum Eval<'u> {
-    Responder(PatIndex, &'u DynResponder),
+    Responder(EvalResponder<'u>),
     Unmock,
+}
+
+struct EvalResponder<'u> {
+    fn_mocker: &'u FnMocker,
+    pat_index: PatIndex,
+    responder: &'u DynResponder,
+}
+
+impl<'u> EvalResponder<'u> {
+    fn debug_pattern(&self) -> debug::CallPatternDebug {
+        self.fn_mocker.debug_pattern(self.pat_index)
+    }
 }
 
 /// 'u = unimock instance
@@ -39,13 +53,13 @@ impl<'u> EvalCtx<'u> {
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
         match dyn_ctx.eval(&|pattern| pattern.match_inputs::<F>(&inputs))? {
-            Eval::Responder(pat_index, responder) => match responder {
+            Eval::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder::Value(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
                         Some(value) => Ok(Evaluation::Evaluated(*value)),
                         None => Err(MockError::CannotReturnValueMoreThanOnce {
                             fn_call: dyn_ctx.fn_call(),
-                            pat_index,
+                            pattern: eval_rsp.debug_pattern(),
                         }),
                     }
                 }
@@ -53,7 +67,7 @@ impl<'u> EvalCtx<'u> {
                     Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
                 }
                 DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
-                responder => Err(dyn_ctx.sized_error(pat_index, responder)),
+                _ => Err(dyn_ctx.sized_error(eval_rsp)),
             },
             Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
         }
@@ -67,7 +81,7 @@ impl<'u> EvalCtx<'u> {
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
         match dyn_ctx.eval(&|pattern| pattern.match_inputs::<F>(&inputs))? {
-            Eval::Responder(pat_index, responder) => match responder {
+            Eval::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder::Value(inner) => Ok(Evaluation::Evaluated(
                     inner.downcast::<F>()?.stored_value.borrow_stored(),
                 )),
@@ -81,7 +95,7 @@ impl<'u> EvalCtx<'u> {
                     Ok(Evaluation::Evaluated(borrow))
                 }
                 DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
-                responder => Err(dyn_ctx.unsized_self_borrowed_error(pat_index, responder)),
+                _ => Err(dyn_ctx.unsized_self_borrowed_error(eval_rsp)),
             },
             Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
         }
@@ -96,12 +110,12 @@ impl<'u> EvalCtx<'u> {
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
         match dyn_ctx.eval(&|pattern| pattern.match_inputs::<F>(&inputs))? {
-            Eval::Responder(pat_index, responder) => match responder {
+            Eval::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder::StaticRefClosure(inner) => {
                     Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
                 }
                 DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
-                responder => Err(dyn_ctx.unsized_static_borrow_error(pat_index, responder, lender)),
+                _ => Err(dyn_ctx.unsized_static_borrow_error(eval_rsp, lender)),
             },
             Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
         }
@@ -125,17 +139,17 @@ struct DynCtx<'u, 's> {
 
 impl<'u, 's> DynCtx<'u, 's> {
     #[inline(never)]
-    fn sized_error(&self, pat_index: PatIndex, responder: &DynResponder) -> MockError {
-        match responder {
+    fn sized_error(&self, eval_rsp: EvalResponder) -> MockError {
+        match eval_rsp.responder {
             DynResponder::StaticRefClosure(_) | DynResponder::Borrowable(_) => {
                 MockError::TypeMismatchExpectedOwnedInsteadOfBorrowed {
                     fn_call: self.fn_call(),
-                    pat_index,
+                    pattern: eval_rsp.debug_pattern(),
                 }
             }
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
                 fn_call: self.fn_call(),
-                pat_index,
+                pattern: eval_rsp.debug_pattern(),
                 msg: msg.clone(),
             },
             _ => panic!("Responder error not handled"),
@@ -143,20 +157,16 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 
     #[inline(never)]
-    fn unsized_self_borrowed_error(
-        &self,
-        pat_index: PatIndex,
-        responder: &DynResponder,
-    ) -> MockError {
-        match responder {
+    fn unsized_self_borrowed_error(&self, eval_rsp: EvalResponder) -> MockError {
+        match eval_rsp.responder {
             DynResponder::Closure(_) => MockError::CannotBorrowValueProducedByClosure {
                 fn_call: self.fn_call(),
-                pat_index,
+                pattern: eval_rsp.debug_pattern(),
                 lender: Lender::Unimock,
             },
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
                 fn_call: self.fn_call(),
-                pat_index,
+                pattern: eval_rsp.debug_pattern(),
                 msg: msg.clone(),
             },
             DynResponder::Unmock
@@ -167,31 +177,26 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 
     #[inline(never)]
-    fn unsized_static_borrow_error(
-        &self,
-        pat_index: PatIndex,
-        responder: &DynResponder,
-        lender: Lender,
-    ) -> MockError {
-        match responder {
+    fn unsized_static_borrow_error(&self, eval_rsp: EvalResponder, lender: Lender) -> MockError {
+        match eval_rsp.responder {
             DynResponder::Value(_) => MockError::CannotBorrowInvalidLifetime {
                 fn_call: self.fn_call(),
-                pat_index,
+                pattern: eval_rsp.debug_pattern(),
                 lender,
             },
             DynResponder::Closure(_) => MockError::CannotBorrowValueProducedByClosure {
                 fn_call: self.fn_call(),
-                pat_index,
+                pattern: eval_rsp.debug_pattern(),
                 lender,
             },
             DynResponder::Borrowable(_) => MockError::CannotBorrowInvalidLifetime {
                 fn_call: self.fn_call(),
-                pat_index,
+                pattern: eval_rsp.debug_pattern(),
                 lender,
             },
             DynResponder::Panic(msg) => MockError::ExplicitPanic {
                 fn_call: self.fn_call(),
-                pat_index,
+                pattern: eval_rsp.debug_pattern(),
                 msg: msg.clone(),
             },
             DynResponder::StaticRefClosure(_) | DynResponder::Unmock => panic!("not an error"),
@@ -217,10 +222,14 @@ impl<'u, 's> DynCtx<'u, 's> {
 
         match self.match_call_pattern(fn_mocker, match_inputs)? {
             Some((pat_index, pattern)) => match pattern.next_responder() {
-                Some(responder) => Ok(Eval::Responder(pat_index, responder)),
+                Some(responder) => Ok(Eval::Responder(EvalResponder {
+                    fn_mocker,
+                    pat_index,
+                    responder,
+                })),
                 None => Err(MockError::NoOutputAvailableForCallPattern {
                     fn_call: self.fn_call(),
-                    pat_index,
+                    pattern: fn_mocker.debug_pattern(pat_index),
                 }),
             },
             None => match self.shared_state.fallback_mode {
@@ -250,47 +259,33 @@ impl<'u, 's> DynCtx<'u, 's> {
                 .next()
                 .transpose(),
             PatternMatchMode::InOrder => {
-                let ordered_call_index = self
-                    .shared_state
-                    .next_ordered_call_index
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let ordered_call_index = self.shared_state.bump_ordered_call_index();
 
                 let (pat_index, pattern) = fn_mocker
-                    .call_patterns
-                    .iter()
-                    .enumerate()
-                    .find(|(_, pattern)| {
-                        pattern.ordered_call_index_range.start <= ordered_call_index
-                            && pattern.ordered_call_index_range.end > ordered_call_index
-                    })
+                    .find_call_pattern_for_call_order(ordered_call_index)
                     .ok_or_else(|| MockError::CallOrderNotMatchedForMockFn {
                         fn_call: self.fn_call(),
                         actual_call_order: error::CallOrder(ordered_call_index),
-                        expected_ranges: fn_mocker
-                            .call_patterns
-                            .iter()
-                            .map(|pattern| std::ops::Range {
-                                start: pattern.ordered_call_index_range.start + 1,
-                                end: pattern.ordered_call_index_range.end + 1,
-                            })
-                            .collect(),
+                        expected: self
+                            .shared_state
+                            .find_ordered_expected_call_pattern_debug(ordered_call_index),
                     })?;
 
                 if !match_inputs(pattern)? {
                     return Err(MockError::InputsNotMatchedInCallOrder {
                         fn_call: self.fn_call(),
                         actual_call_order: error::CallOrder(ordered_call_index),
-                        pat_index: PatIndex(pat_index),
+                        pattern: fn_mocker.debug_pattern(pat_index),
                     });
                 }
 
-                Ok(Some((PatIndex(pat_index), pattern)))
+                Ok(Some((pat_index, pattern)))
             }
         }
     }
 
-    fn fn_call(&self) -> error::FnCall {
-        error::FnCall {
+    fn fn_call(&self) -> debug::FnActualCall {
+        debug::FnActualCall {
             mock_fn: self.mock_fn.clone(),
             inputs_debug: self.debug_inputs(),
         }

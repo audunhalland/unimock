@@ -1,6 +1,11 @@
+use std::fmt::Write;
+
+use proc_macro2::{TokenStream, TokenTree};
+use quote::ToTokens;
+
 pub struct SkipReceiver(pub bool);
 
-trait SynDoc {
+pub(crate) trait SynDoc {
     fn doc(&self, out: &mut String);
 }
 
@@ -79,13 +84,127 @@ impl<'a, T: SynDoc> SynDoc for Trail<'a, T> {
     }
 }
 
+struct Sep<'a, T, P> {
+    punct: &'a syn::punctuated::Punctuated<T, P>,
+    padding: (Option<char>, Option<char>),
+}
+
+impl<'a, T, P> Sep<'a, T, P> {
+    /// Standard punctuation separator with whitespace inserted after each separator
+    fn ws(punct: &'a syn::punctuated::Punctuated<T, P>) -> Self {
+        Self {
+            punct,
+            padding: (None, Some(' ')),
+        }
+    }
+
+    /// Punctuation separator with whitespace before and after separating punctuation
+    fn ws2(punct: &'a syn::punctuated::Punctuated<T, P>) -> Self {
+        Self {
+            punct,
+            padding: (Some(' '), Some(' ')),
+        }
+    }
+}
+
+impl<'a, T: SynDoc, P: SynDoc> SynDoc for Sep<'a, T, P> {
+    fn doc(&self, out: &mut String) {
+        let len = self.punct.len();
+        for (index, pair) in self.punct.pairs().enumerate() {
+            match pair {
+                syn::punctuated::Pair::Punctuated(item, punct) => {
+                    if index + 1 == len {
+                        item.doc(out);
+                    } else {
+                        item.doc(out);
+                        if let Some(char) = self.padding.0 {
+                            out.push(char);
+                        }
+                        punct.doc(out);
+                        if let Some(char) = self.padding.1 {
+                            out.push(char);
+                        }
+                    }
+                }
+                syn::punctuated::Pair::End(item) => {
+                    item.doc(out);
+                }
+            }
+        }
+    }
+}
+
+struct TokenDoc<'s, T>(&'s T);
+
+impl<'s, T: ToTokens> SynDoc for TokenDoc<'s, T> {
+    fn doc(&self, out: &mut String) {
+        let mut stream = TokenStream::new();
+        self.0.to_tokens(&mut stream);
+        for token in stream {
+            match token {
+                TokenTree::Group(_) => {
+                    // This is hopefully not reachable code; output a debugging 'token':
+                    out.write_str("?group?").unwrap();
+                }
+                TokenTree::Ident(ident) => {
+                    out.write_str(ident.to_string().as_str()).unwrap();
+                }
+                TokenTree::Punct(punct) => {
+                    out.write_char(punct.as_char()).unwrap();
+                }
+                TokenTree::Literal(lit) => {
+                    let lit_string = format!("{lit}");
+                    out.write_str(lit_string.as_str()).unwrap();
+                }
+            }
+        }
+    }
+}
+
+mod basics {
+    use super::*;
+
+    impl SynDoc for syn::Ident {
+        fn doc(&self, out: &mut String) {
+            let string = format!("{}", self);
+            out.push_str(&string);
+        }
+    }
+
+    impl<T: SynDoc> SynDoc for Option<T> {
+        fn doc(&self, out: &mut String) {
+            if let Some(t) = self {
+                t.doc(out);
+            }
+        }
+    }
+}
+
 mod expr {
-    use super::SynDoc;
+    use super::*;
 
     impl SynDoc for syn::Expr {
         fn doc(&self, out: &mut String) {
-            // TODO: needed?
-            doc!(out, ["?"]);
+            match self {
+                syn::Expr::Array(array) => {
+                    doc!(out, [array.bracket_token, Sep::ws(&array.elems), "]"]);
+                }
+                syn::Expr::Assign(assign) => {
+                    doc!(out, [assign.left, TokenDoc(&assign.eq_token), assign.right]);
+                }
+                syn::Expr::AssignOp(assign) => {
+                    doc!(out, [assign.left, TokenDoc(&assign.op), assign.right]);
+                }
+                syn::Expr::Binary(bin) => {
+                    doc!(out, [bin.left, TokenDoc(&bin.op), bin.right]);
+                }
+                syn::Expr::Lit(lit) => {
+                    doc!(out, [TokenDoc(&lit.lit)]);
+                }
+                _ => {
+                    doc!(out, ["?expr?"]);
+                }
+            }
         }
     }
 }
@@ -110,40 +229,6 @@ mod item {
     }
 }
 
-mod pat {
-    use super::*;
-
-    impl SynDoc for syn::Pat {
-        fn doc(&self, out: &mut String) {
-            match self {
-                Self::Box(b) => {
-                    doc!(out, ["box", b.pat]);
-                }
-                Self::Ident(i) => {
-                    doc!(
-                        out,
-                        [Trail(&i.by_ref, " "), Trail(&i.mutability, " "), i.ident]
-                    );
-                    if let Some((at, subpat)) = &i.subpat {
-                        doc!(out, [" ", at, " ", subpat]);
-                    }
-                }
-                Self::Lit(l) => {
-                    doc!(out, [l.expr]);
-                }
-                // TODO: More patterns?
-                _ => {}
-            }
-        }
-    }
-
-    impl SynDoc for syn::PatType {
-        fn doc(&self, out: &mut String) {
-            doc!(out, [self.pat, self.colon_token, " ", self.ty]);
-        }
-    }
-}
-
 mod path {
     use super::*;
 
@@ -155,10 +240,13 @@ mod path {
                 match &last_segment.arguments {
                     syn::PathArguments::None => {}
                     syn::PathArguments::AngleBracketed(b) => {
-                        doc!(out, [b.colon2_token, b.lt_token, b.args, b.gt_token]);
+                        doc!(
+                            out,
+                            [b.colon2_token, b.lt_token, Sep::ws(&b.args), b.gt_token]
+                        );
                     }
                     syn::PathArguments::Parenthesized(p) => {
-                        doc!(out, [p.paren_token, p.inputs, ")", p.output]);
+                        doc!(out, [p.paren_token, Sep::ws(&p.inputs), ")", p.output]);
                     }
                 }
             }
@@ -178,7 +266,7 @@ mod path {
                     doc!(out, [b.ident, " ", b.eq_token, " ", b.ty]);
                 }
                 Self::Constraint(c) => {
-                    doc!(out, [c.ident, c.colon_token, " ", c.bounds]);
+                    doc!(out, [c.ident, c.colon_token, " ", Sep::ws(&c.bounds)]);
                 }
                 Self::Const(e) => {
                     doc!(out, [e]);
@@ -212,7 +300,7 @@ mod ty {
                             // Trail(&b.abi, " "),
                             b.fn_token,
                             b.paren_token,
-                            b.inputs,
+                            Sep::ws(&b.inputs),
                             ")",
                             // b.variadic,
                             b.output
@@ -260,10 +348,10 @@ mod ty {
                     doc!(out, ["[", s.elem, "]"]);
                 }
                 Self::TraitObject(t) => {
-                    doc!(out, [Trail(&t.dyn_token, " "), t.bounds]);
+                    doc!(out, [Trail(&t.dyn_token, " "), Sep::ws(&t.bounds)]);
                 }
                 Self::Tuple(t) => {
-                    doc!(out, ["(", t.elems, ")"]);
+                    doc!(out, ["(", Sep::ws(&t.elems), ")"]);
                 }
                 _ => {}
             }
@@ -289,12 +377,12 @@ mod ty {
 }
 
 mod generics {
-    use super::SynDoc;
+    use super::*;
 
     impl SynDoc for syn::Generics {
         fn doc(&self, out: &mut String) {
             if self.lt_token.is_some() {
-                doc!(out, ["<", self.params, ">"]);
+                doc!(out, ["<", Sep::ws(&self.params), ">"]);
             }
         }
     }
@@ -322,7 +410,7 @@ mod generics {
         fn doc(&self, out: &mut String) {
             doc!(out, [self.lifetime]);
             if let Some(colon_token) = &self.colon_token {
-                doc!(out, [colon_token, " ", self.bounds]);
+                doc!(out, [colon_token, " ", Sep::ws(&self.bounds)]);
             }
         }
     }
@@ -337,7 +425,7 @@ mod generics {
         fn doc(&self, out: &mut String) {
             doc!(out, [self.ident]);
             if let Some(colon_token) = &self.colon_token {
-                doc!(out, [colon_token, " ", self.bounds]);
+                doc!(out, [colon_token, " ", Sep::ws(&self.bounds)]);
             }
             if let Some(eq_token) = &self.eq_token {
                 doc!(out, [" ", eq_token, " ", self.default]);
@@ -376,46 +464,75 @@ mod generics {
 
     impl SynDoc for syn::BoundLifetimes {
         fn doc(&self, out: &mut String) {
-            doc!(out, [self.lt_token, self.for_token, self.lifetimes]);
+            doc!(
+                out,
+                [self.lt_token, self.for_token, Sep::ws(&self.lifetimes)]
+            );
         }
     }
 }
 
-mod basics {
+mod pat {
     use super::*;
 
-    impl SynDoc for syn::Ident {
+    impl SynDoc for syn::Pat {
         fn doc(&self, out: &mut String) {
-            let string = format!("{}", self);
-            out.push_str(&string);
-        }
-    }
-
-    impl<T: SynDoc, P: SynDoc> SynDoc for syn::punctuated::Punctuated<T, P> {
-        fn doc(&self, out: &mut String) {
-            let len = self.len();
-            for (index, pair) in self.pairs().enumerate() {
-                match pair {
-                    syn::punctuated::Pair::Punctuated(item, punct) => {
-                        if index + 1 == len {
-                            doc!(out, [item]);
-                        } else {
-                            doc!(out, [item, punct, " "]);
-                        }
+            match self {
+                Self::Box(b) => {
+                    doc!(out, ["box ", b.pat]);
+                }
+                Self::Ident(i) => {
+                    doc!(
+                        out,
+                        [Trail(&i.by_ref, " "), Trail(&i.mutability, " "), i.ident]
+                    );
+                    if let Some((at, subpat)) = &i.subpat {
+                        doc!(out, [" ", at, " ", subpat]);
                     }
-                    syn::punctuated::Pair::End(item) => {
-                        doc!(out, [item]);
+                }
+                Self::Lit(l) => {
+                    doc!(out, [l.expr]);
+                }
+                Self::Tuple(t) => {
+                    doc!(out, [t]);
+                }
+                Self::Wild(_) => {
+                    doc!(out, ["_"]);
+                }
+                Self::Or(or) => {
+                    doc!(out, [Sep::ws2(&or.cases)]);
+                }
+                Self::Path(path) => {
+                    doc!(out, [path.path]);
+                }
+                Self::TupleStruct(tup) => {
+                    doc!(out, [tup.path, tup.pat]);
+                }
+                Self::Range(range) => {
+                    range.lo.doc(out);
+                    match &range.limits {
+                        syn::RangeLimits::HalfOpen(_) => out.push_str(".."),
+                        syn::RangeLimits::Closed(_) => out.push_str("..="),
                     }
+                    range.hi.doc(out);
+                }
+                // TODO: More patterns?
+                _ => {
+                    doc!(out, ["?pat?"]);
                 }
             }
         }
     }
 
-    impl<T: SynDoc> SynDoc for Option<T> {
+    impl SynDoc for syn::PatType {
         fn doc(&self, out: &mut String) {
-            if let Some(t) = self {
-                t.doc(out);
-            }
+            doc!(out, [self.pat, self.colon_token, " ", self.ty]);
+        }
+    }
+
+    impl SynDoc for syn::PatTuple {
+        fn doc(&self, out: &mut String) {
+            doc!(out, ["(", Sep::ws(&self.elems), ")"]);
         }
     }
 }
@@ -455,6 +572,7 @@ mod token {
     doc_for_token!(Star, "*");
     doc_for_token!(Mut, "mut");
     doc_for_token!(And, "&");
+    doc_for_token!(Or, "|");
     doc_for_token!(Dyn, "dyn");
     doc_for_token!(Async, "async");
     doc_for_token!(SelfValue, "self");
@@ -465,40 +583,68 @@ mod token {
 
 #[cfg(test)]
 mod tests {
+    use super::SynDoc;
     use syn::parse_quote;
 
-    fn doc(sig: syn::Signature) -> String {
+    fn doc_sig(sig: syn::Signature) -> String {
         super::signature_documentation(&sig, super::SkipReceiver(true))
     }
 
+    fn doc_pat(pat: syn::Pat) -> String {
+        let mut string = String::new();
+        pat.doc(&mut string);
+        string
+    }
+
     #[test]
-    fn should_work() {
-        assert_eq!("foo()", doc(parse_quote! { fn foo() }));
-        assert_eq!("foo(a: T)", doc(parse_quote! { fn foo(a: T) }));
-        assert_eq!("foo(a: &T)", doc(parse_quote! { fn foo(a: &T) }));
-        assert_eq!("foo(a: &'a T)", doc(parse_quote! { fn foo(a: &'a T) }));
-        assert_eq!("foo(a: &T)", doc(parse_quote! { fn foo(a: &T, ) }));
-        assert_eq!("foo(a: &mut T)", doc(parse_quote! { fn foo(a: &mut T, ) }));
-        assert_eq!("foo() -> i32", doc(parse_quote! { fn foo() -> i32 }));
+    fn should_doc_signatures() {
+        assert_eq!("foo()", doc_sig(parse_quote! { fn foo() }));
+        assert_eq!("foo(a: T)", doc_sig(parse_quote! { fn foo(a: T) }));
+        assert_eq!("foo(a: &T)", doc_sig(parse_quote! { fn foo(a: &T) }));
+        assert_eq!("foo(a: &'a T)", doc_sig(parse_quote! { fn foo(a: &'a T) }));
+        assert_eq!("foo(a: &T)", doc_sig(parse_quote! { fn foo(a: &T, ) }));
+        assert_eq!(
+            "foo(a: &mut T)",
+            doc_sig(parse_quote! { fn foo(a: &mut T, ) })
+        );
+        assert_eq!("foo() -> i32", doc_sig(parse_quote! { fn foo() -> i32 }));
         assert_eq!(
             "foo() -> Result<(), ()>",
-            doc(parse_quote! { fn foo() -> Result<(), ()> })
+            doc_sig(parse_quote! { fn foo() -> Result<(), ()> })
         );
         assert_eq!(
             "foo() -> Result<(), ()>",
-            doc(parse_quote! { fn foo() -> foobar::Result<(), ()> })
+            doc_sig(parse_quote! { fn foo() -> foobar::Result<(), ()> })
         );
         assert_eq!(
             "foo() -> Result<(), ()>",
-            doc(parse_quote! { fn foo() -> foobar::Result<(), ()> })
+            doc_sig(parse_quote! { fn foo() -> foobar::Result<(), ()> })
         );
         assert_eq!(
             "foo() -> Result<i32, u32>",
-            doc(parse_quote! { fn foo() -> foobar::Result<i32, u32> })
+            doc_sig(parse_quote! { fn foo() -> foobar::Result<i32, u32> })
         );
         assert_eq!(
             "foo() -> &'static str",
-            doc(parse_quote! { fn foo() -> &'static str })
+            doc_sig(parse_quote! { fn foo() -> &'static str })
         );
+    }
+
+    #[test]
+    fn should_doc_pat_tuples() {
+        assert_eq!("()", doc_pat(parse_quote! { () }));
+        assert_eq!("_", doc_pat(parse_quote! { _ }));
+        assert_eq!("(1)", doc_pat(parse_quote! { (1) }));
+        assert_eq!("(\"1\")", doc_pat(parse_quote! { ("1") }));
+        assert_eq!("('1')", doc_pat(parse_quote! { ('1') }));
+        assert_eq!("(1u32)", doc_pat(parse_quote! { (1u32) }));
+        assert_eq!("(1, 2)", doc_pat(parse_quote! { (1, 2) }));
+        assert_eq!("(1 | 2)", doc_pat(parse_quote! { (1 | 2) }));
+        assert_eq!("(Newtype(1))", doc_pat(parse_quote! { (Newtype(1)) }));
+        assert_eq!("(Newtype(1))", doc_pat(parse_quote! { (path::Newtype(1)) }));
+        assert_eq!("(1..2)", doc_pat(parse_quote! { (1..2) }));
+        assert_eq!("(1..=2)", doc_pat(parse_quote! { (1..=2) }));
+        assert_eq!("(a @ (1, 2))", doc_pat(parse_quote! { (a @ (1, 2)) }));
+        assert_eq!("(?pat?)", doc_pat(parse_quote! { (some_macro!()) }));
     }
 }

@@ -90,13 +90,13 @@ where
     /// The new call pattern will be matched after any previously defined call patterns on the same [Each] instance.
     ///
     /// The method returns a [DefineMultipleResponses], which is used to define how unimock responds to the matched call.
-    pub fn call<'e, M>(&'e mut self, matching: M) -> DefineMultipleResponses<'e, F, InAnyOrder>
-    where
-        M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
-    {
+    pub fn call<'e>(
+        &'e mut self,
+        matching_fn: &dyn Fn(&mut Matching<F>),
+    ) -> DefineMultipleResponses<'e, F, InAnyOrder> {
         self.patterns.push(DynCallPatternBuilder::new(
             PatternMatchMode::InAnyOrder,
-            InputMatcher(Box::new(matching)).into_dyn(),
+            DynInputMatcher::from_matching_fn(matching_fn),
         ));
 
         DefineMultipleResponses {

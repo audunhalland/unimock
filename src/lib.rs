@@ -353,16 +353,19 @@ mod assemble;
 mod call_pattern;
 mod clause;
 mod counter;
+mod debug;
 mod error;
 mod eval;
 mod fn_mocker;
+mod state;
 
 use std::any::TypeId;
-use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use assemble::MockAssembler;
+use call_pattern::DynInputMatcher;
+use macro_api::Matching;
+
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
@@ -392,7 +395,7 @@ use assemble::MockAssembler;
 ///     sum(Unimock::new(())); // note: panics at runtime!
 ///
 ///     // Mock a single method (still panics, because all 3 must be mocked:):
-///     sum(Unimock::new(Trait1Mock::a.next_call(|_| true).returns(0)));
+///     sum(Unimock::new(Trait1Mock::a.next_call(matching!()).returns(0)));
 /// }
 /// ```
 ///
@@ -478,13 +481,19 @@ pub use unimock_macros::unimock;
 /// ```rust
 /// # use unimock::*;
 ///
+/// #[unimock(api=Mock)]
+/// trait Trait {
+///     fn one(&self, a: &str);
+///     fn three(&self, a: &str, b: &str, c: &str);
+/// }
+///
 /// fn one_str() {
-///     fn args(_: impl Fn(&(&str)) -> bool) {}
+///     fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::one>)) {}
 ///     args(matching!("a"));
 /// }
 ///
 /// fn three_strs() {
-///     fn args(_: impl Fn(&(&str, &str, &str)) -> bool) {}
+///     fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::three>)) {}
 ///     args(matching!("a", _, "c"));
 ///     args(matching! {("a", "b", "c") | ("d", "e", "f")});
 ///     args(matching! {("a", b, "c") if b.contains("foo")});
@@ -511,12 +520,22 @@ pub use unimock_macros::unimock;
 ///
 /// ```rust
 /// # use unimock::*;
-/// struct Newtype(String);
+/// pub struct Newtype(String);
 ///
-/// fn exotic_strings() {
-///     fn args(_: impl Fn(&(String, std::borrow::Cow<'static, str>, Newtype, i32)) -> bool) {}
-///     args(matching! {("a", _, "c", _) | (_, "b", _, 42)});
+/// #[unimock(api=Mock)]
+/// trait Trait {
+///     fn interesting_args(
+///         &self,
+///         a: String,
+///         b: std::borrow::Cow<'static, str>,
+///         c: Newtype,
+///         d: i32
+///     );
 /// }
+///
+/// fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::interesting_args>)) {}
+///
+/// args(matching! {("a", _, "c", _) | (_, "b", _, 42)});
 ///
 /// // Newtype works by implementing the following:
 /// impl std::convert::AsRef<str> for Newtype {
@@ -542,14 +561,7 @@ enum FallbackMode {
 /// the traits that it implements.
 pub struct Unimock {
     original_instance: bool,
-    shared_state: Arc<SharedState>,
-}
-
-struct SharedState {
-    fallback_mode: FallbackMode,
-    fn_mockers: HashMap<TypeId, fn_mocker::FnMocker>,
-    next_ordered_call_index: AtomicUsize,
-    panic_reasons: Mutex<Vec<error::MockError>>,
+    shared_state: Arc<state::SharedState>,
 }
 
 impl Unimock {
@@ -623,12 +635,7 @@ impl Unimock {
 
         Self {
             original_instance: true,
-            shared_state: Arc::new(SharedState {
-                fallback_mode,
-                fn_mockers,
-                next_ordered_call_index: AtomicUsize::new(0),
-                panic_reasons: Mutex::new(vec![]),
-            }),
+            shared_state: Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
         }
     }
 
@@ -636,17 +643,8 @@ impl Unimock {
     fn handle_error<T>(&self, result: Result<T, error::MockError>) -> T {
         match result {
             Ok(value) => value,
-            Err(error) => panic!("{}", self.prepare_panic(error)),
+            Err(error) => panic!("{}", self.shared_state.prepare_panic(error)),
         }
-    }
-
-    fn prepare_panic(&self, error: error::MockError) -> String {
-        let msg = format!("{}", error);
-
-        let mut panic_reasons = self.shared_state.panic_reasons.lock().unwrap();
-        panic_reasons.push(error);
-
-        msg
     }
 }
 
@@ -690,7 +688,7 @@ impl Drop for Unimock {
         {
             // if already panicked, it must be in another thread. Forward that panic to the original thread.
             // (if original is even still in the original thread.. But panic as close to the test "root" as possible)
-            let panic_reasons = self.shared_state.panic_reasons.lock().unwrap();
+            let panic_reasons = self.shared_state.clone_panic_reasons();
             panic_if_nonempty(&panic_reasons);
         }
 
@@ -774,12 +772,12 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     ///
     /// This call pattern variant supports return values that do not implement [Clone],
     /// therefore the call pattern can only be matched a single time.
-    fn some_call<M>(self, matching: M) -> build::DefineResponse<'static, Self, property::InAnyOrder>
-    where
-        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
-    {
+    fn some_call(
+        self,
+        matching_fn: &dyn Fn(&mut Matching<Self>),
+    ) -> build::DefineResponse<'static, Self, property::InAnyOrder> {
         build::DefineResponse::with_owned_builder(
-            call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
+            DynInputMatcher::from_matching_fn(matching_fn),
             fn_mocker::PatternMatchMode::InAnyOrder,
             property::InAnyOrder,
         )
@@ -791,15 +789,12 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// that needs to be specified on this MockFn.
     ///
     /// This variant is specialized for functions called multiple times.
-    fn each_call<M>(
+    fn each_call(
         self,
-        matching: M,
-    ) -> build::DefineMultipleResponses<'static, Self, property::InAnyOrder>
-    where
-        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
-    {
+        matching_fn: &dyn Fn(&mut Matching<Self>),
+    ) -> build::DefineMultipleResponses<'static, Self, property::InAnyOrder> {
         build::DefineMultipleResponses::with_owned_builder(
-            call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
+            DynInputMatcher::from_matching_fn(matching_fn),
             fn_mocker::PatternMatchMode::InAnyOrder,
             property::InAnyOrder,
         )
@@ -810,12 +805,12 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     /// This differens from [MockFn::stub], in that that a stub defines all call patterns without any
     /// specific required call order. This function takes only single input matcher, that MUST be
     /// matched in the order specified, relative to other next calls.
-    fn next_call<M>(self, matching: M) -> build::DefineResponse<'static, Self, property::InOrder>
-    where
-        M: (for<'i> Fn(&<Self as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
-    {
+    fn next_call(
+        self,
+        matching_fn: &dyn Fn(&mut Matching<Self>),
+    ) -> build::DefineResponse<'static, Self, property::InOrder> {
         build::DefineResponse::with_owned_builder(
-            call_pattern::InputMatcher(Box::new(matching)).into_dyn(),
+            DynInputMatcher::from_matching_fn(matching_fn),
             fn_mocker::PatternMatchMode::InOrder,
             property::InOrder,
         )

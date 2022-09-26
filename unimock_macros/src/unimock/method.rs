@@ -2,9 +2,10 @@ use quote::quote;
 use syn::spanned::Spanned;
 
 use super::attr::MockApi;
-use super::doc;
 use super::output;
 use super::Attr;
+
+use crate::doc;
 
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemMethod,

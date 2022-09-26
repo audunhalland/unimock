@@ -1,4 +1,5 @@
 use crate::call_pattern::PatIndex;
+use crate::debug;
 use crate::error::MockError;
 use crate::*;
 
@@ -15,24 +16,51 @@ pub(crate) enum PatternMatchMode {
 /// Holds all the state for mocking one particular MockFn
 /// during Unimock's lifetime
 pub(crate) struct FnMocker {
-    pub name: &'static str,
+    pub dyn_mock_fn: DynMockFn,
     pub pattern_match_mode: PatternMatchMode,
     pub call_patterns: Vec<call_pattern::CallPattern>,
 }
 
 impl FnMocker {
+    pub fn find_call_pattern_for_call_order(
+        &self,
+        ordered_call_index: usize,
+    ) -> Option<(PatIndex, &call_pattern::CallPattern)> {
+        self.call_patterns
+            .iter()
+            .enumerate()
+            .find(|(_, pattern)| {
+                pattern.ordered_call_index_range.start <= ordered_call_index
+                    && pattern.ordered_call_index_range.end > ordered_call_index
+            })
+            .map(|(index, call_pattern)| (PatIndex(index), call_pattern))
+    }
+
+    pub fn debug_pattern(&self, pat_index: PatIndex) -> debug::CallPatternDebug {
+        debug::CallPatternDebug {
+            mock_fn: self.dyn_mock_fn.clone(),
+            location: self.call_patterns[pat_index.0].debug_location(pat_index),
+        }
+    }
+
     pub fn verify(&self, errors: &mut Vec<MockError>) {
         let mut total_calls = 0;
 
         for (pat_index, pattern) in self.call_patterns.iter().enumerate() {
             total_calls += pattern
                 .call_counter
-                .verify(self.name, PatIndex(pat_index), errors)
+                .verify(
+                    self.dyn_mock_fn.name,
+                    || self.debug_pattern(PatIndex(pat_index)),
+                    errors,
+                )
                 .0;
         }
 
         if total_calls == 0 {
-            errors.push(error::MockError::MockNeverCalled { name: self.name });
+            errors.push(error::MockError::MockNeverCalled {
+                name: self.dyn_mock_fn.name,
+            });
         }
     }
 }

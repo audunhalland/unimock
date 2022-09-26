@@ -1,18 +1,6 @@
-use crate::call_pattern::PatIndex;
+use crate::debug;
 
 pub(crate) type MockResult<T> = Result<T, MockError>;
-
-#[derive(Clone)]
-pub(crate) struct FnCall {
-    pub mock_fn: crate::DynMockFn,
-    pub inputs_debug: String,
-}
-
-impl std::fmt::Display for FnCall {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.mock_fn.name, self.inputs_debug)
-    }
-}
 
 #[derive(Clone)]
 pub(crate) enum Lender {
@@ -40,51 +28,54 @@ pub(crate) enum MockError {
     NoMockImplementation {
         name: &'static str,
     },
+    NoMatcherFunction {
+        name: &'static str,
+    },
     NoMatchingCallPatterns {
-        fn_call: FnCall,
+        fn_call: debug::FnActualCall,
     },
     NoOutputAvailableForCallPattern {
-        fn_call: FnCall,
-        pat_index: PatIndex,
+        fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
     },
     MockNeverCalled {
         name: &'static str,
     },
     CallOrderNotMatchedForMockFn {
-        fn_call: FnCall,
+        fn_call: debug::FnActualCall,
         actual_call_order: CallOrder,
-        expected_ranges: Vec<std::ops::Range<usize>>,
+        expected: Option<debug::CallPatternDebug>,
     },
     InputsNotMatchedInCallOrder {
-        fn_call: FnCall,
+        fn_call: debug::FnActualCall,
         actual_call_order: CallOrder,
-        pat_index: PatIndex,
+        pattern: debug::CallPatternDebug,
     },
     TypeMismatchExpectedOwnedInsteadOfBorrowed {
-        fn_call: FnCall,
-        pat_index: PatIndex,
+        fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
     },
     CannotBorrowValueProducedByClosure {
-        fn_call: FnCall,
-        pat_index: PatIndex,
+        fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
         lender: Lender,
     },
     CannotBorrowInvalidLifetime {
-        fn_call: FnCall,
-        pat_index: PatIndex,
+        fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
         lender: Lender,
     },
     CannotReturnValueMoreThanOnce {
-        fn_call: FnCall,
-        pat_index: PatIndex,
+        fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
     },
     FailedVerification(String),
     CannotUnmock {
         name: &'static str,
     },
     ExplicitPanic {
-        fn_call: FnCall,
-        pat_index: PatIndex,
+        fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
         msg: String,
     },
 }
@@ -98,14 +89,17 @@ impl std::fmt::Display for MockError {
             Self::NoMockImplementation { name } => {
                 write!(f, "No mock implementation found for {name}.")
             }
+            Self::NoMatcherFunction { name } => {
+                write!(f, "No function supplied for matching inputs for one of the call patterns for {name}.")
+            }
             Self::NoMatchingCallPatterns { fn_call } => {
                 write!(f, "{fn_call}: No matching call patterns.")
             }
             Self::NoOutputAvailableForCallPattern {
                 fn_call,
-                pat_index,
+                pattern,
             } => {
-                write!(f, "{fn_call}: No output available for matching call pattern {pat_index}.")
+                write!(f, "{fn_call}: No output available for after matching {pattern}.")
             }
             Self::MockNeverCalled { name } => {
                 write!(f, "Mock for {name} was never called. Dead mocks should be removed.")
@@ -113,47 +107,50 @@ impl std::fmt::Display for MockError {
             Self::CallOrderNotMatchedForMockFn {
                 fn_call,
                 actual_call_order,
-                expected_ranges,
+                expected,
             } => {
-                let ranges_dbg = expected_ranges.iter().map(format_call_range).collect::<Vec<_>>().join(", ");
-                write!(f, "{fn_call}: Matched in wrong order. It supported the call order ranges [{ranges_dbg}], but actual call order was {actual_call_order}.")
+                if let Some(expected) = expected {
+                    write!(f, "{fn_call}: Method matched in wrong order. Expected a call matching {expected}.")
+                } else {
+                    write!(f, "{fn_call}: Ordered call ({actual_call_order}) out of range: There were no more ordered call patterns in line for selection.")
+                }
             }
             Self::InputsNotMatchedInCallOrder {
                 fn_call,
                 actual_call_order,
-                pat_index,
+                pattern,
             } => {
-                write!(f, "{fn_call}: Invoked in the correct order ({actual_call_order}), but inputs didn't match call pattern {pat_index}.")
+                write!(f, "{fn_call}: Method invoked in the correct order ({actual_call_order}), but inputs didn't match {pattern}.")
             }
             Self::TypeMismatchExpectedOwnedInsteadOfBorrowed {
                 fn_call,
-                pat_index,
-            } => write!(f, "{fn_call}: Type mismatch: Expected an owned return value, but found a borrow for call pattern {pat_index}. Try using Match::returns() or Match::answers()."),
+                pattern,
+            } => write!(f, "{fn_call}: Type mismatch: Expected an owned return value, but found a borrow for {pattern}. Try using Match::returns() or Match::answers()."),
             Self::CannotBorrowValueProducedByClosure {
                 fn_call,
-                pat_index,
+                pattern,
                 lender,
-            } => write!(f, "{fn_call}: Cannot borrow the value returned by the answering closure for pattern {pat_index}. {}", lender.suggest()),
+            } => write!(f, "{fn_call}: Cannot borrow the value returned by the answering closure in {pattern}. {}", lender.suggest()),
             Self::CannotBorrowInvalidLifetime {
                 fn_call,
-                pat_index,
+                pattern,
                 lender,
             } => match lender {
-                Lender::Unimock => write!(f, "{fn_call}: Cannot borrow output value from unimock for call pattern {pat_index}. {}", lender.suggest()),
-                Lender::Param =>write!(f, "{fn_call}: Cannot borrow output value from a parameter for call pattern {pat_index}. {}", lender.suggest()),
-                Lender::Static => write!(f, "{fn_call}: Cannot borrow output value statically for call pattern {pat_index}. {}", lender.suggest()),
+                Lender::Unimock => write!(f, "{fn_call}: Cannot borrow output value from unimock from {pattern}. {}", lender.suggest()),
+                Lender::Param =>write!(f, "{fn_call}: Cannot borrow output value from a parameter from {pattern}. {}", lender.suggest()),
+                Lender::Static => write!(f, "{fn_call}: Cannot borrow output value statically from {pattern}. {}", lender.suggest()),
             },
             Self::CannotReturnValueMoreThanOnce {
                 fn_call,
-                pat_index,
+                pattern,
             } => {
-                write!(f, "{fn_call}: Cannot return value more than once for call pattern {pat_index}, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response.")
+                write!(f, "{fn_call}: Cannot return value more than once from {pattern}, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response.")
             },
             Self::FailedVerification(message) => write!(f, "{message}"),
             Self::CannotUnmock { name } => {
                 write!(f, "{name} cannot be unmocked as there is no function available to call.")
             },
-            Self::ExplicitPanic { fn_call, pat_index, msg } => write!(f, "{fn_call}: Explicit panic for call pattern {pat_index}: {msg}")
+            Self::ExplicitPanic { fn_call, pattern, msg } => write!(f, "{fn_call}: Explicit panic from {pattern}: {msg}")
         }
     }
 }
@@ -164,13 +161,5 @@ pub struct CallOrder(pub usize);
 impl std::fmt::Display for CallOrder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0 + 1)
-    }
-}
-
-fn format_call_range(range: &std::ops::Range<usize>) -> String {
-    if range.end == range.start + 1 {
-        format!("{}", range.start)
-    } else {
-        format!("{:?}", range)
     }
 }

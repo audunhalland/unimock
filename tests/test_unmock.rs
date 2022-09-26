@@ -66,7 +66,7 @@ mod unmock_simple {
 
     #[test]
     #[should_panic(
-        expected = "Spyable::concat: Expected call pattern #0 to match at least 1 call, but it actually matched no calls."
+        expected = "Spyable::concat: Expected Spyable::concat(\"\", \"\") at tests/test_unmock.rs:73 to match at least 1 call, but it actually matched no calls."
     )]
     fn unmatched_pattern_still_panics() {
         Unimock::new(SpyableMock::concat.stub(|each| {
