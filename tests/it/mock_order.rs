@@ -65,10 +65,10 @@ fn calling_expired_pattern_should_fail() {
 
 #[test]
 #[should_panic(
-    expected = "T1::a(0): Method invoked in the correct order (1), but inputs didn't match T1::a(1 | 2) at tests/it/mock_order.rs:71."
+    expected = "T1::a(0): Method invoked in the correct order (1), but inputs didn't match T1::a(1 | 2) | (3 | 4) at tests/it/mock_order.rs:71."
 )]
 fn call_order_error_with_complex_pattern() {
-    let m = Unimock::new(T1Mock::a.next_call(matching!((1 | 2))).returns(0));
+    let m = Unimock::new(T1Mock::a.next_call(matching!((1 | 2) | (3 | 4))).returns(0));
     m.a(0);
 }
 

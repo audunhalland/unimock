@@ -4,37 +4,40 @@ use quote::quote;
 use syn::spanned::Spanned;
 
 pub struct MatchingInput {
-    patterns: Vec<syn::PatTuple>,
+    tuples: Vec<syn::PatTuple>,
     guard: Option<(syn::token::If, syn::Expr)>,
 }
 
 impl syn::parse::Parse for MatchingInput {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.peek(syn::token::Or) {
-            let _: syn::token::Or = input.parse()?;
-        }
-
-        let mut patterns = Vec::new();
+        let mut tuples = Vec::new();
         let mut guard = None;
 
-        if input.peek(syn::token::Paren) {
-            patterns.push(syn_pat_to_pattern(input.parse()?)?);
-            while input.peek(syn::token::Or) {
-                let _: syn::token::Or = input.parse()?;
-                patterns.push(syn_pat_to_pattern(input.parse()?)?);
+        if !input.is_empty() {
+            let first: syn::Pat = parse_pat_or_flat_or(input)?;
+
+            if input.peek(syn::token::Or) {
+                tuples.push(expect_pat_tuple(first)?);
+
+                while input.peek(syn::token::Or) {
+                    let _: syn::token::Or = input.parse()?;
+                    tuples.push(expect_pat_tuple(input.parse()?)?);
+                }
+            } else {
+                let mut elems = syn::punctuated::Punctuated::<syn::Pat, syn::token::Comma>::new();
+                elems.push(first);
+
+                while input.peek(syn::token::Comma) {
+                    elems.push_punct(input.parse()?);
+                    elems.push(parse_pat_or_flat_or(input)?);
+                }
+
+                tuples.push(syn::PatTuple {
+                    attrs: vec![],
+                    paren_token: syn::token::Paren::default(),
+                    elems,
+                });
             }
-        } else if !input.is_empty() {
-            let mut elems = syn::punctuated::Punctuated::<syn::Pat, syn::token::Comma>::new();
-            elems.push(parse_pat_potential_or(input)?);
-            while input.peek(syn::token::Comma) {
-                let _: syn::token::Comma = input.parse()?;
-                elems.push(parse_pat_potential_or(input)?);
-            }
-            patterns.push(syn::PatTuple {
-                attrs: vec![],
-                paren_token: syn::token::Paren(proc_macro2::Span::call_site()),
-                elems,
-            });
         }
 
         if input.peek(syn::token::If) {
@@ -44,13 +47,17 @@ impl syn::parse::Parse for MatchingInput {
             guard = Some((if_token, expr));
         }
 
-        Ok(Self { patterns, guard })
+        if !input.is_empty() {
+            return Err(syn::Error::new(input.span(), "Excessive tokens"));
+        }
+
+        Ok(MatchingInput { tuples, guard })
     }
 }
 
-fn parse_pat_potential_or(input: syn::parse::ParseStream) -> syn::Result<syn::Pat> {
+fn parse_pat_or_flat_or(input: syn::parse::ParseStream) -> syn::Result<syn::Pat> {
     let pat: syn::Pat = input.parse()?;
-    if input.peek(syn::token::Or) {
+    if input.peek(syn::token::Or) && !matches!(pat, syn::Pat::Tuple(_)) {
         let mut cases: syn::punctuated::Punctuated<syn::Pat, syn::token::Or> =
             syn::punctuated::Punctuated::new();
         cases.push(pat);
@@ -70,10 +77,10 @@ fn parse_pat_potential_or(input: syn::parse::ParseStream) -> syn::Result<syn::Pa
     }
 }
 
-fn syn_pat_to_pattern(pat: syn::Pat) -> syn::Result<syn::PatTuple> {
+fn expect_pat_tuple(pat: syn::Pat) -> syn::Result<syn::PatTuple> {
     match pat {
         syn::Pat::Tuple(pat_tuple) => Ok(pat_tuple),
-        _ => Err(syn::Error::new(pat.span(), "Unsupported pattern")),
+        _ => Err(syn::Error::new(pat.span(), "Expected tuple")),
     }
 }
 
@@ -89,7 +96,7 @@ enum ArgKind {
 }
 
 pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
-    if input.patterns.is_empty() {
+    if input.tuples.is_empty() {
         return quote! {
             &|_m| {
                 _m.func(|()| true);
@@ -98,18 +105,18 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
         };
     }
 
-    let args = analyze_args(&input.patterns);
+    let args = analyze_args(&input.tuples);
     let pattern_debug_lit_str = generate_pat_debug(&input);
     let tuple_pats = input
-        .patterns
+        .tuples
         .into_iter()
-        .map(|pattern| match pattern.elems.len() {
+        .map(|pat_tuple| match pat_tuple.elems.len() {
             1 => {
-                let unwrapped = pattern.elems.into_iter().next().unwrap();
+                let unwrapped = pat_tuple.elems.into_iter().next().unwrap();
                 quote! { #unwrapped }
             }
             _ => {
-                quote! { #pattern }
+                quote! { #pat_tuple }
             }
         });
     let guard = if let Some((if_token, expr)) = input.guard {
@@ -221,13 +228,13 @@ fn guess_arg_kind(index: usize, patterns: &[syn::PatTuple]) -> ArgKind {
 fn generate_pat_debug(input: &MatchingInput) -> syn::LitStr {
     let mut debug = String::new();
 
-    if input.patterns.is_empty() {
+    if input.tuples.is_empty() {
         debug.push_str("()");
     } else {
-        let len = input.patterns.len();
+        let len = input.tuples.len();
 
-        for (index, pattern) in input.patterns.iter().enumerate() {
-            pattern.doc(&mut debug);
+        for (index, pat_tuple) in input.tuples.iter().enumerate() {
+            pat_tuple.doc(&mut debug);
             if index < len - 1 {
                 debug.push_str(" | ");
             }
@@ -254,28 +261,39 @@ mod tests {
     #[test]
     fn test_parsing_by_doc_output() {
         assert_eq!("()", test_doc(parse_quote!()));
-        assert_eq!("()", test_doc(parse_quote!(())));
+        assert_eq!("(())", test_doc(parse_quote!(())));
 
         assert_eq!("(1)", test_doc(parse_quote!(1)));
-        assert_eq!("(1)", test_doc(parse_quote!((1))));
-        assert_eq!("((1))", test_doc(parse_quote!(((1,)))));
+        assert_eq!("((1))", test_doc(parse_quote!((1))));
+        assert_eq!("(((1)))", test_doc(parse_quote!(((1,)))));
 
         assert_eq!("(1, 2)", test_doc(parse_quote!(1, 2)));
-        assert_eq!("(1, 2)", test_doc(parse_quote!((1, 2))));
-        assert_eq!("((1, 2))", test_doc(parse_quote!(((1, 2)))));
+        assert_eq!("((1, 2))", test_doc(parse_quote!((1, 2))));
+        assert_eq!("(((1, 2)))", test_doc(parse_quote!(((1, 2)))));
 
         assert_eq!("(1 | 2)", test_doc(parse_quote!(1 | 2)));
-        assert_eq!("(1 | 2)", test_doc(parse_quote!((1 | 2))));
+        assert_eq!("((1 | 2))", test_doc(parse_quote!((1 | 2))));
         assert_eq!("(1 | 2) | (3)", test_doc(parse_quote!((1 | 2) | (3))));
         assert_eq!("(1) | (2)", test_doc(parse_quote!((1) | (2))));
-        assert_eq!("((1) | (2))", test_doc(parse_quote!(((1) | (2)))));
+        assert_eq!("(((1) | (2)))", test_doc(parse_quote!(((1) | (2)))));
         assert_eq!("(1 | 2, 3 | 4)", test_doc(parse_quote!(1 | 2, 3 | 4)));
+        assert_eq!("(1, 2 | 3)", test_doc(parse_quote!(1, 2 | 3)));
         assert_eq!(
             "(1 | 2, 3 | 4) | (4 | 5, 6 | 7)",
             test_doc(parse_quote!((1 | 2, 3 | 4) | (4 | 5, 6 | 7)))
         );
 
         assert_eq!("(1) if {guard}", test_doc(parse_quote!(1 if expr())));
-        assert_eq!("(1) if {guard}", test_doc(parse_quote!((1) if expr())));
+        assert_eq!("((1)) if {guard}", test_doc(parse_quote!((1) if expr())));
+        assert_eq!(
+            "(1) | (2) if {guard}",
+            test_doc(parse_quote!((1) | (2) if expr()))
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected tuple")]
+    fn syntax_error1() {
+        test_doc(parse_quote!((1) | 2));
     }
 }

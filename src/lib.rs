@@ -476,6 +476,8 @@ pub use unimock_macros::unimock;
 /// 1. Simple form, e.g. `matching!(1, 2)`: A single tuple pattern to match the entire input tuple.
 /// 2. Disjunctive form, e.g. `matching!((1, 2) | (3, 4) | (5, 6))`: Each operand to the `|` sigil is a standalone tuple pattern, with the behaviour that the complete pattern is matching if at least one of the standalone tuple patterns are matching.
 ///
+/// `if` guards are also supported.
+///
 /// # Example
 ///
 /// ```rust
