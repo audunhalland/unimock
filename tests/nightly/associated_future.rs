@@ -1,6 +1,3 @@
-#![cfg(feature = "nightly-tests")]
-#![feature(type_alias_impl_trait)]
-
 use unimock::*;
 
 mod without_unmock {
