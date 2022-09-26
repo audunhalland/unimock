@@ -129,3 +129,21 @@ fn should_complain_when_returning_unquantified_value_more_then_once() {
     assert_eq!(42, unimock.foo(1));
     unimock.foo(2);
 }
+
+#[test]
+#[should_panic(
+    expected = "Foo::foo: Expected Foo::foo(2) at tests/test_errors.rs:145 to match exactly 1 call, but it actually matched no calls."
+)]
+fn should_require_both_calls_2_some_call() {
+    #[unimock(api=FooMock)]
+    trait Foo {
+        fn foo(&self, arg: i32) -> i32;
+    }
+
+    let unimock = Unimock::new((
+        FooMock::foo.some_call(matching!(1)).returns(42),
+        FooMock::foo.some_call(matching!(2)).returns(1337),
+    ));
+
+    assert_eq!(42, unimock.foo(1));
+}
