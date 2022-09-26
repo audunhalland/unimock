@@ -23,7 +23,7 @@
 //! 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
 //! 3. A mock instantiation by calling [`Unimock::new(())`](crate::Unimock::new), which crates a [`Unimock`](crate::Unimock) value which is passed into `takes_foo`.
 //!
-//! The [new](crate::Unimock::new) function takes an argument called `setup` (implementing [Clause](crate::Clause)), in this case the unit value `()`.
+//! The [`new`](crate::Unimock::new) function takes an argument called `setup` (implementing [`Clause`](crate::Clause)), in this case the unit value `()`.
 //! The setup argument is _what behaviour is being mocked_, in this case nothing at all.
 //! `Foo` contains no methods, so there is no behaviour to mock.
 //!
@@ -49,7 +49,7 @@
 //! This API will be created in form of a new module, [which is named](#selecting-a-name-for-the-mock-api) by passing e.g. `api=TraitMock` to the unimock macro invocation.
 //!
 //! Each of the trait's original methods will get exported as mock config entrypoints through this module: For example `TraitMock::method`.
-//! `method` is a type that will implement [`MockFn`](crate::MockFn), which is the entrypoint for creating a [Clause](crate::Clause):
+//! `method` is a type that will implement [`MockFn`](crate::MockFn), which is the entrypoint for creating a [`Clause`](crate::Clause):
 //!
 //! ```rust
 //! # use unimock::*;
@@ -91,9 +91,9 @@
 //!
 //! There are different constraints acting on return values based on how the clause gets initialized:
 //!
-//! * [some_call](crate::MockFn::some_call) is tailored for calls that will happen once. Return values have no [Clone] constraint.
-//! * [each_call](crate::MockFn::each_call) is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
-//! * [next_call](crate::MockFn::next_call) is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
+//! * [`some_call`](crate::MockFn::some_call) is tailored for calls that will happen once. Return values have no [Clone] constraint.
+//! * [`each_call`](crate::MockFn::each_call) is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
+//! * [`next_call`](crate::MockFn::next_call) is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
 //!
 //!
 //!
@@ -125,7 +125,7 @@
 //!                 .some_call(matching!(_))
 //!                 .answers(|arg| arg * 3),
 //!             BarMock::bar
-//!                 .some_call(matching! {(arg) if *arg > 20})
+//!                 .some_call(matching!((arg) if *arg > 20))
 //!                 .answers(|arg| arg * 2),
 //!         )),
 //!         7
@@ -143,7 +143,7 @@
 //!                 each.call(matching!(_)).answers(|arg| arg * 3);
 //!             }),
 //!             BarMock::bar.stub(|each| {
-//!                 each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
+//!                 each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
 //!             }),
 //!         )),
 //!         7
@@ -162,7 +162,7 @@
 //!
 //! One verification is always enabled in unimock:
 //!
-//! _Each [MockFn](crate::MockFn) mentioned in some clause must be interacted with at least once._
+//! _Each [`MockFn`](crate::MockFn) mentioned in some setup clause must be interacted with at least once._
 //!
 //! If this requirement is not met, Unimock will panic inside its Drop implementation.
 //! The reason is to help avoiding "bit rot" accumulating over time inside test code.
@@ -274,9 +274,9 @@
 //! Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 //! For that to work, unimock needs to know how to call the "real" implementation of traits.
 //!
-//! See the documentation of [new_partial](crate::Unimock::new_partial) to see how this works.
+//! See the documentation of [`new_partial`](crate::Unimock::new_partial) to see how this works.
 //!
-//! Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
+//! Although this can be implemented with unimock directly, it works best with a higher-level macro like [`entrait`](https://docs.rs/entrait).
 //!
 //! ### Misc
 //!
@@ -445,7 +445,7 @@ use macro_api::Matching;
 ///     // well, not in the test, at least!
 ///     Unimock::new(
 ///         FactorialMock::factorial.stub(|each| {
-///             each.call(matching! {(input) if *input <= 1}).returns(1_u32); // unimock controls the API call
+///             each.call(matching!((input) if *input <= 1)).returns(1_u32); // unimock controls the API call
 ///             each.call(matching!(_)).unmocked();
 ///         })
 ///     )
@@ -468,13 +468,13 @@ pub use unimock_macros::unimock;
 
 ///
 /// Macro to ease _call pattern_ matching for function arguments.
-/// This macro produces a closure expression suitable for passing to [build::Each::call].
+/// The macro produces a closure reference expression suitable for passing to [`some_call`](MockFn::some_call), etc.
 ///
-/// Takes inspiration from [std::matches] and works similarly, except that the value to match can be removed as a macro argument, since it is instead received as the closure argument.
+/// Its syntax takes inspiration from [std::matches] and works similarly, except that the value to match can be removed as a macro argument, since it is instead received as the closure argument.
 ///
-/// Unimock uses tuples to represent multiple arguments. A single argument is not a tuple.
-/// To avoid the extra set of parentheses for simple multi-argument matchers, there is a special syntax that accepts several top-level patterns:
-/// `matching!("a", "b")` will expand to `matching! {("a", "b")}`.
+/// Two main forms of syntaxes are supported:
+/// 1. Simple form, e.g. `matching!(1, 2)`: A single tuple pattern to match the entire input tuple.
+/// 2. Disjunctive form, e.g. `matching!((1, 2) | (3, 4) | (5, 6))`: Each operand to the `|` sigil is a standalone tuple pattern, with the behaviour that the complete pattern is matching if at least one of the standalone tuple patterns are matching.
 ///
 /// # Example
 ///
@@ -495,8 +495,8 @@ pub use unimock_macros::unimock;
 /// fn three_strs() {
 ///     fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::three>)) {}
 ///     args(matching!("a", _, "c"));
-///     args(matching! {("a", "b", "c") | ("d", "e", "f")});
-///     args(matching! {("a", b, "c") if b.contains("foo")});
+///     args(matching!(("a", "b", "c") | ("d", "e", "f")));
+///     args(matching!(("a", b, "c") if b.contains("foo")));
 /// }
 /// ```
 ///
