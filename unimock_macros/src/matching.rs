@@ -234,7 +234,7 @@ fn generate_pat_debug(input: &MatchingInput) -> syn::LitStr {
         }
     }
 
-    if let Some(_) = &input.guard {
+    if input.guard.is_some() {
         debug.push_str(" if {guard}");
     }
 

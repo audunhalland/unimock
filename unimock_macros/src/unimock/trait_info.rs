@@ -19,7 +19,7 @@ impl<'t> TraitInfo<'t> {
             .any(|param| matches!(param, syn::GenericParam::Type(_)));
         let generic_params = &generics.params;
 
-        let methods = method::extract_methods(&item_trait, is_type_generic, attr)?;
+        let methods = method::extract_methods(item_trait, is_type_generic, attr)?;
 
         let contains_async = methods.iter().filter_map(Option::as_ref).any(|method| {
             if method.method.sig.asyncness.is_some() {

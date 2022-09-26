@@ -44,7 +44,7 @@ impl<'p> BuilderWrapper<'p> {
 
     fn inner(&self) -> &DynCallPatternBuilder {
         match self {
-            Self::Borrowed(builder) => *builder,
+            Self::Borrowed(builder) => builder,
             Self::Owned(builder) => builder,
             Self::Stolen => panic!("builder stolen"),
         }
@@ -52,7 +52,7 @@ impl<'p> BuilderWrapper<'p> {
 
     fn inner_mut(&mut self) -> &mut DynCallPatternBuilder {
         match self {
-            Self::Borrowed(builder) => *builder,
+            Self::Borrowed(builder) => builder,
             Self::Owned(builder) => builder,
             Self::Stolen => panic!("builder stolen"),
         }
@@ -120,7 +120,7 @@ where
 {
     fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
         if self.patterns.is_empty() {
-            return Err(format!("Stub contained no call patterns"));
+            return Err("Stub contained no call patterns".to_string());
         }
 
         for builder in self.patterns.into_iter() {
@@ -499,12 +499,10 @@ where
     O: Ordering,
 {
     fn assemble(mut self, assembler: &mut dyn Assemble) -> Result<(), String> {
-        match self.builder.inner().pattern_match_mode {
-            PatternMatchMode::InOrder => {
-                self.builder.quantify(1, counter::Exactness::Exact);
-            }
-            _ => {}
-        };
+        if self.builder.inner().pattern_match_mode == PatternMatchMode::InOrder {
+            self.builder.quantify(1, counter::Exactness::Exact);
+        }
+
         match self.builder {
             BuilderWrapper::Owned(builder) => assembler.append_terminal(TerminalClause {
                 dyn_mock_fn: DynMockFn::new::<F>(),

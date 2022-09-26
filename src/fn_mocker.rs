@@ -37,10 +37,10 @@ impl FnMocker {
     }
 
     pub fn debug_pattern(&self, pat_index: PatIndex) -> debug::CallPatternDebug {
-        debug::CallPatternDebug {
-            mock_fn: self.dyn_mock_fn.clone(),
-            location: self.call_patterns[pat_index.0].debug_location(pat_index),
-        }
+        debug::CallPatternDebug::new(
+            self.dyn_mock_fn.clone(),
+            self.call_patterns[pat_index.0].debug_location(pat_index),
+        )
     }
 
     pub fn verify(&self, errors: &mut Vec<MockError>) {
