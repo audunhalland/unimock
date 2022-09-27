@@ -77,6 +77,6 @@ fn call_order_error_with_complex_pattern() {
     expected = "T1::a(0): Method invoked in the correct order (1), but inputs didn't match T1::a(x) if {guard} at tests/it/mock_order.rs:80."
 )]
 fn call_order_error_with_guard_pattern() {
-    let m = Unimock::new(T1Mock::a.next_call(matching!(x if x * 2 == 7)).returns(0));
+    let m = Unimock::new(T1Mock::a.next_call(matching!((x) if x * 2 == 7)).returns(0));
     m.a(0);
 }

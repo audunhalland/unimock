@@ -749,7 +749,7 @@ mod slice_matching {
         .two_vec_of_i32(vec![1, 2], vec![3, 4]);
         Unimock::new(
             Mock::vec_of_string
-                .next_call(matching!([a, b] if a == "1" && b == "2"))
+                .next_call(matching!(([a, b]) if a == "1" && b == "2"))
                 .returns(()),
         )
         .vec_of_string(vec!["1".to_string(), "2".to_string()]);
