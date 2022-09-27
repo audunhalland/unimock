@@ -1,10 +1,13 @@
-use crate::assemble::Assemble;
 use crate::build::DynCallPatternBuilder;
 use crate::*;
 
 /// Supertrait of Clause that makes that trait sealed
-pub trait SealedCompositeClause: Sized {
-    fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String>;
+pub trait ClauseSealed: Sized {
+    fn deconstruct(self, sink: &mut dyn TerminalSink) -> Result<(), String>;
+}
+
+pub trait TerminalSink {
+    fn put_terminal(&mut self, terminal: TerminalClause) -> Result<(), String>;
 }
 
 /// Public yet hidden terminal clause
@@ -14,17 +17,17 @@ pub struct TerminalClause {
     pub(crate) builder: DynCallPatternBuilder,
 }
 
-impl SealedCompositeClause for () {
-    fn assemble(self, _: &mut dyn Assemble) -> Result<(), String> {
+impl ClauseSealed for () {
+    fn deconstruct(self, _: &mut dyn TerminalSink) -> Result<(), String> {
         Ok(())
     }
 }
 
 macro_rules! tuple_nonterminal_impl {
     ([$($t:ident),+], [$($index:tt),+]) => {
-        impl<$($t: SealedCompositeClause),+> SealedCompositeClause for ($($t,)+) {
-            fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
-                $(self.$index.assemble(assembler)?;)+
+        impl<$($t: ClauseSealed),+> ClauseSealed for ($($t,)+) {
+            fn deconstruct(self, sink: &mut dyn TerminalSink) -> Result<(), String> {
+                $(self.$index.deconstruct(sink)?;)+
                 Ok(())
             }
         }

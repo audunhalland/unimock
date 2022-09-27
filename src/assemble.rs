@@ -1,4 +1,5 @@
 use crate::call_pattern::CallPattern;
+use crate::clause;
 use crate::clause::TerminalClause;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::Clause;
@@ -6,10 +7,6 @@ use crate::Clause;
 use std::any::TypeId;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-
-pub trait Assemble {
-    fn append_terminal(&mut self, terminal: TerminalClause) -> Result<(), String>;
-}
 
 pub(crate) struct MockAssembler {
     fn_mockers: HashMap<TypeId, FnMocker>,
@@ -21,7 +18,7 @@ impl MockAssembler {
     #[track_caller]
     pub fn try_from_clause(clause: impl Clause) -> Result<Self, String> {
         let mut assembler = Self::new();
-        clause.assemble(&mut assembler).map(|_| assembler)
+        clause.deconstruct(&mut assembler).map(|_| assembler)
     }
 
     fn new() -> Self {
@@ -36,8 +33,8 @@ impl MockAssembler {
     }
 }
 
-impl Assemble for MockAssembler {
-    fn append_terminal(&mut self, terminal: TerminalClause) -> Result<(), String> {
+impl clause::TerminalSink for MockAssembler {
+    fn put_terminal(&mut self, terminal: TerminalClause) -> Result<(), String> {
         let pattern_match_mode = terminal.builder.pattern_match_mode;
         let dyn_mock_fn = terminal.dyn_mock_fn.clone();
         let mock_type_id = terminal.dyn_mock_fn.type_id;

@@ -857,9 +857,9 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
 /// assert_eq!(6, mocked.foo(0) + mocked.bar(0) + mocked.baz(0));
 /// ```
 #[must_use]
-pub trait Clause: clause::SealedCompositeClause {}
+pub trait Clause: clause::ClauseSealed {}
 
-impl<T: clause::SealedCompositeClause> Clause for T {}
+impl<T: clause::ClauseSealed> Clause for T {}
 
 #[derive(Clone)]
 pub(crate) struct DynMockFn {

@@ -1,7 +1,5 @@
-use crate::assemble::Assemble;
 use crate::call_pattern::*;
-use crate::clause::SealedCompositeClause;
-use crate::clause::TerminalClause;
+use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
 use crate::property::*;
 use crate::*;
@@ -73,6 +71,13 @@ impl<'p> BuilderWrapper<'p> {
         builder.count_expectation.add_to_minimum(times, exactness);
         builder.current_response_index += times;
     }
+
+    fn into_owned(self) -> DynCallPatternBuilder {
+        match self {
+            Self::Owned(owned) => owned,
+            _ => panic!("Tried to turn a non-owned pattern builder into owned"),
+        }
+    }
 }
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
@@ -114,17 +119,17 @@ where
     }
 }
 
-impl<F> SealedCompositeClause for Each<F>
+impl<F> ClauseSealed for Each<F>
 where
     F: MockFn + 'static,
 {
-    fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
+    fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
         if self.patterns.is_empty() {
             return Err("Stub contained no call patterns".to_string());
         }
 
         for builder in self.patterns.into_iter() {
-            assembler.append_terminal(TerminalClause {
+            sink.put_terminal(TerminalClause {
                 dyn_mock_fn: DynMockFn::new::<F>(),
                 builder,
             })?;
@@ -415,14 +420,14 @@ where
     }
 }
 
-impl<'p, F, O> SealedCompositeClause for QuantifyReturnValue<'p, F, O>
+impl<'p, F, O> ClauseSealed for QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
     F::Output: Sized + Send + Sync,
     O: Copy + Ordering,
 {
-    fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
-        self.once().assemble(assembler)
+    fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
+        self.once().deconstruct(sink)
     }
 }
 
@@ -493,23 +498,20 @@ where
     }
 }
 
-impl<'p, F, O> SealedCompositeClause for Quantify<'p, F, O>
+impl<'p, F, O> ClauseSealed for Quantify<'p, F, O>
 where
     F: MockFn + 'static,
     O: Ordering,
 {
-    fn assemble(mut self, assembler: &mut dyn Assemble) -> Result<(), String> {
+    fn deconstruct(mut self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
         if self.builder.inner().pattern_match_mode == PatternMatchMode::InOrder {
             self.builder.quantify(1, counter::Exactness::Exact);
         }
 
-        match self.builder {
-            BuilderWrapper::Owned(builder) => assembler.append_terminal(TerminalClause {
-                dyn_mock_fn: DynMockFn::new::<F>(),
-                builder,
-            }),
-            _ => panic!("Cannot expect a next call among group of call patterns"),
-        }
+        sink.put_terminal(TerminalClause {
+            dyn_mock_fn: DynMockFn::new::<F>(),
+            builder: self.builder.into_owned(),
+        })
     }
 }
 
@@ -550,19 +552,16 @@ where
     }
 }
 
-impl<'p, F, O, R> SealedCompositeClause for QuantifiedResponse<'p, F, O, R>
+impl<'p, F, O, R> ClauseSealed for QuantifiedResponse<'p, F, O, R>
 where
     F: MockFn + 'static,
     O: Ordering,
     R: Repetition,
 {
-    fn assemble(self, assembler: &mut dyn Assemble) -> Result<(), String> {
-        match self.builder {
-            BuilderWrapper::Owned(builder) => assembler.append_terminal(TerminalClause {
-                dyn_mock_fn: DynMockFn::new::<F>(),
-                builder,
-            }),
-            _ => panic!(),
-        }
+    fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
+        sink.put_terminal(TerminalClause {
+            dyn_mock_fn: DynMockFn::new::<F>(),
+            builder: self.builder.into_owned(),
+        })
     }
 }
