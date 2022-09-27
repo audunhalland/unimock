@@ -24,15 +24,15 @@ trait Foo {}
 
 fn takes_foo(foo: impl Foo) {}
 
-takes_foo(mock(()));
+takes_foo(Unimock::new(()));
 ```
 
 1. `trait Foo` is declared with the `#[unimock]` attribute which makes its behaviour mockable.
 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-3. A mock instantiation by calling `mock(())`, which returns a `Unimock` value which is passed into `takes_foo`.
+3. A mock instantiation by calling `Unimock::new(())`, which crates a `Unimock` value which is passed into `takes_foo`.
 
-The mock function takes an argument of type `impl Clause`, in this case the unit value `()`.
-The argument is _what behaviour are we mocking_, in this case nothing at all.
+The `new` function takes an argument called `setup` (implementing `Clause`), in this case the unit value `()`.
+The setup argument is _what behaviour is being mocked_, in this case nothing at all.
 `Foo` contains no methods, so there is no behaviour to mock.
 
 ## Methods and behaviour mocking
@@ -49,17 +49,17 @@ trait Foo {
 }
 ```
 
-we would like to tell unimock what `FooMock::foo`'s behaviour will be, i.e. what it will return.
+we would like to tell unimock what `Foo::foo`'s behaviour will be, i.e. what it will return.
 In order to do that, we first need to refer to the method.
 In Rust, trait methods aren't reified entities, they are not types nor values, so they cannot be referred to in code.
-Therefore, the unimock macro creates a surrogate type to represent it. By default, this type will be called
+We need to tell unimock to expose a separate mocking API.
+This API will be created in form of a new module, [which is named](#selecting-a-name-for-the-mock-api) by passing e.g. `api=TraitMock` to the unimock macro invocation.
 
-`FooMock::foo`.
-
-This type will implement `MockFn`, which is the entrypoint for creating a Clause:
+Each of the trait's original methods will get exported as mock config entrypoints through this module: For example `TraitMock::method`.
+`method` is a type that will implement `MockFn`, which is the entrypoint for creating a `Clause`:
 
 ```rust
-#[unimock]
+#[unimock(api=FooMock)]
 trait Foo {
     fn foo(&self) -> i32;
 }
@@ -68,16 +68,16 @@ fn test_me(foo: impl Foo) -> i32 {
     foo.foo()
 }
 
-let clause = FooMock::foo.some_call(matching!()).returns(1337);
+let clause = FooMock::foo.each_call(matching!()).returns(1337);
 
-assert_eq!(1337, test_me(mock(clause)));
+assert_eq!(1337, test_me(Unimock::new(clause)));
 ```
 
 Clause construction is a type-state machine that in this example goes through two steps:
 
-1. `FooMock::foo.some_call(matching!())`: Define a _call pattern_.
+1. `my_mock_api::foo.each_call(matching!())`: Define a _call pattern_.
    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
-2. `.returs(1337)`: Each matching call will return the value `1337`.
+2. `.returns(1337)`: Each matching call will return the value `1337`.
    In this example there is only one clause.
 
 ### Call patterns (matching inputs)
@@ -95,30 +95,25 @@ Inputs being matched is a condition that needs to be fulfilled in order for the 
 Specifying outputs can be done in several ways. The simplest one is `returns(some_value)`.
 Different ways of specifying outputs are found in `build::DefineResponse`.
 
-There are different constraints acting on return values based on how the mock is initialized.
-* some_call is tailored for calls that will happen once. Return values have no [Clone] constraint.
-* each_call is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
-* next_call is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
+There are different constraints acting on return values based on how the clause gets initialized:
 
-## Combining clauses
-`mock()` accepts as argument anything that implements [Clause], which includes long tuples, so that you can specify more than one kind of behaviour!
-A tuple has a specific order of elements, and sometimes the order of sub-clauses matters too. It will depend on the type of clause.
+* `some_call` is tailored for calls that will happen once. Return values have no [Clone] constraint.
+* `each_call` is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
+* `next_call` is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
 
-Other mocking libraries often have distinctions between several kinds of "test doubles". Terminology varies. Unimock uses this terminology:
 
-* _Mock_: A test double where every valid interaction must be declared up front.
-* _Spy_: A test double which behaves as release code, unless behaviour is overridden.
-* _Stub_: Defined behaviour for a single function, where the order of calls does not matter.
 
-Now that terminology is in place for unimock, let's look at various ways to combine clauses.
+## Combining setup clauses
+`Unimock::new()` accepts as argument anything that implements [Clause].
+Basic setup clauses can be combined into composite clauses by using _tuples_:
 
 ```rust
-#[unimock]
+#[unimock(api=FooMock)]
 trait Foo {
     fn foo(&self, arg: i32) -> i32;
 }
 
-#[unimock]
+#[unimock(api=BarMock)]
 trait Bar {
     fn bar(&self, arg: i32) -> i32;
 }
@@ -130,12 +125,12 @@ fn test_me(deps: &(impl Foo + Bar), arg: i32) -> i32 {
 assert_eq!(
     42,
     test_me(
-        &mock((
+        &Unimock::new((
             FooMock::foo
                 .some_call(matching!(_))
                 .answers(|arg| arg * 3),
             BarMock::bar
-                .some_call(matching! {(arg) if *arg > 20})
+                .some_call(matching!((arg) if *arg > 20))
                 .answers(|arg| arg * 2),
         )),
         7
@@ -147,13 +142,13 @@ assert_eq!(
 assert_eq!(
     42,
     test_me(
-        &mock((
+        &Unimock::new((
             FooMock::foo.stub(|each| {
                 each.call(matching!(1337)).returns(1024);
                 each.call(matching!(_)).answers(|arg| arg * 3);
             }),
             BarMock::bar.stub(|each| {
-                each.call(matching! {(arg) if *arg > 20}).answers(|arg| arg * 2);
+                each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
             }),
         )),
         7
@@ -165,16 +160,20 @@ In both these examples, the order in which the clauses are specified do not matt
 In order for unimock to find the correct response, call patterns will be matched in the sequence they were defined.
 
 ## Interaction verifications
+Unimock performs interaction verifications using a declarative approach.
+Expected interactions are configured at construction time, using [Clause]s.
+Rust makes it possible to automatically verify things because of RAII and the [drop] method, which Unimock implements.
+When a Unimock instance goes out of scope, Rust automatically runs its verification rules.
 
-Unimock has one built-in verification that is always enabled:
+One verification is always enabled in unimock:
 
-_Every MockFn that is introduced in some clause, *must* be called at least once._
+_Each `MockFn` mentioned in some setup clause must be interacted with at least once._
 
 If this requirement is not met, Unimock will panic inside its Drop implementation.
 The reason is to help avoiding "bit rot" accumulating over time inside test code.
 When refactoring release code, tests should always follow along and not be overly generic.
 
-Every unimock verification happens automatically in `drop`.
+In general, clauses do not only encode what behaviour is _allowed_ to happen, but also that this behaviour necessarily _must happen_.
 
 ### Optional call count expectations in call patterns
 To make a call count expectation for a specific call pattern,
@@ -183,28 +182,30 @@ To make a call count expectation for a specific call pattern,
    [`n_times(n)`](build::Quantify::n_times) and
    [`at_least_times(n)`](build::Quantify::at_least_times).
 
-With exact quantification in place, we can produce output sequences by chaining output definitions:
+With exact quantification in place, _output sequence_ verifications can be constructed by chaining combinators:
 
 ```rust
 each.call(matching!(_)).returns(1).n_times(2).then().returns(2);
 ```
 
 The output sequence will be `[1, 1, 2, 2, 2, ..]`.
-A call pattern like this is _expected_ to be called at least 3 times.
+A call pattern like this _must_ be called at least 3 times.
 2 times because of the first exact output sequence, then at least one time because of the [`.then()`](build::QuantifiedResponse::then) combinator.
 
 ### Verifying exact sequence of calls
 Exact call sequences may be expressed using _strictly ordered clauses_.
-Use [`next_call`](MockFn::next_call) to define a call pattern.
+Use [`next_call`](MockFn::next_call) to define this kind of call pattern.
 
 ```rust
-mock((
+Unimock::new((
     FooMock::foo.next_call(matching!(3)).returns(5),
     BarMock::bar.next_call(matching!(8)).returns(7).n_times(2),
 ));
 ```
 
-Order-sensitive clauses and order-insensitive clauses (like [`stub`](MockFn::stub)) do not interfere with each other.
+All clauses constructed by `next_call` are expected to be evaluated in the exact sequence they appear in the clause tuple.
+
+Order-sensitive clauses and order-insensitive clauses (like [`some_call`](MockFn::some_call)) do not interfere with each other.
 However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 
 ## Application architecture
@@ -251,13 +252,13 @@ The previous code snippet is at the extreme end of the loosely-coupled scale: _N
 It shows that unimock is merely a piece in a larger picture.
 To wire all of this together into a full-fledged runtime solution, without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
 
-### Combining release code and mocks: Spying
+### Combining release code and mocks: Partial mocks
 Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 For that to work, unimock needs to know how to call the "real" implementation of traits.
 
-See the documentation of spy to see how this works.
+See the documentation of `new_partial` to see how this works.
 
-Although this can be implemented with unimock directly, it works best with a higher-level macro like [entrait](https://docs.rs/entrait).
+Although this can be implemented with unimock directly, it works best with a higher-level macro like [`entrait`](https://docs.rs/entrait).
 
 ### Misc
 
@@ -275,6 +276,21 @@ Although this can be implemented with unimock directly, it works best with a hig
 #### What kinds of traits or methods cannot be mocked?
 * Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
 * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
+
+### Selecting a name for the mock `api`
+Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
+    unimock tries to avoid autogenerating any new identifiers that might accidentally create undesired namespace collisions.
+To avoid user confusion through conjuring up new identifier names out of thin air, the name of the mocking API therefore has to be user-supplied.
+Although the user is free to choose any name, unimock suggests following a naming convention.
+
+The entity being mocked is a trait, but the mocking API is a module.
+This introduces a conflict in naming convention style, since traits use CamelCase but modules use snake_case.
+
+_The suggested naming convention is using the name of the trait (e.g. `Trait`) postfixed with `Mock`: The resulting module should be called `TraitMock`._
+
+This will make it easier to discover the API, as it shares a common prefix with the name of the trait.
+
+
 
 ## Project goals
 #### Use only safe Rust
