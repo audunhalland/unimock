@@ -69,7 +69,7 @@
 //!
 //! Clause construction is a type-state machine that in this example goes through two steps:
 //!
-//! 1. [`my_mock_api::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
+//! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 //! 2. [`.returns(1337)`](crate::build::DefineResponse::returns): Each matching call will return the value `1337`.
 //!    In this example there is only one clause.
