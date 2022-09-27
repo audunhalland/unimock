@@ -1,6 +1,6 @@
 #![cfg(feature = "nightly-tests")]
+#![allow(incomplete_features)]
 #![feature(type_alias_impl_trait)]
-#![cfg(feature = "nightly-tests")]
 #![feature(async_fn_in_trait)]
 
 #[cfg(feature = "nightly-tests")]
