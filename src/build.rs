@@ -272,7 +272,7 @@ macro_rules! define_response_common_impl {
             /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
             pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
             where
-                A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
+                A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
                 R: Into<F::Output>,
                 F::Output: Sized,
             {
@@ -295,7 +295,7 @@ macro_rules! define_response_common_impl {
             /// on input parameters is necessary, which should not be a common use case.
             pub fn answers_leaked_ref<A, R>(mut self, func: A) -> Quantify<'p, F, O>
             where
-                A: (for<'i> Fn(<F as MockInputs<'i>>::Inputs) -> R) + Send + Sync + 'static,
+                A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
                 R: std::borrow::Borrow<F::Output> + 'static,
                 F::Output: Sized,
             {

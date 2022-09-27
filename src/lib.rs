@@ -702,18 +702,6 @@ impl Drop for Unimock {
     }
 }
 
-/// Trait specifying inputs to a mocked function. Base trait of [MockFn].
-///
-/// The lifetime parameter allows inputs that are non-static references.
-pub trait MockInputs<'i> {
-    /// The inputs to a mockable function.
-    ///
-    /// * For a function with no parameters, the type should be the empty tuple `()`.
-    /// * For a function with 1 parameter `T`, the type should be `T`.
-    /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
-    type Inputs;
-}
-
 ///
 /// The main trait used for unimock configuration.
 ///
@@ -740,7 +728,14 @@ pub trait MockInputs<'i> {
 /// /* impl MockFn for MockMeMock::method ... */
 /// ```
 ///
-pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
+pub trait MockFn: Sized + 'static {
+    /// The inputs to a mockable function.
+    ///
+    /// * For a function with no parameters, the type should be the empty tuple `()`.
+    /// * For a function with 1 parameter `T`, the type should be `T`.
+    /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
+    type Inputs<'i>;
+
     /// The output of the function.
     type Output: ?Sized;
 
@@ -748,7 +743,7 @@ pub trait MockFn: Sized + 'static + for<'i> MockInputs<'i> {
     const NAME: &'static str;
 
     /// Compute some debug representation of the inputs.
-    fn debug_inputs(inputs: &<Self as MockInputs<'_>>::Inputs) -> String;
+    fn debug_inputs(inputs: &Self::Inputs<'_>) -> String;
 
     /// Create a stubbing clause by grouping calls.
     ///

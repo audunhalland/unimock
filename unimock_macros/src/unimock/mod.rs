@@ -150,7 +150,6 @@ fn def_mock_fn(
         .collect::<Vec<_>>();
 
     let generic_params = util::Generics::params(trait_info);
-    let inputs_generic_params = generic_params.input_params(attr);
     let generic_args = util::Generics::args(trait_info);
     let where_clause = &trait_info.item.generics.where_clause;
 
@@ -176,12 +175,15 @@ fn def_mock_fn(
     };
 
     let impl_blocks = quote! {
+        /*
         impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args #where_clause {
             type Inputs = (#(#inputs_tuple),*);
         }
+        */
 
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Output = #output;
+            type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -205,8 +207,10 @@ fn def_mock_fn(
                 impl #module_scope #non_generic_ident {
                     pub fn with_types #generic_params(
                         self
-                    ) -> impl #prefix::MockFn<Output = #output>
-                            + for<#input_lifetime> #prefix::MockInputs<#input_lifetime, Inputs = (#(#inputs_tuple),*)>
+                    ) -> impl for<#input_lifetime> #prefix::MockFn<
+                        Inputs<#input_lifetime> = (#(#inputs_tuple),*),
+                        Output = #output
+                    >
                         #where_clause
                     {
                         #mock_fn_ident(#(#untyped_phantoms),*)

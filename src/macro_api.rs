@@ -10,7 +10,7 @@ pub enum Evaluation<'i, O, F: MockFn> {
     /// Function evaluated to its output.
     Evaluated(O),
     /// Function not yet evaluated.
-    Skipped(<F as MockInputs<'i>>::Inputs),
+    Skipped(F::Inputs<'i>),
 }
 
 impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
@@ -54,7 +54,7 @@ where
     #[inline]
     pub fn func<M>(&mut self, matching_fn: M)
     where
-        M: (for<'i> Fn(&<F as MockInputs<'i>>::Inputs) -> bool) + Send + Sync + 'static,
+        M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + 'static,
     {
         self.matching_fn = Some(MatchingFn(Box::new(matching_fn)));
     }
@@ -75,7 +75,7 @@ where
 #[track_caller]
 pub fn eval<'i, F>(
     unimock: &Unimock,
-    inputs: <F as MockInputs<'i>>::Inputs,
+    inputs: F::Inputs<'i>,
 ) -> macro_api::Evaluation<'i, F::Output, F>
 where
     F: MockFn + 'static,
@@ -88,7 +88,7 @@ where
 #[track_caller]
 pub fn eval_borrowed<'u, 'i, F>(
     unimock: &'u Unimock,
-    inputs: <F as MockInputs<'i>>::Inputs,
+    inputs: F::Inputs<'i>,
 ) -> macro_api::Evaluation<'i, &'u F::Output, F>
 where
     F: MockFn + 'static,
@@ -102,7 +102,7 @@ where
 #[track_caller]
 pub fn eval_borrowed_param<'u, 'i, F>(
     unimock: &'u Unimock,
-    inputs: <F as MockInputs<'i>>::Inputs,
+    inputs: F::Inputs<'i>,
 ) -> macro_api::Evaluation<'i, &'i F::Output, F>
 where
     F: MockFn + 'static,
@@ -117,7 +117,7 @@ where
 #[track_caller]
 pub fn eval_static_ref<'i, F>(
     unimock: &Unimock,
-    inputs: <F as MockInputs<'i>>::Inputs,
+    inputs: F::Inputs<'i>,
 ) -> macro_api::Evaluation<'i, &'static F::Output, F>
 where
     F: MockFn + 'static,

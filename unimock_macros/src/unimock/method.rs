@@ -55,7 +55,7 @@ impl<'s> MockMethod<'s> {
         let inputs_destructuring = self.inputs_destructuring();
 
         quote! {
-            fn debug_inputs((#inputs_destructuring): &<Self as #prefix::MockInputs<'_>>::Inputs) -> String {
+            fn debug_inputs((#inputs_destructuring): &Self::Inputs<'_>) -> String {
                 #body
             }
         }

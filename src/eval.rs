@@ -6,7 +6,7 @@ use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::Evaluation;
 use crate::state::SharedState;
 use crate::DynMockFn;
-use crate::{FallbackMode, MockFn, MockInputs};
+use crate::{FallbackMode, MockFn};
 
 use std::borrow::Borrow;
 
@@ -44,7 +44,7 @@ impl<'u> EvalCtx<'u> {
     #[allow(clippy::needless_lifetimes)]
     pub fn eval_sized<'i, F: MockFn>(
         self,
-        inputs: <F as MockInputs<'i>>::Inputs,
+        inputs: F::Inputs<'i>,
     ) -> MockResult<Evaluation<'i, F::Output, F>>
     where
         F::Output: Sized,
@@ -75,7 +75,7 @@ impl<'u> EvalCtx<'u> {
 
     pub fn eval_unsized_self_borrowed<'i, F: MockFn>(
         self,
-        inputs: <F as MockInputs<'i>>::Inputs,
+        inputs: F::Inputs<'i>,
     ) -> MockResult<Evaluation<'i, &'u F::Output, F>> {
         let input_debugger = &|| F::debug_inputs(&inputs);
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
@@ -103,7 +103,7 @@ impl<'u> EvalCtx<'u> {
 
     pub fn eval_unsized_static_ref<'i, F: MockFn>(
         self,
-        inputs: <F as MockInputs<'i>>::Inputs,
+        inputs: F::Inputs<'i>,
         lender: Lender,
     ) -> MockResult<Evaluation<'i, &'static F::Output, F>> {
         let input_debugger = &|| F::debug_inputs(&inputs);

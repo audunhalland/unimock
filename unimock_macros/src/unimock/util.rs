@@ -1,22 +1,19 @@
-use super::attr::Attr;
 use super::trait_info::TraitInfo;
 
 use quote::*;
 
-pub struct Generics<'t, 'a> {
+pub struct Generics<'t> {
     trait_info: &'t TraitInfo<'t>,
-    kind: GenericsKind<'a>,
+    kind: GenericsKind,
 }
 
-enum GenericsKind<'a> {
+enum GenericsKind {
     None,
     GenericParams,
-    InputParam(&'a syn::Lifetime),
-    GenericInputParams(&'a syn::Lifetime),
     Args,
 }
 
-impl<'t, 'a> Generics<'t, 'a> {
+impl<'t> Generics<'t> {
     // Params: e.g. impl<A, B>
     pub fn params(trait_info: &'t TraitInfo) -> Self {
         Self {
@@ -37,17 +34,6 @@ impl<'t, 'a> Generics<'t, 'a> {
                 GenericsKind::Args
             } else {
                 GenericsKind::None
-            },
-        }
-    }
-
-    pub fn input_params(&self, attr: &'a Attr) -> Self {
-        Self {
-            trait_info: self.trait_info,
-            kind: if self.trait_info.is_type_generic {
-                GenericsKind::GenericInputParams(&attr.input_lifetime)
-            } else {
-                GenericsKind::InputParam(&attr.input_lifetime)
             },
         }
     }
@@ -74,7 +60,7 @@ impl<'t, 'a> Generics<'t, 'a> {
     }
 }
 
-impl<'t, 'a> quote::ToTokens for Generics<'t, 'a> {
+impl<'t> quote::ToTokens for Generics<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if let GenericsKind::None = &self.kind {
             return;
@@ -85,14 +71,6 @@ impl<'t, 'a> quote::ToTokens for Generics<'t, 'a> {
             GenericsKind::None => {}
             GenericsKind::GenericParams => {
                 self.trait_info.generic_params_with_bounds.to_tokens(tokens);
-            }
-            GenericsKind::GenericInputParams(lifetime) => {
-                lifetime.to_tokens(tokens);
-                syn::token::Comma::default().to_tokens(tokens);
-                self.trait_info.generic_params_with_bounds.to_tokens(tokens);
-            }
-            GenericsKind::InputParam(lifetime) => {
-                lifetime.to_tokens(tokens);
             }
             GenericsKind::Args => {
                 let args = self.args_iterator();
