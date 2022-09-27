@@ -516,6 +516,16 @@ mod pat {
                     }
                     range.hi.doc(out);
                 }
+                Self::Slice(slice) => {
+                    doc!(out, ["[", Sep::ws(&slice.elems), "]"]);
+                }
+                Self::Rest(_) => {
+                    doc!(out, [".."]);
+                }
+                Self::Struct(pat_struct) => {
+                    // Skipping documentation of fields:
+                    doc!(out, [pat_struct.path, " {}"]);
+                }
                 // TODO: More patterns?
                 _ => {
                     doc!(out, ["?pat?"]);

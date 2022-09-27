@@ -724,3 +724,34 @@ mod lifetime_constrained_output_type {
         assert_eq!(result.1, "b");
     }
 }
+
+mod slice_matching {
+    use std::vec;
+
+    use super::*;
+
+    #[unimock(api = Mock)]
+    trait Trait {
+        fn vec_of_i32(&self, a: Vec<i32>);
+        fn two_vec_of_i32(&self, a: Vec<i32>, b: Vec<i32>);
+        fn vec_of_string(&self, a: Vec<String>);
+    }
+
+    #[test]
+    fn vec_of_strings() {
+        Unimock::new(Mock::vec_of_i32.next_call(matching!([1, 2])).returns(()))
+            .vec_of_i32(vec![1, 2]);
+        Unimock::new(
+            Mock::two_vec_of_i32
+                .next_call(matching!([1, 2], [3, 4]))
+                .returns(()),
+        )
+        .two_vec_of_i32(vec![1, 2], vec![3, 4]);
+        Unimock::new(
+            Mock::vec_of_string
+                .next_call(matching!([a, b] if a == "1" && b == "2"))
+                .returns(()),
+        )
+        .vec_of_string(vec!["1".to_string(), "2".to_string()]);
+    }
+}

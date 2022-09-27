@@ -93,6 +93,7 @@ struct Arg {
 enum ArgKind {
     Unknown,
     LitStr,
+    Slice,
 }
 
 pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
@@ -133,6 +134,7 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
         let ident = &arg.ident;
         match arg.kind {
             ArgKind::LitStr => quote! { ::unimock::macro_api::as_str_ref(#ident) },
+            ArgKind::Slice => quote! { ::unimock::macro_api::as_slice(#ident) },
             _ => quote! { #ident },
         }
     });
@@ -197,6 +199,7 @@ fn guess_arg_kind(index: usize, patterns: &[syn::PatTuple]) -> ArgKind {
                 },
                 _ => ArgKind::Unknown,
             },
+            syn::Pat::Slice(_) => ArgKind::Slice,
             _ => ArgKind::Unknown,
         }
     }
@@ -282,6 +285,10 @@ mod tests {
             "(1 | 2, 3 | 4) | (4 | 5, 6 | 7)",
             test_doc(parse_quote!((1 | 2, 3 | 4) | (4 | 5, 6 | 7)))
         );
+
+        assert_eq!("([1, 2])", test_doc(parse_quote!([1, 2])));
+        assert_eq!("([1, 2, ..])", test_doc(parse_quote!([1, 2, ..])));
+        assert_eq!("(Struct {})", test_doc(parse_quote!(some::Struct { a: b })));
 
         assert_eq!("(1) if {guard}", test_doc(parse_quote!(1 if expr())));
         assert_eq!("((1)) if {guard}", test_doc(parse_quote!((1) if expr())));

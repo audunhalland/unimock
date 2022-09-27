@@ -168,3 +168,11 @@ where
 {
     input.as_ref()
 }
+
+/// Convert any type implementing `AsRef<[I]>` to a `&[I]`.
+pub fn as_slice<T, I>(input: &T) -> &[I]
+where
+    T: AsRef<[I]>,
+{
+    input.as_ref()
+}
