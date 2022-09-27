@@ -224,10 +224,6 @@ mod tests {
             "(1) | (2) if {guard}",
             test_doc(parse_quote!((1) | (2) if expr()))
         );
-        assert_eq!(
-            "(1) if {guard} | (2) if {guard}",
-            test_doc(parse_quote!((1) if expr() | (2) if expr()))
-        );
     }
 
     #[test]
