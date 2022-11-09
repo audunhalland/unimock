@@ -55,11 +55,11 @@ mod reference_argument_works_with_explicit_lifetime {
 
     #[unimock]
     trait GetUsername {
-        type Fut<'s, 'i1>: ::core::future::Future<Output = Result<String, Error>> + Send
+        type Fut<'s>: ::core::future::Future<Output = Result<String, Error>> + Send
         where
             Self: 's;
 
-        fn get_username<'s, 'i1>(&'s self, id: u32, password: &'i1 str) -> Self::Fut<'s, 'i1>;
+        fn get_username<'s, 'i: 's>(&'s self, id: u32, password: &'i str) -> Self::Fut<'s>;
     }
 }
 
