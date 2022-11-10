@@ -175,15 +175,9 @@ fn def_mock_fn(
     };
 
     let impl_blocks = quote! {
-        /*
-        impl #inputs_generic_params #prefix::MockInputs<#input_lifetime> for #mock_fn_path #generic_args #where_clause {
-            type Inputs = (#(#inputs_tuple),*);
-        }
-        */
-
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
-            type Output = #output;
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
+            type Output = #output;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -316,8 +310,14 @@ fn def_associated_future(method: Option<&method::MockMethod>) -> Option<proc_mac
             let ident = &trait_item_type.ident;
             let generics = &trait_item_type.generics;
             let bounds = &trait_item_type.bounds;
+
+            let outlives = generics.lifetimes().map(|lifetime_def| {
+                let lifetime = &lifetime_def.lifetime;
+                quote! { + #lifetime }
+            });
+
             Some(quote! {
-                type #ident #generics = impl #bounds;
+                type #ident #generics = impl #bounds #(#outlives)*;
             })
         }
         _ => None,

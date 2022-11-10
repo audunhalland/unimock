@@ -179,17 +179,26 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
 }
 
 fn make_lifetimes_params_static(mut ty: syn::Type) -> syn::Type {
-    if let syn::Type::Path(type_path) = &mut ty {
-        for segment in type_path.path.segments.iter_mut() {
-            if let syn::PathArguments::AngleBracketed(generic_arguments) = &mut segment.arguments {
-                for arg in generic_arguments.args.iter_mut() {
-                    if let syn::GenericArgument::Lifetime(lifetime) = arg {
-                        lifetime.ident = syn::Ident::new("static", proc_macro2::Span::call_site());
-                    }
-                }
-            }
+    struct MakeStatic;
+
+    fn new_static() -> syn::Lifetime {
+        syn::Lifetime::new("'static", proc_macro2::Span::call_site())
+    }
+
+    impl syn::visit_mut::VisitMut for MakeStatic {
+        fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
+            reference.lifetime = Some(new_static());
+            syn::visit_mut::visit_type_reference_mut(self, reference);
+        }
+
+        fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
+            *lifetime = new_static();
+            syn::visit_mut::visit_lifetime_mut(self, lifetime);
         }
     }
+
+    use syn::visit_mut::VisitMut;
+    MakeStatic.visit_type_mut(&mut ty);
 
     ty
 }

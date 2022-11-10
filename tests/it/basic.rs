@@ -184,6 +184,20 @@ mod referenced {
     }
 }
 
+mod reference_in_wrapper {
+    use super::*;
+
+    #[unimock]
+    trait InOption {
+        fn foo(&self, a: &str) -> Option<&str>;
+    }
+
+    #[unimock]
+    trait InResultWithLifetimes {
+        fn foo<'s, 'i>(&'s self, a: &'i str) -> Result<&'s str, &'i str>;
+    }
+}
+
 mod no_clone_return {
     use unimock::*;
 
