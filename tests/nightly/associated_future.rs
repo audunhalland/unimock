@@ -54,12 +54,46 @@ mod reference_argument_works_with_explicit_lifetime {
     pub struct Error;
 
     #[unimock]
-    trait GetUsername {
+    trait WithoutReturning {
         type Fut<'s>: ::core::future::Future<Output = Result<String, Error>> + Send
         where
             Self: 's;
 
         fn get_username<'s, 'i: 's>(&'s self, id: u32, password: &'i str) -> Self::Fut<'s>;
+    }
+
+    struct TestReturnSelf {
+        value: String,
+    }
+    struct TestReturnArg;
+
+    #[unimock]
+    trait ReturnRef {
+        type Fut<'s>: ::core::future::Future<Output = Result<&'s str, Error>> + Send
+        where
+            Self: 's;
+
+        fn return_ref<'s, 'i: 's>(&'s self, input: &'i str) -> Self::Fut<'s>;
+    }
+
+    impl ReturnRef for TestReturnSelf {
+        type Fut<'s>: = impl ::core::future::Future<Output = Result<&'s str, Error>> + Send
+        where
+            Self: 's;
+
+        fn return_ref<'s, 'i: 's>(&'s self, _: &'i str) -> Self::Fut<'s> {
+            async move { Ok(self.value.as_str()) }
+        }
+    }
+
+    impl ReturnRef for TestReturnArg {
+        type Fut<'s>: = impl ::core::future::Future<Output = Result<&'s str, Error>> + Send
+        where
+            Self: 's;
+
+        fn return_ref<'s, 'i: 's>(&'s self, input: &'i str) -> Self::Fut<'s> {
+            async move { Ok(input) }
+        }
     }
 }
 
