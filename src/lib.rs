@@ -404,7 +404,7 @@ use macro_api::Matching;
 ///
 /// A true implementation must be a standalone function, not part of a trait,
 /// where the first parameter is generic (a `self`-replacement), and the rest of the parameters are
-/// identical to [MockInputs::Inputs]:
+/// identical to [MockFn::Inputs]:
 ///
 /// ```rust
 /// # use unimock::*;
