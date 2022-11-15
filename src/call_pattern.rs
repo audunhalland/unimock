@@ -1,8 +1,6 @@
 use crate::debug;
 use crate::error::{MockError, MockResult};
-use crate::output::{
-    Complex, ComplexOutput, Output, OwnedOutput, RefOutput, StaticRefOutput, StoreOutput,
-};
+use crate::output::{ComplexOutput, Output, OwnedOutput, RefOutput, StaticRefOutput, StoreOutput};
 use crate::*;
 
 use std::any::Any;
@@ -341,6 +339,8 @@ fn find_responder_by_call_index(
 
 #[cfg(test)]
 mod tests {
+    use crate::output::Complex;
+
     use super::*;
 
     #[test]
@@ -376,7 +376,7 @@ mod tests {
 
         impl MockFn2 for Test {
             type Inputs<'i> = ();
-            type Output<'s> = Complex<Option<&'s str>>;
+            type Output<'u> = Complex<'u, Option<&'u str>>;
         }
 
         let q = Test.some_call().returns(Some(String::new()));
@@ -391,5 +391,6 @@ mod tests {
             Ok(r) => r,
             Err(_) => panic!(),
         };
+        let borrowed_stored: &Option<String> = complex_resp.stored_value.borrow_stored();
     }
 }

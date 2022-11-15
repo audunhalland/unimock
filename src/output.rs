@@ -50,20 +50,23 @@ impl<T: ?Sized + 'static + Send + Sync> StoreOutput for StaticRef<T> {
 
 impl<T: ?Sized + 'static + Send + Sync> StaticRefOutput for StaticRef<T> {}
 
-pub struct Complex<T: ?Sized + Unborrow>(std::marker::PhantomData<T>);
+pub struct Complex<'u, T: ?Sized + Unborrow<'u>>(std::marker::PhantomData<&'u T>);
 
-impl<T: Unborrow> Output for Complex<T> {
+impl<'u, T: Unborrow<'u>> Output for Complex<'u, T> {
     type Type = T;
 }
 
-impl<T: Unborrow> StoreOutput for Complex<T>
+impl<'u, T: Unborrow<'u>> StoreOutput for Complex<'u, T>
 where
-    <T as Unborrow>::Unborrowed: Send + Sync,
+    <T as Unborrow<'u>>::Unborrowed: Send + Sync,
 {
-    type Stored = <T as Unborrow>::Unborrowed;
+    type Stored = <T as Unborrow<'u>>::Unborrowed;
 }
 
-impl<T: Unborrow> ComplexOutput for Complex<T> where <T as Unborrow>::Unborrowed: Send + Sync {}
+impl<'u, T: Unborrow<'u>> ComplexOutput for Complex<'u, T> where
+    <T as Unborrow<'u>>::Unborrowed: Send + Sync
+{
+}
 
 mod test {
     use super::*;
@@ -103,7 +106,7 @@ mod test {
     }
 
     impl MockFn3 for MockComplex {
-        type Output<'s> = Complex<Option<&'s str>>;
+        type Output<'u> = Complex<'u, Option<&'u str>>;
     }
 
     fn test_it() {

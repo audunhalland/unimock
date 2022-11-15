@@ -29,7 +29,7 @@ impl MockFn2 for MockStatic {
 
 impl MockFn2 for MockComplex {
     type Inputs<'i> = ();
-    type Output<'s> = output::Complex<Option<&'s str>>;
+    type Output<'u> = output::Complex<'u, Option<&'u str>>;
 }
 
 #[test]
