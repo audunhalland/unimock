@@ -190,7 +190,7 @@ pub(crate) struct DynComplexValueResponder2(AnyBox);
 impl DynComplexValueResponder2 {
     pub fn downcast<F: MockFn2>(&self) -> MockResult<&ComplexValueResponder2<F>>
     where
-        for<'u> F::Output<'u>: StoreOutput,
+        for<'u> F::Output<'u>: StoreOutput<'u>,
     {
         downcast_box(&self.0, "FAKE NAME")
     }
@@ -198,16 +198,16 @@ impl DynComplexValueResponder2 {
 
 pub(crate) struct OwnedResponder2<F: MockFn2>
 where
-    for<'s> F::Output<'s>: OwnedOutput,
+    for<'u> F::Output<'u>: OwnedOutput<'u>,
 {
-    pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output<'static> as Output>::Type>>,
+    pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output<'static> as Output<'static>>::Type>>,
 }
 
 pub(crate) struct RefResponder2<F: MockFn2>
 where
-    for<'u> F::Output<'u>: RefOutput,
+    for<'u> F::Output<'u>: RefOutput<'u>,
 {
-    pub borrowable: Box<dyn Borrow<<F::Output<'static> as Output>::Type> + Send + Sync>,
+    pub borrowable: Box<dyn Borrow<<F::Output<'static> as Output<'static>>::Type> + Send + Sync>,
 }
 
 pub(crate) struct StaticRefClosureResponder2<F: MockFn2>
@@ -215,20 +215,24 @@ where
     for<'u> F::Output<'u>: StaticRefOutput,
 {
     #[allow(clippy::type_complexity)]
-    pub func:
-        Box<dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Output<'static> as Output>::Type) + Send + Sync>,
+    pub func: Box<
+        dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Output<'static> as Output<'static>>::Type)
+            + Send
+            + Sync,
+    >,
 }
 
 pub(crate) struct ComplexValueResponder2<F: MockFn2>
 where
-    for<'u> F::Output<'u>: StoreOutput,
+    for<'u> F::Output<'u>: StoreOutput<'u>,
 {
-    pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output<'static> as StoreOutput>::Stored>>,
+    pub stored_value:
+        Box<dyn CloneOrTakeOrBorrow<<F::Output<'static> as StoreOutput<'static>>::Stored>>,
 }
 
 impl<F: MockFn2> OwnedResponder2<F>
 where
-    for<'s> F::Output<'s>: OwnedOutput,
+    for<'u> F::Output<'u>: OwnedOutput<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Owned(DynOwnedResponder2(Box::new(self)))
@@ -237,7 +241,7 @@ where
 
 impl<F: MockFn2> RefResponder2<F>
 where
-    for<'u> F::Output<'u>: RefOutput,
+    for<'u> F::Output<'u>: RefOutput<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Ref(DynRefResponder2(Box::new(self)))
@@ -255,7 +259,7 @@ where
 
 impl<F: MockFn2> ComplexValueResponder2<F>
 where
-    for<'u> F::Output<'u>: ComplexOutput,
+    for<'u> F::Output<'u>: ComplexOutput<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::ComplexValue(DynComplexValueResponder2(Box::new(self)))
@@ -379,7 +383,7 @@ mod tests {
             type Output<'u> = Complex<'u, Option<&'u str>>;
         }
 
-        let q = Test.some_call().returns(Some(String::new()));
+        let q = Test.some_call().returns(Some("fancy".to_string()));
         let call_pattern_builder = q.builder.inner();
         let resp = &call_pattern_builder.responders2[0];
         let dyn_complex_resp = match &resp.responder {
@@ -392,5 +396,17 @@ mod tests {
             Err(_) => panic!(),
         };
         let borrowed_stored: &Option<String> = complex_resp.stored_value.borrow_stored();
+        let reborrowed = util_reborrow_complex::<Test>(borrowed_stored).unwrap();
+
+        assert_eq!(Some("fancy"), reborrowed);
+    }
+
+    fn util_reborrow_complex<'u, F: MockFn2>(
+        stored: &'u <F::Output<'u> as StoreOutput<'u>>::Stored,
+    ) -> Option<<F::Output<'u> as Output<'u>>::Type>
+    where
+        F::Output<'u>: StoreOutput<'u>,
+    {
+        <F::Output<'u> as StoreOutput<'u>>::reborrow_complex(stored)
     }
 }
