@@ -11,6 +11,7 @@ pub(crate) struct DynCallPatternBuilder {
     pub pattern_match_mode: PatternMatchMode,
     pub input_matcher: DynInputMatcher,
     pub responders: Vec<DynCallOrderResponder>,
+    pub responders2: Vec<DynCallOrderResponder2>,
     pub count_expectation: counter::CallCountExpectation,
     pub current_response_index: usize,
 }
@@ -21,13 +22,14 @@ impl DynCallPatternBuilder {
             pattern_match_mode,
             input_matcher,
             responders: vec![],
+            responders2: vec![],
             count_expectation: Default::default(),
             current_response_index: 0,
         }
     }
 }
 
-enum BuilderWrapper<'p> {
+pub(crate) enum BuilderWrapper<'p> {
     Borrowed(&'p mut DynCallPatternBuilder),
     Owned(DynCallPatternBuilder),
     Stolen,
@@ -40,7 +42,7 @@ impl<'p> BuilderWrapper<'p> {
         stolen
     }
 
-    fn inner(&self) -> &DynCallPatternBuilder {
+    pub fn inner(&self) -> &DynCallPatternBuilder {
         match self {
             Self::Borrowed(builder) => builder,
             Self::Owned(builder) => builder,
@@ -62,6 +64,14 @@ impl<'p> BuilderWrapper<'p> {
             response_index: dyn_builder.current_response_index,
             responder,
         });
+    }
+
+    fn push_responder2(&mut self, responder: DynResponder2) {
+        let dyn_builder = self.inner_mut();
+        dyn_builder.responders2.push(DynCallOrderResponder2 {
+            response_index: dyn_builder.current_response_index,
+            responder,
+        })
     }
 
     /// Note: must be called after `push_responder`
@@ -563,5 +573,129 @@ where
             dyn_mock_fn: DynMockFn::new::<F>(),
             builder: self.builder.into_owned(),
         })
+    }
+}
+
+pub mod v2 {
+    use super::*;
+    use crate::output::*;
+
+    pub struct DefineResponse<'p, F: MockFn2, O: Ordering> {
+        builder: BuilderWrapper<'p>,
+        mock_fn: PhantomData<F>,
+        ordering: O,
+    }
+
+    pub struct QuantifyTodo<'p, F: MockFn2, O: Ordering> {
+        pub(crate) builder: BuilderWrapper<'p>,
+        mock_fn: PhantomData<F>,
+        ordering: O,
+    }
+
+    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O> {
+        pub(crate) fn with_owned_builder(
+            input_matcher: DynInputMatcher,
+            pattern_match_mode: PatternMatchMode,
+            ordering: O,
+        ) -> Self {
+            Self {
+                builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(
+                    pattern_match_mode,
+                    input_matcher,
+                )),
+                mock_fn: PhantomData,
+                ordering,
+            }
+        }
+
+        fn quantify(self) -> QuantifyTodo<'p, F, O> {
+            QuantifyTodo {
+                builder: self.builder,
+                mock_fn: PhantomData,
+                ordering: self.ordering,
+            }
+        }
+    }
+
+    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
+    where
+        for<'u> F::Output<'u>: OwnedOutput,
+        for<'u> <F::Output<'u> as Output>::Type: Clone + Send + Sync,
+    {
+        // FIXME: Should return a Quantify object and not require clone
+        pub fn returns(
+            mut self,
+            value: impl Into<<F::Output<'static> as Output>::Type>,
+        ) -> QuantifyTodo<'p, F, O> {
+            let value = value.into();
+            self.builder.push_responder2(
+                OwnedResponder2 {
+                    stored_value: Box::new(StoredValueSlot(value)),
+                }
+                .into_dyn_responder(),
+            );
+            self.quantify()
+        }
+    }
+
+    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
+    where
+        for<'u> F::Output<'u>: RefOutput,
+        <F::Output<'static> as Output>::Type: Send + Sync + 'static,
+    {
+        pub fn returns(
+            mut self,
+            value: impl std::borrow::Borrow<<F::Output<'static> as Output>::Type>
+                + Send
+                + Sync
+                + 'static,
+        ) -> QuantifyTodo<'p, F, O> {
+            self.builder.push_responder2(
+                RefResponder2 {
+                    borrowable: Box::new(value),
+                }
+                .into_dyn_responder(),
+            );
+            self.quantify()
+        }
+    }
+
+    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
+    where
+        for<'s> F::Output<'s>: StaticRefOutput,
+        <F::Output<'static> as Output>::Type: Send + Sync + Copy + 'static,
+    {
+        pub fn returns(
+            mut self,
+            value: <F::Output<'static> as Output>::Type,
+        ) -> QuantifyTodo<'p, F, O> {
+            self.builder.push_responder2(
+                StaticRefClosureResponder2::<F> {
+                    func: Box::new(move |_| value),
+                }
+                .into_dyn_responder(),
+            );
+            self.quantify()
+        }
+    }
+
+    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
+    where
+        for<'s> F::Output<'s>: ComplexOutput,
+        for<'u> <F::Output<'u> as StoreOutput>::Stored: Clone + Send + Sync,
+    {
+        pub fn returns(
+            mut self,
+            value: impl Into<<F::Output<'static> as StoreOutput>::Stored>,
+        ) -> QuantifyTodo<'p, F, O> {
+            let value = value.into();
+            self.builder.push_responder2(
+                ComplexValueResponder2 {
+                    stored_value: Box::new(StoredValueSlot(value)),
+                }
+                .into_dyn_responder(),
+            );
+            self.quantify()
+        }
     }
 }

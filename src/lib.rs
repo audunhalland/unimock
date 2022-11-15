@@ -346,8 +346,12 @@
 pub mod build;
 /// APIs used by macros, not intended to be used directly.
 pub mod macro_api;
+/// Function outputs
+pub mod output;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
+/// Trait used in complex output borrowing scenarios
+pub mod unborrow;
 
 mod assemble;
 mod call_pattern;
@@ -810,6 +814,22 @@ pub trait MockFn: Sized + 'static {
             DynInputMatcher::from_matching_fn(matching_fn),
             fn_mocker::PatternMatchMode::InOrder,
             property::InOrder,
+        )
+    }
+}
+
+pub trait MockFn2: Sized + 'static {
+    type Inputs<'i>;
+    type Output<'s>: output::Output;
+
+    fn some_call(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
+        build::v2::DefineResponse::with_owned_builder(
+            DynInputMatcher {
+                func: None,
+                pat_debug: None,
+            },
+            fn_mocker::PatternMatchMode::InAnyOrder,
+            property::InAnyOrder,
         )
     }
 }
