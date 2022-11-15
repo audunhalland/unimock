@@ -1,4 +1,4 @@
-use crate::unborrow::Unborrow;
+use crate::possess::Possess;
 use std::borrow::Borrow;
 
 pub trait Output {
@@ -50,21 +50,21 @@ impl<T: ?Sized + 'static + Send + Sync> StoreOutput for StaticRef<T> {
 
 impl<T: ?Sized + 'static + Send + Sync> StaticRefOutput for StaticRef<T> {}
 
-pub struct Complex<'u, T: ?Sized + Unborrow<'u>>(std::marker::PhantomData<&'u T>);
+pub struct Complex<'u, T: ?Sized + Possess<'u>>(std::marker::PhantomData<&'u T>);
 
-impl<'u, T: Unborrow<'u>> Output for Complex<'u, T> {
+impl<'u, T: Possess<'u>> Output for Complex<'u, T> {
     type Type = T;
 }
 
-impl<'u, T: Unborrow<'u>> StoreOutput for Complex<'u, T>
+impl<'u, T: Possess<'u>> StoreOutput for Complex<'u, T>
 where
-    <T as Unborrow<'u>>::Unborrowed: Send + Sync,
+    <T as Possess<'u>>::Possessed: Send + Sync,
 {
-    type Stored = <T as Unborrow<'u>>::Unborrowed;
+    type Stored = <T as Possess<'u>>::Possessed;
 }
 
-impl<'u, T: Unborrow<'u>> ComplexOutput for Complex<'u, T> where
-    <T as Unborrow<'u>>::Unborrowed: Send + Sync
+impl<'u, T: Possess<'u>> ComplexOutput for Complex<'u, T> where
+    <T as Possess<'u>>::Possessed: Send + Sync
 {
 }
 

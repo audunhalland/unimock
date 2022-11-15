@@ -14,17 +14,17 @@ struct MockComplex;
 
 impl MockFn2 for MockOwned {
     type Inputs<'i> = ();
-    type Output<'s> = output::Owned<String>;
+    type Output<'u> = output::Owned<String>;
 }
 
 impl MockFn2 for MockBorrowed {
     type Inputs<'i> = ();
-    type Output<'s> = output::Ref<'s, str>;
+    type Output<'u> = output::Ref<'u, str>;
 }
 
 impl MockFn2 for MockStatic {
     type Inputs<'i> = ();
-    type Output<'s> = output::StaticRef<str>;
+    type Output<'u> = output::StaticRef<str>;
 }
 
 impl MockFn2 for MockComplex {
