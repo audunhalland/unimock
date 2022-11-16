@@ -44,7 +44,6 @@ impl MockFn2 for MockComplex {
 fn test_owned() {
     MockOwned.some_call().returns("");
     MockBorrowed.some_call().returns_ref("");
-    MockBorrowed.some_call().returns_ref_old("");
     MockStatic.some_call().returns("");
     MockComplex.some_call().returns(Some(String::new()));
     MockComplex.some_call().returns(None);

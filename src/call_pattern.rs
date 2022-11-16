@@ -200,11 +200,14 @@ pub(crate) struct DynStaticRefClosureResponder2(AnyBox);
 pub(crate) struct DynComplexValueResponder2(AnyBox);
 
 impl DynOwnedResponder2 {
-    pub fn downcast<F: MockFn2>(&self) -> MockResult<&OwnedResponder2<F>>
-    where
-        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-    {
+    pub fn downcast<F: MockFn2>(&self) -> MockResult<&OwnedResponder2<F>> {
         downcast_box(&self.0, "FAKE_NAME")
+    }
+}
+
+impl DynRefResponder2 {
+    pub fn downcast<F: MockFn2>(&self) -> MockResult<&RefResponder2<F>> {
+        downcast_box(&self.0, "FAKE NAME")
     }
 }
 

@@ -166,10 +166,18 @@ where
     <F::OutputOld<'u> as StoreOutputOld<'u>>::load_ref(stored)
 }
 
-fn to_output_sig_owned<'u, F: MockFn2>(
+fn move_to_output_sig<'u, F: MockFn2>(
     value: <F::Output as Output>::Type,
 ) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project(value).unwrap()
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project(value)
+        .expect("BUG: Expected to be able to move the output value")
+}
+
+fn reference_output_sig<'u, F: MockFn2>(
+    value: &'u <F::Output as Output>::Type,
+) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project_ref(value)
+        .expect("BUG: Expected to be able to reference the value")
 }
 
 impl<'u> EvalCtx<'u> {
@@ -180,7 +188,7 @@ impl<'u> EvalCtx<'u> {
         }
     }
 
-    pub(crate) fn eval2_owned<'i, F: MockFn2>(
+    pub(crate) fn eval2_generic<'i, F: MockFn2>(
         self,
         inputs: F::Inputs<'i>,
     ) -> MockResult<Evaluation2<'u, 'i, F>>
@@ -195,7 +203,7 @@ impl<'u> EvalCtx<'u> {
                 DynResponder2::Owned(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
                         Some(value) => {
-                            let output_sig = to_output_sig_owned::<F>(*value);
+                            let output_sig = move_to_output_sig::<F>(*value);
                             Ok(Evaluation2::Evaluated(output_sig))
                         }
                         None => Err(MockError::CannotReturnValueMoreThanOnce {
@@ -203,6 +211,11 @@ impl<'u> EvalCtx<'u> {
                             pattern: eval_rsp.debug_pattern(),
                         }),
                     }
+                }
+                DynResponder2::Ref(inner) => {
+                    let downcasted = inner.downcast::<F>()?;
+                    let value = reference_output_sig::<F>(&downcasted.borrowable);
+                    Ok(Evaluation2::Evaluated(value))
                 }
                 _ => todo!(),
             },
