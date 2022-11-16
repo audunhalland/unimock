@@ -16,24 +16,28 @@ impl MockFn2 for MockOwned {
     type Inputs<'i> = ();
     type Output = output::Owned<String>;
     type OutputSig<'u> = output::Owned<String>;
+    const NAME: &'static str = "";
 }
 
 impl MockFn2 for MockBorrowed {
     type Inputs<'i> = ();
     type Output = output::Ref<str>;
     type OutputSig<'u> = output::RefSig<'u, str>;
+    const NAME: &'static str = "";
 }
 
 impl MockFn2 for MockStatic {
     type Inputs<'i> = ();
     type Output = output::StaticRef<str>;
     type OutputSig<'u> = output::StaticRef<str>;
+    const NAME: &'static str = "";
 }
 
 impl MockFn2 for MockComplex {
     type Inputs<'i> = ();
     type Output = output::Complex<Option<&'static str>>;
     type OutputSig<'u> = output::ComplexSig<Option<&'u str>>;
+    const NAME: &'static str = "";
 }
 
 #[test]

@@ -70,7 +70,7 @@ impl<'u> EvalCtx<'u> {
         self,
         inputs: F::Inputs<'i>,
     ) -> MockResult<Evaluation2<'u, 'i, F>> {
-        let input_debugger = &|| "TODO: Implement input debug".to_string();
+        let input_debugger = &|| F::debug_inputs(&inputs);
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
         match dyn_ctx.eval2(&|pattern| pattern.match_inputs2::<F>(&inputs))? {

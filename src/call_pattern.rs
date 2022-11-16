@@ -194,13 +194,13 @@ pub(crate) struct DynBorrowResponder2(AnyBox);
 
 impl DynOwnedResponder2 {
     pub fn downcast<F: MockFn2>(&self) -> MockResult<&OwnedResponder2<F>> {
-        downcast_box(&self.0, "FAKE_NAME")
+        downcast_box(&self.0, F::NAME)
     }
 }
 
 impl DynBorrowResponder2 {
     pub fn downcast<F: MockFn2>(&self) -> MockResult<&BorrowResponder2<F>> {
-        downcast_box(&self.0, "FAKE NAME")
+        downcast_box(&self.0, F::NAME)
     }
 }
 
@@ -360,6 +360,7 @@ mod tests {
             type Inputs<'i> = ();
             type Output = Complex<Option<&'static str>>;
             type OutputSig<'u> = ComplexSig<Option<&'u str>>;
+            const NAME: &'static str = "Test";
         }
 
         let q = Test.some_call().returns(Some("fancy".to_string()));

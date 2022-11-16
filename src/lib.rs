@@ -819,9 +819,26 @@ pub trait MockFn: Sized + 'static {
 }
 
 pub trait MockFn2: Sized + 'static {
+    /// The inputs to a mockable function.
+    ///
+    /// * For a function with no parameters, the type should be the empty tuple `()`.
+    /// * For a function with 1 parameter `T`, the type should be `T`.
+    /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
     type Inputs<'i>;
+
+    /// Type describing the output of the function in a way that unimock can store (i.e. without lifetime parameters).
     type Output: output::Output;
+
+    /// Type describing the output of the function the way it's seen in the function signature.
     type OutputSig<'u>: output::OutputSig<'u, Self::Output>;
+
+    /// The name to use for runtime errors.
+    const NAME: &'static str;
+
+    /// Compute some debug representation of the inputs.
+    fn debug_inputs(_: &Self::Inputs<'_>) -> String {
+        String::new()
+    }
 
     fn some_call(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
         build::v2::DefineResponse::with_owned_builder(
@@ -1003,7 +1020,7 @@ impl DynMockFn {
     pub fn new2<F: crate::MockFn2>() -> Self {
         Self {
             type_id: TypeId::of::<F>(),
-            name: "TODO",
+            name: F::NAME,
         }
     }
 }
