@@ -2,6 +2,7 @@ use crate::possess::Possess;
 use std::borrow::Borrow;
 
 pub trait Output {
+    /// Version of output without lifetimes
     type Type: 'static;
 }
 
@@ -30,6 +31,9 @@ pub trait StoreOutputOld<'u>: OutputOld<'u> {
 }
 
 pub trait OwnedOutput: Output {}
+pub trait RefOutput: Output {}
+pub trait StaticRefOutput: Output {}
+pub trait ComplexOutput: Output {}
 
 pub trait OwnedOutputOld<'u>: StoreOutputOld<'u> {}
 pub trait RefOutputOld<'u>: StoreOutputOld<'u> {}
@@ -75,6 +79,8 @@ pub struct Ref<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 impl<T: ?Sized + 'static> Output for Ref<T> {
     type Type = Box<dyn Borrow<T> + Send + Sync>;
 }
+
+impl<T: ?Sized + 'static> RefOutput for Ref<T> {}
 
 pub struct RefSig<'u, T: ?Sized + 'static>(std::marker::PhantomData<&'u T>);
 
