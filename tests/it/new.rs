@@ -5,14 +5,14 @@ trait Mockable {
     fn borrowed(&self) -> &str;
     fn borrowed_param<'i>(&self, i: &'i str) -> &'i str;
     fn statik(&self) -> &'static str;
-    fn complex(&self) -> Option<&str>;
+    fn mixed(&self) -> Option<&str>;
 }
 
 struct MockOwned;
 struct MockBorrowed;
 struct MockBorrowedParam;
 struct MockStatic;
-struct MockComplex;
+struct MockMixed;
 
 impl MockFn2 for MockOwned {
     type Inputs<'i> = ();
@@ -42,10 +42,10 @@ impl MockFn2 for MockStatic {
     const NAME: &'static str = "";
 }
 
-impl MockFn2 for MockComplex {
+impl MockFn2 for MockMixed {
     type Inputs<'i> = ();
-    type Output = output::Complex<Option<&'static str>>;
-    type OutputSig<'u, 'i> = output::ComplexSig<Option<&'u str>>;
+    type Output = output::Mixed<Option<&'static str>>;
+    type OutputSig<'u, 'i> = output::MixedSig<Option<&'u str>>;
     const NAME: &'static str = "";
 }
 
@@ -58,8 +58,8 @@ fn test_owned() {
     MockBorrowedParam.some_call().returns_ref("foo");
     MockBorrowedParam.some_call().returns_ref("foo".to_string());
     MockStatic.some_call().returns("foo");
-    MockComplex.some_call().returns(Some("foo".to_string()));
-    MockComplex.some_call().returns(None);
+    MockMixed.some_call().returns(Some("foo".to_string()));
+    MockMixed.some_call().returns(None);
 }
 
 fn test_borrow_self_compiles<'u>(unimock: &Unimock) -> &str {

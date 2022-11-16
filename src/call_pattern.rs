@@ -321,7 +321,7 @@ fn find_responder_by_call_index2(
 
 #[cfg(test)]
 mod tests {
-    use crate::output::{Complex, ComplexSig, OutputSig};
+    use crate::output::{Mixed, MixedSig, OutputSig};
 
     use super::*;
 
@@ -358,8 +358,8 @@ mod tests {
 
         impl MockFn2 for Test {
             type Inputs<'i> = ();
-            type Output = Complex<Option<&'static str>>;
-            type OutputSig<'u, 'i> = ComplexSig<Option<&'u str>>;
+            type Output = Mixed<Option<&'static str>>;
+            type OutputSig<'u, 'i> = MixedSig<Option<&'u str>>;
             const NAME: &'static str = "Test";
         }
 

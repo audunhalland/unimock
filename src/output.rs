@@ -89,18 +89,18 @@ impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Self> for StaticRef<T> {
     type Sig = &'static T;
 }
 
-// Complex
+// Mixed
 
-pub struct Complex<T>(std::marker::PhantomData<T>);
-pub struct ComplexSig<T>(std::marker::PhantomData<T>);
+pub struct Mixed<T>(std::marker::PhantomData<T>);
+pub struct MixedSig<T>(std::marker::PhantomData<T>);
 
-impl<T: Possess<'static>> Output for Complex<T> {
+impl<T: Possess<'static>> Output for Mixed<T> {
     type Type = <T as Possess<'static>>::Possessed;
 }
 
-impl<T: Possess<'static>> OwnedOutput for Complex<T> {}
+impl<T: Possess<'static>> OwnedOutput for Mixed<T> {}
 
-impl<'u, 'i, T, O> OutputSig<'u, 'i, O> for ComplexSig<T>
+impl<'u, 'i, T, O> OutputSig<'u, 'i, O> for MixedSig<T>
 where
     O: Output,
     T: Possess<'u, Possessed = O::Type>,
