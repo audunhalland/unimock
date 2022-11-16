@@ -42,9 +42,11 @@ impl MockFn2 for MockComplex {
 
 #[test]
 fn test_owned() {
-    MockOwned.some_call().returns("");
-    MockBorrowed.some_call().returns_ref("");
-    MockStatic.some_call().returns("");
-    MockComplex.some_call().returns(Some(String::new()));
+    MockOwned.some_call().returns("foo");
+    MockOwned.some_call().returns("too".to_string());
+    MockBorrowed.some_call().returns_ref("foo");
+    MockBorrowed.some_call().returns_ref("foo".to_string());
+    MockStatic.some_call().returns("foo");
+    MockComplex.some_call().returns(Some("foo".to_string()));
     MockComplex.some_call().returns(None);
 }

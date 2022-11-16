@@ -80,7 +80,7 @@ impl<'u> EvalCtx<'u> {
                         }),
                     }
                 }
-                DynResponder2::Ref(inner) => {
+                DynResponder2::Borrow(inner) => {
                     let downcasted = inner.downcast::<F>()?;
                     let value = reference_output_sig::<F>(&downcasted.borrowable);
                     Ok(Evaluation2::Evaluated(value))

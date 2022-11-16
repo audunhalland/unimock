@@ -31,13 +31,13 @@ pub trait StoreOutputOld<'u>: OutputOld<'u> {
 }
 
 pub trait OwnedOutput: Output {}
-pub trait RefOutput: Output
+pub trait BorrowOutput: Output
 where
     <Self as Output>::Type: Send + Sync,
 {
 }
-pub trait IntoRefOutput<T: ?Sized>: Output {
-    fn into_ref_output(
+pub trait IntoBorrowOutputType<T: ?Sized>: Output {
+    fn into_borrow_output_type(
         value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
     ) -> <Self as Output>::Type;
 }
@@ -87,10 +87,10 @@ impl<T: ?Sized + 'static> Output for Ref<T> {
     type Type = Box<dyn Borrow<T> + Send + Sync>;
 }
 
-impl<T: ?Sized + 'static> RefOutput for Ref<T> {}
+impl<T: ?Sized + 'static> BorrowOutput for Ref<T> {}
 
-impl<T: ?Sized + 'static> IntoRefOutput<T> for Ref<T> {
-    fn into_ref_output(
+impl<T: ?Sized + 'static> IntoBorrowOutputType<T> for Ref<T> {
+    fn into_borrow_output_type(
         value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
     ) -> <Self as Output>::Type {
         Box::new(value)
@@ -130,6 +130,8 @@ pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
 impl<T: ?Sized + 'static> Output for StaticRef<T> {
     type Type = &'static T;
 }
+
+impl<T: ?Sized + 'static> OwnedOutput for StaticRef<T> {}
 
 impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for StaticRef<T> {
     type Sig = &'static T;

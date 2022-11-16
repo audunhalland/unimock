@@ -1,6 +1,6 @@
 use crate::debug;
 use crate::error::{MockError, MockResult};
-use crate::output::{Output, OutputOld, RefOutput, StaticRefOutputOld};
+use crate::output::Output;
 use crate::*;
 
 use std::any::Any;
@@ -186,13 +186,11 @@ pub(crate) struct DynCallOrderResponder2 {
 
 pub(crate) enum DynResponder2 {
     Owned(DynOwnedResponder2),
-    Ref(DynRefResponder2),
-    StaticRefClosure(DynStaticRefClosureResponder2),
+    Borrow(DynBorrowResponder2),
 }
 
 pub(crate) struct DynOwnedResponder2(AnyBox);
-pub(crate) struct DynRefResponder2(AnyBox);
-pub(crate) struct DynStaticRefClosureResponder2(AnyBox);
+pub(crate) struct DynBorrowResponder2(AnyBox);
 
 impl DynOwnedResponder2 {
     pub fn downcast<F: MockFn2>(&self) -> MockResult<&OwnedResponder2<F>> {
@@ -200,8 +198,8 @@ impl DynOwnedResponder2 {
     }
 }
 
-impl DynRefResponder2 {
-    pub fn downcast<F: MockFn2>(&self) -> MockResult<&RefResponder2<F>> {
+impl DynBorrowResponder2 {
+    pub fn downcast<F: MockFn2>(&self) -> MockResult<&BorrowResponder2<F>> {
         downcast_box(&self.0, "FAKE NAME")
     }
 }
@@ -210,20 +208,8 @@ pub(crate) struct OwnedResponder2<F: MockFn2> {
     pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output as Output>::Type>>,
 }
 
-pub(crate) struct RefResponder2<F: MockFn2> {
+pub(crate) struct BorrowResponder2<F: MockFn2> {
     pub borrowable: <F::Output as Output>::Type,
-}
-
-pub(crate) struct StaticRefClosureResponder2<F: MockFn2>
-where
-    for<'a> F::OutputOld<'a>: StaticRefOutputOld,
-{
-    #[allow(clippy::type_complexity)]
-    pub func: Box<
-        dyn (for<'i> Fn(F::Inputs<'i>) -> <F::OutputOld<'static> as OutputOld<'static>>::Type)
-            + Send
-            + Sync,
-    >,
 }
 
 impl<F: MockFn2> OwnedResponder2<F> {
@@ -232,22 +218,12 @@ impl<F: MockFn2> OwnedResponder2<F> {
     }
 }
 
-impl<F: MockFn2> RefResponder2<F>
+impl<F: MockFn2> BorrowResponder2<F>
 where
     <F::Output as Output>::Type: Send + Sync,
-    F::Output: RefOutput,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
-        DynResponder2::Ref(DynRefResponder2(Box::new(self)))
-    }
-}
-
-impl<F: MockFn2> StaticRefClosureResponder2<F>
-where
-    for<'u> F::OutputOld<'u>: StaticRefOutputOld,
-{
-    pub fn into_dyn_responder(self) -> DynResponder2 {
-        DynResponder2::StaticRefClosure(DynStaticRefClosureResponder2(Box::new(self)))
+        DynResponder2::Borrow(DynBorrowResponder2(Box::new(self)))
     }
 }
 

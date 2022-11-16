@@ -640,7 +640,7 @@ pub mod v2 {
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
-        F::Output: RefOutput,
+        F::Output: BorrowOutput,
         <F::Output as Output>::Type: Send + Sync,
     {
         pub fn returns_ref<T: ?Sized + Send + Sync>(
@@ -648,30 +648,11 @@ pub mod v2 {
             value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
         ) -> QuantifyTodo<'p, F, O>
         where
-            F::Output: IntoRefOutput<T>,
+            F::Output: IntoBorrowOutputType<T>,
         {
-            let borrowable = <F::Output as IntoRefOutput<T>>::into_ref_output(value);
+            let borrowable = <F::Output as IntoBorrowOutputType<T>>::into_borrow_output_type(value);
             self.builder
-                .push_responder2(RefResponder2::<F> { borrowable }.into_dyn_responder());
-            self.quantify()
-        }
-    }
-
-    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
-    where
-        for<'u> F::OutputOld<'u>: StaticRefOutputOld,
-        <F::OutputOld<'static> as OutputOld<'static>>::Type: Send + Sync + Copy + 'static,
-    {
-        pub fn returns(
-            mut self,
-            value: <F::OutputOld<'static> as OutputOld<'static>>::Type,
-        ) -> QuantifyTodo<'p, F, O> {
-            self.builder.push_responder2(
-                StaticRefClosureResponder2::<F> {
-                    func: Box::new(move |_| value),
-                }
-                .into_dyn_responder(),
-            );
+                .push_responder2(BorrowResponder2::<F> { borrowable }.into_dyn_responder());
             self.quantify()
         }
     }
