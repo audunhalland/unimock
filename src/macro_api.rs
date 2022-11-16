@@ -37,6 +37,25 @@ pub enum Evaluation2<'u, 'i, F: MockFn2> {
     Skipped(F::Inputs<'i>),
 }
 
+impl<'u, 'i, F: MockFn2> Evaluation2<'u, 'i, F> {
+    /// Unwrap the `Evaluated` variant, or panic.
+    /// The unimock instance must be passed in order to register that an eventual panic happened.
+    pub fn unwrap(
+        self,
+        unimock: &Unimock,
+    ) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
+        match self {
+            Self::Evaluated(output) => output,
+            Self::Skipped(_) => panic!(
+                "{}",
+                unimock
+                    .shared_state
+                    .prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
+            ),
+        }
+    }
+}
+
 /// A builder for argument matchers.
 pub struct Matching<F: MockFn> {
     pub(crate) mock_fn: std::marker::PhantomData<F>,

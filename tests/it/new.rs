@@ -23,15 +23,15 @@ impl MockFn2 for MockOwned {
 
 impl MockFn2 for MockBorrowed {
     type Inputs<'i> = ();
-    type Output = output::Ref<str>;
-    type OutputSig<'u, 'i> = output::RefSig<'u, str>;
+    type Output = output::Borrowed<str>;
+    type OutputSig<'u, 'i> = output::BorrowSelf<'u, str>;
     const NAME: &'static str = "";
 }
 
 impl MockFn2 for MockBorrowedParam {
-    type Inputs<'i> = ();
-    type Output = output::Ref<str>;
-    type OutputSig<'u, 'i> = output::RefSig<'u, str>;
+    type Inputs<'i> = &'i str;
+    type Output = output::Borrowed<str>;
+    type OutputSig<'u, 'i> = output::BorrowInputs<'i, str>;
     const NAME: &'static str = "";
 }
 
@@ -55,7 +55,17 @@ fn test_owned() {
     MockOwned.some_call().returns("too".to_string());
     MockBorrowed.some_call().returns_ref("foo");
     MockBorrowed.some_call().returns_ref("foo".to_string());
+    MockBorrowedParam.some_call().returns_ref("foo");
+    MockBorrowedParam.some_call().returns_ref("foo".to_string());
     MockStatic.some_call().returns("foo");
     MockComplex.some_call().returns(Some("foo".to_string()));
     MockComplex.some_call().returns(None);
+}
+
+fn test_borrow_self_compiles<'u>(unimock: &Unimock) -> &str {
+    unimock::macro_api::eval2::<MockBorrowed>(unimock, ()).unwrap(unimock)
+}
+
+fn test_borrow_param_compiles<'i>(unimock: &Unimock, input: &'i str) -> &'i str {
+    unimock::macro_api::eval2::<MockBorrowedParam>(unimock, input).unwrap(unimock)
 }

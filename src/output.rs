@@ -45,17 +45,17 @@ impl<'u, 'i, T: 'static> OutputSig<'u, 'i, Self> for Owned<T> {
 
 impl<T: 'static> OwnedOutput for Owned<T> {}
 
-// Ref
+// Borrowed
 
-pub struct Ref<T: ?Sized + 'static>(std::marker::PhantomData<T>);
+pub struct Borrowed<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 
-impl<T: ?Sized + 'static> Output for Ref<T> {
+impl<T: ?Sized + 'static> Output for Borrowed<T> {
     type Type = Box<dyn Borrow<T> + Send + Sync>;
 }
 
-impl<T: ?Sized + 'static> BorrowOutput for Ref<T> {}
+impl<T: ?Sized + 'static> BorrowOutput for Borrowed<T> {}
 
-impl<T: ?Sized + 'static> IntoBorrowOutputType<T> for Ref<T> {
+impl<T: ?Sized + 'static> IntoBorrowOutputType<T> for Borrowed<T> {
     fn into_borrow_output_type(
         value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
     ) -> <Self as Output>::Type {
@@ -63,10 +63,16 @@ impl<T: ?Sized + 'static> IntoBorrowOutputType<T> for Ref<T> {
     }
 }
 
-pub struct RefSig<'u, T: ?Sized + 'static>(std::marker::PhantomData<&'u T>);
+pub struct BorrowSelf<'u, T: ?Sized + 'static>(std::marker::PhantomData<&'u T>);
 
-impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Ref<T>> for RefSig<'u, T> {
+impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for BorrowSelf<'u, T> {
     type Sig = &'u T;
+}
+
+pub struct BorrowInputs<'i, T: ?Sized + 'static>(std::marker::PhantomData<&'i T>);
+
+impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for BorrowInputs<'i, T> {
+    type Sig = &'i T;
 }
 
 // Static
