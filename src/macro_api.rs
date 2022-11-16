@@ -84,7 +84,7 @@ pub fn eval2<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluati
 where
     F: MockFn2 + 'static,
 {
-    panic!()
+    unimock.handle_error(eval::EvalCtx::new2::<F>(&unimock.shared_state).eval2(inputs))
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.

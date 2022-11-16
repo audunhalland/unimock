@@ -999,4 +999,11 @@ impl DynMockFn {
             name: F::NAME,
         }
     }
+
+    pub fn new2<F: crate::MockFn2>() -> Self {
+        Self {
+            type_id: TypeId::of::<F>(),
+            name: "TODO",
+        }
+    }
 }

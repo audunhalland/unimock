@@ -59,7 +59,14 @@ impl<'u> EvalCtx<'u> {
         }
     }
 
-    pub(crate) fn eval2_generic<'i, F: MockFn2>(
+    pub fn new2<F: MockFn2>(shared_state: &'u SharedState) -> Self {
+        Self {
+            mock_fn: DynMockFn::new2::<F>(),
+            shared_state,
+        }
+    }
+
+    pub(crate) fn eval2<'i, F: MockFn2>(
         self,
         inputs: F::Inputs<'i>,
     ) -> MockResult<Evaluation2<'u, 'i, F>> {
@@ -85,7 +92,6 @@ impl<'u> EvalCtx<'u> {
                     let value = reference_output_sig::<F>(&downcasted.borrowable);
                     Ok(Evaluation2::Evaluated(value))
                 }
-                _ => todo!(),
             },
             EvalResult2::Unmock => Ok(Evaluation2::Skipped(inputs)),
         }
