@@ -1,4 +1,5 @@
 use crate::debug;
+use crate::output::OutputOld;
 use crate::{call_pattern::MatchingFn, *};
 
 /// The evaluation of a [MockFn].
@@ -27,6 +28,13 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
             ),
         }
     }
+}
+
+pub enum Evaluation2<'u, 'i, F: MockFn2> {
+    /// Function evaluated to its output.
+    Evaluated(<F::OutputOld<'u> as OutputOld<'u>>::Type),
+    /// Function not yet evaluated.
+    Skipped(F::Inputs<'i>),
 }
 
 /// A builder for argument matchers.
@@ -69,6 +77,14 @@ where
             line,
         });
     }
+}
+
+#[track_caller]
+pub fn eval2<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation2<'u, 'i, F>
+where
+    F: MockFn2 + 'static,
+{
+    panic!()
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.

@@ -4,7 +4,7 @@ use std::{
 };
 
 pub trait Possess<'a> {
-    type Possessed;
+    type Possessed: 'static;
 
     fn reborrow(value: &'a Self::Possessed) -> Self;
 }
@@ -33,7 +33,7 @@ impl<'a> Possess<'a> for &'a OsStr {
     }
 }
 
-impl<'a, T> Possess<'a> for &'a [T] {
+impl<'a, T: 'static> Possess<'a> for &'a [T] {
     type Possessed = Vec<T>;
 
     fn reborrow(value: &'a Self::Possessed) -> Self {
@@ -77,7 +77,7 @@ macro_rules! possess_identity {
             type Possessed = $i;
 
             fn reborrow(value: &Self::Possessed) -> Self {
-                *value
+                value.clone()
             }
         }
 
@@ -103,3 +103,4 @@ possess_identity!(i32);
 possess_identity!(i64);
 possess_identity!(i128);
 possess_identity!(char);
+possess_identity!(String);

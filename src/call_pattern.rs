@@ -1,6 +1,8 @@
 use crate::debug;
 use crate::error::{MockError, MockResult};
-use crate::output::{ComplexOutput, Output, OwnedOutput, RefOutput, StaticRefOutput, StoreOutput};
+use crate::output::{
+    ComplexOutput, OutputOld, OwnedOutput, RefOutput, StaticRefOutput, StoreOutputOld,
+};
 use crate::*;
 
 use std::any::Any;
@@ -25,6 +27,7 @@ fn downcast_box<'b, T: 'static>(any_box: &'b AnyBox, name: &'static str) -> Mock
 pub(crate) struct CallPattern {
     pub input_matcher: DynInputMatcher,
     pub responders: Vec<DynCallOrderResponder>,
+    pub responders2: Vec<DynCallOrderResponder2>,
     pub ordered_call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
 }
@@ -37,6 +40,10 @@ impl CallPattern {
         Ok((func.0)(inputs))
     }
 
+    pub fn match_inputs2<F: MockFn2>(&self, inputs: &F::Inputs<'_>) -> MockResult<bool> {
+        Ok(true)
+    }
+
     pub fn debug_location(&self, pat_index: PatIndex) -> debug::CallPatternLocation {
         if let Some(debug) = self.input_matcher.pat_debug {
             debug::CallPatternLocation::Debug(debug)
@@ -47,6 +54,10 @@ impl CallPattern {
 
     pub fn next_responder(&self) -> Option<&DynResponder> {
         find_responder_by_call_index(&self.responders, self.call_counter.fetch_add())
+    }
+
+    pub fn next_responder2(&self) -> Option<&DynResponder2> {
+        find_responder_by_call_index2(&self.responders2, self.call_counter.fetch_add())
     }
 }
 
@@ -187,10 +198,19 @@ pub(crate) struct DynRefResponder2(AnyBox);
 pub(crate) struct DynStaticRefClosureResponder2(AnyBox);
 pub(crate) struct DynComplexValueResponder2(AnyBox);
 
+impl DynOwnedResponder2 {
+    pub fn downcast<F: MockFn2>(&self) -> MockResult<&OwnedResponder2<F>>
+    where
+        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+    {
+        downcast_box(&self.0, "FAKE_NAME")
+    }
+}
+
 impl DynComplexValueResponder2 {
     pub fn downcast<F: MockFn2>(&self) -> MockResult<&ComplexValueResponder2<F>>
     where
-        for<'u> F::Output<'u>: StoreOutput<'u>,
+        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
     {
         downcast_box(&self.0, "FAKE NAME")
     }
@@ -198,25 +218,27 @@ impl DynComplexValueResponder2 {
 
 pub(crate) struct OwnedResponder2<F: MockFn2>
 where
-    for<'u> F::Output<'u>: OwnedOutput<'u>,
+    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
 {
-    pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output<'static> as Output<'static>>::Type>>,
+    pub stored_value:
+        Box<dyn CloneOrTakeOrBorrow<<F::OutputOld<'static> as OutputOld<'static>>::Type>>,
 }
 
 pub(crate) struct RefResponder2<F: MockFn2>
 where
-    for<'u> F::Output<'u>: RefOutput<'u>,
+    for<'a> F::OutputOld<'a>: RefOutput<'a>,
 {
-    pub borrowable: Box<dyn Borrow<<F::Output<'static> as Output<'static>>::Type> + Send + Sync>,
+    pub borrowable:
+        Box<dyn Borrow<<F::OutputOld<'static> as OutputOld<'static>>::Type> + Send + Sync>,
 }
 
 pub(crate) struct StaticRefClosureResponder2<F: MockFn2>
 where
-    for<'u> F::Output<'u>: StaticRefOutput,
+    for<'a> F::OutputOld<'a>: StaticRefOutput,
 {
     #[allow(clippy::type_complexity)]
     pub func: Box<
-        dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Output<'static> as Output<'static>>::Type)
+        dyn (for<'i> Fn(F::Inputs<'i>) -> <F::OutputOld<'static> as OutputOld<'static>>::Type)
             + Send
             + Sync,
     >,
@@ -224,15 +246,15 @@ where
 
 pub(crate) struct ComplexValueResponder2<F: MockFn2>
 where
-    for<'u> F::Output<'u>: StoreOutput<'u>,
+    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
 {
     pub stored_value:
-        Box<dyn CloneOrTakeOrBorrow<<F::Output<'static> as StoreOutput<'static>>::Stored>>,
+        Box<dyn CloneOrTakeOrBorrow<<F::OutputOld<'static> as StoreOutputOld<'static>>::Stored>>,
 }
 
 impl<F: MockFn2> OwnedResponder2<F>
 where
-    for<'u> F::Output<'u>: OwnedOutput<'u>,
+    for<'u> F::OutputOld<'u>: OwnedOutput<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Owned(DynOwnedResponder2(Box::new(self)))
@@ -241,7 +263,7 @@ where
 
 impl<F: MockFn2> RefResponder2<F>
 where
-    for<'u> F::Output<'u>: RefOutput<'u>,
+    for<'u> F::OutputOld<'u>: RefOutput<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Ref(DynRefResponder2(Box::new(self)))
@@ -250,7 +272,7 @@ where
 
 impl<F: MockFn2> StaticRefClosureResponder2<F>
 where
-    for<'u> F::Output<'u>: StaticRefOutput,
+    for<'u> F::OutputOld<'u>: StaticRefOutput,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::StaticRefClosure(DynStaticRefClosureResponder2(Box::new(self)))
@@ -259,14 +281,14 @@ where
 
 impl<F: MockFn2> ComplexValueResponder2<F>
 where
-    for<'u> F::Output<'u>: ComplexOutput<'u>,
+    for<'u> F::OutputOld<'u>: ComplexOutput<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::ComplexValue(DynComplexValueResponder2(Box::new(self)))
     }
 }
 
-pub(crate) trait CloneOrTakeOrBorrow<T: ?Sized>: Send + Sync {
+pub(crate) trait CloneOrTakeOrBorrow<T: ?Sized + 'static>: Send + Sync {
     fn box_take_or_clone(&self) -> Option<Box<T>>;
 
     fn borrow_stored(&self) -> &T;
@@ -274,7 +296,7 @@ pub(crate) trait CloneOrTakeOrBorrow<T: ?Sized>: Send + Sync {
 
 pub(crate) struct StoredValueSlot<T>(pub T);
 
-impl<T: Clone + Send + Sync> CloneOrTakeOrBorrow<T> for StoredValueSlot<T> {
+impl<T: Clone + Send + Sync + 'static> CloneOrTakeOrBorrow<T> for StoredValueSlot<T> {
     fn box_take_or_clone(&self) -> Option<Box<T>> {
         Some(Box::new(self.0.clone()))
     }
@@ -298,7 +320,7 @@ impl<T> StoredValueSlotOnce<T> {
     }
 }
 
-impl<T: Send + Sync> CloneOrTakeOrBorrow<T> for StoredValueSlotOnce<T> {
+impl<T: Send + Sync + 'static> CloneOrTakeOrBorrow<T> for StoredValueSlotOnce<T> {
     fn box_take_or_clone(&self) -> Option<Box<T>> {
         let mut lock = self.initial_value.lock().unwrap();
         lock.take().map(|value| Box::new(value))
@@ -341,9 +363,26 @@ fn find_responder_by_call_index(
     })
 }
 
+fn find_responder_by_call_index2(
+    responders: &[DynCallOrderResponder2],
+    call_index: usize,
+) -> Option<&DynResponder2> {
+    if responders.is_empty() {
+        return None;
+    }
+
+    let index_result =
+        responders.binary_search_by(|responder| responder.response_index.cmp(&call_index));
+
+    Some(match index_result {
+        Ok(index) => &responders[index].responder,
+        Err(insert_index) => &responders[insert_index - 1].responder,
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::output::Complex;
+    use crate::output::{Complex, ComplexOld, ComplexSig};
 
     use super::*;
 
@@ -380,7 +419,9 @@ mod tests {
 
         impl MockFn2 for Test {
             type Inputs<'i> = ();
-            type Output<'u> = Complex<'u, Option<&'u str>>;
+            type Output = Complex<Option<&'static str>>;
+            type OutputSig<'u> = ComplexSig<Option<&'u str>>;
+            type OutputOld<'u> = ComplexOld<'u, Option<&'u str>>;
         }
 
         let q = Test.some_call().returns(Some("fancy".to_string()));
@@ -396,17 +437,47 @@ mod tests {
             Err(_) => panic!(),
         };
         let borrowed_stored: &Option<String> = complex_resp.stored_value.borrow_stored();
-        let reborrowed = util_reborrow_complex::<Test>(borrowed_stored).unwrap();
+        let reborrowed = load_ref::<Test>(borrowed_stored).unwrap();
 
         assert_eq!(Some("fancy"), reborrowed);
     }
 
-    fn util_reborrow_complex<'u, F: MockFn2>(
-        stored: &'u <F::Output<'u> as StoreOutput<'u>>::Stored,
-    ) -> Option<<F::Output<'u> as Output<'u>>::Type>
+    fn load_stored_complex<'u, 'u2, F: MockFn2>(
+        responder: &'u DynCallOrderResponder2,
+    ) -> &'u <F::OutputOld<'u2> as StoreOutputOld<'u2>>::Stored
     where
-        F::Output<'u>: StoreOutput<'u>,
+        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
     {
-        <F::Output<'u> as StoreOutput<'u>>::reborrow_complex(stored)
+        let complex_resp = downcast_complex(responder);
+        let stored = complex_resp.stored_value.borrow_stored();
+
+        // stored
+        todo!()
+    }
+
+    fn downcast_complex<'u, F: MockFn2>(
+        responder: &'u DynCallOrderResponder2,
+    ) -> &'u ComplexValueResponder2<F>
+    where
+        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+    {
+        let dyn_complex_resp = match &responder.responder {
+            DynResponder2::ComplexValue(c) => c,
+            _ => panic!(),
+        };
+
+        match dyn_complex_resp.downcast::<F>() {
+            Ok(r) => r,
+            Err(_) => panic!(),
+        }
+    }
+
+    fn load_ref<'u, F: MockFn2>(
+        stored: &'u <F::OutputOld<'u> as StoreOutputOld<'u>>::Stored,
+    ) -> Option<<F::OutputOld<'u> as OutputOld<'u>>::Type>
+    where
+        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+    {
+        <F::OutputOld<'u> as StoreOutputOld<'u>>::load_ref(stored)
     }
 }

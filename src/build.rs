@@ -619,13 +619,13 @@ pub mod v2 {
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
-        for<'u> F::Output<'u>: OwnedOutput<'u>,
-        for<'u> <F::Output<'u> as Output<'u>>::Type: Clone + Send + Sync,
+        for<'u> F::OutputOld<'u>: OwnedOutput<'u>,
+        for<'u> <F::OutputOld<'u> as OutputOld<'u>>::Type: Clone + Send + Sync,
     {
         // FIXME: Should return a Quantify object and not require clone
         pub fn returns(
             mut self,
-            value: impl Into<<F::Output<'static> as Output<'static>>::Type>,
+            value: impl Into<<F::OutputOld<'static> as OutputOld<'static>>::Type>,
         ) -> QuantifyTodo<'p, F, O> {
             let value = value.into();
             self.builder.push_responder2(
@@ -640,12 +640,12 @@ pub mod v2 {
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
-        for<'u> F::Output<'u>: RefOutput<'u>,
-        <F::Output<'static> as Output<'static>>::Type: Send + Sync + 'static,
+        for<'u> F::OutputOld<'u>: RefOutput<'u>,
+        <F::OutputOld<'static> as OutputOld<'static>>::Type: Send + Sync + 'static,
     {
         pub fn returns(
             mut self,
-            value: impl std::borrow::Borrow<<F::Output<'static> as Output<'static>>::Type>
+            value: impl std::borrow::Borrow<<F::OutputOld<'static> as OutputOld<'static>>::Type>
                 + Send
                 + Sync
                 + 'static,
@@ -662,12 +662,12 @@ pub mod v2 {
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
-        for<'u> F::Output<'u>: StaticRefOutput,
-        <F::Output<'static> as Output<'static>>::Type: Send + Sync + Copy + 'static,
+        for<'u> F::OutputOld<'u>: StaticRefOutput,
+        <F::OutputOld<'static> as OutputOld<'static>>::Type: Send + Sync + Copy + 'static,
     {
         pub fn returns(
             mut self,
-            value: <F::Output<'static> as Output<'static>>::Type,
+            value: <F::OutputOld<'static> as OutputOld<'static>>::Type,
         ) -> QuantifyTodo<'p, F, O> {
             self.builder.push_responder2(
                 StaticRefClosureResponder2::<F> {
@@ -681,12 +681,12 @@ pub mod v2 {
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
-        for<'u> F::Output<'u>: ComplexOutput<'u>,
-        for<'u> <F::Output<'u> as StoreOutput<'u>>::Stored: Clone + Send + Sync,
+        for<'u> F::OutputOld<'u>: ComplexOutput<'u>,
+        for<'u> <F::OutputOld<'u> as StoreOutputOld<'u>>::Stored: Clone + Send + Sync,
     {
         pub fn returns(
             mut self,
-            value: impl Into<<F::Output<'static> as StoreOutput<'static>>::Stored>,
+            value: impl Into<<F::OutputOld<'static> as StoreOutputOld<'static>>::Stored>,
         ) -> QuantifyTodo<'p, F, O> {
             let value = value.into();
             self.builder.push_responder2(

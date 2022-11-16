@@ -1,16 +1,20 @@
-use crate::call_pattern::{CallPattern, DynResponder, PatIndex};
-use crate::debug;
+use crate::call_pattern::{
+    CallPattern, ComplexValueResponder2, DynComplexValueResponder2, DynResponder, DynResponder2,
+    PatIndex,
+};
 use crate::error;
 use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::macro_api::Evaluation;
+use crate::macro_api::{Evaluation, Evaluation2};
+use crate::output::{ComplexOutput, OutputOld, StoreOutputOld};
 use crate::state::SharedState;
 use crate::DynMockFn;
+use crate::{debug, MockFn2};
 use crate::{FallbackMode, MockFn};
 
 use std::borrow::Borrow;
 
-enum Eval<'u> {
+enum EvalResult<'u> {
     Responder(EvalResponder<'u>),
     Unmock,
 }
@@ -27,10 +31,139 @@ impl<'u> EvalResponder<'u> {
     }
 }
 
+enum EvalResult2<'u> {
+    Responder(EvalResponder2<'u>),
+    Unmock,
+}
+
+struct EvalResponder2<'u> {
+    fn_mocker: &'u FnMocker,
+    pat_index: PatIndex,
+    responder: &'u DynResponder2,
+}
+
+impl<'u> EvalResponder2<'u> {
+    fn debug_pattern(&self) -> debug::CallPatternDebug {
+        self.fn_mocker.debug_pattern(self.pat_index)
+    }
+}
+
 /// 'u = unimock instance
 pub(crate) struct EvalCtx<'u> {
     mock_fn: DynMockFn,
     shared_state: &'u SharedState,
+}
+
+pub(crate) fn eval2_complex<'u, 'i, F: MockFn2>(
+    mock_fn: DynMockFn,
+    shared_state: &'u SharedState,
+    inputs: F::Inputs<'i>,
+) -> MockResult<Evaluation2<'u, 'i, F>>
+where
+    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+{
+    let input_debugger = &|| "TODO: Implement input debug".to_string();
+    let dyn_ctx = DynCtx {
+        mock_fn,
+        shared_state,
+        input_debugger,
+    };
+
+    match dyn_ctx.eval2(&|pattern| pattern.match_inputs2::<F>(&inputs))? {
+        EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
+            DynResponder2::ComplexValue(inner) => {
+                let responder = inner.downcast::<F>()?;
+                //let stored = inner.downcast::<F>()?.stored_value.borrow_stored();
+                //let r = <F::Output<'_>>::load_ref(stored);
+
+                todo!();
+            }
+            _ => todo!(),
+        },
+        EvalResult2::Unmock => Ok(Evaluation2::Skipped(inputs)),
+    }
+}
+
+pub(crate) fn get_complex_responder<'u, 'i, F: MockFn2>(
+    mock_fn: DynMockFn,
+    shared_state: &'u SharedState,
+    inputs: F::Inputs<'i>,
+) -> MockResult<&'u ComplexValueResponder2<F>>
+where
+    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+{
+    let input_debugger = &|| "TODO: Implement input debug".to_string();
+    let dyn_ctx = DynCtx {
+        mock_fn,
+        shared_state,
+        input_debugger,
+    };
+
+    match dyn_ctx.eval2(&|pattern| pattern.match_inputs2::<F>(&inputs))? {
+        EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
+            DynResponder2::ComplexValue(inner) => {
+                match inner.downcast::<F>() {
+                    Ok(r) => Ok(r),
+                    Err(_) => panic!(),
+                }
+                //let stored = inner.downcast::<F>()?.stored_value.borrow_stored();
+                //let r = <F::Output<'_>>::load_ref(stored);
+            }
+            _ => todo!(),
+        },
+        EvalResult2::Unmock => panic!(),
+    }
+}
+
+pub(crate) fn test_complex_answer<'u, F: MockFn2>(
+    resp: &'u ComplexValueResponder2<F>,
+) -> Option<<F::OutputOld<'u> as OutputOld>::Type>
+where
+    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+{
+    panic!();
+    /*
+    let stored = resp.stored_value.borrow_stored();
+    load_ref(stored);
+    */
+    // <F::Output<'u> as StoreOutput<'u>>::load_ref(value);
+
+    todo!()
+}
+
+pub(crate) fn just_load<F: MockFn2>(resp: &ComplexValueResponder2<F>)
+where
+    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+{
+    todo!()
+    //let stored = resp.stored_value.borrow_stored();
+    //load_ref(stored);
+}
+
+fn load_from_dyn<F: MockFn2>()
+where
+    for<'a> F::OutputOld<'a>: ComplexOutput<'a>,
+{
+    let dyn_complex = fake_dyn_complex();
+    let complex_resp = match dyn_complex.downcast::<F>() {
+        Ok(r) => r,
+        Err(_) => panic!(),
+    };
+    let borrowed_stored = complex_resp.stored_value.borrow_stored();
+    // let reborrowed: <F::Output<'_> as Output>::Type = load_ref::<F>(borrowed_stored).unwrap();
+}
+
+fn fake_dyn_complex() -> DynComplexValueResponder2 {
+    panic!()
+}
+
+fn load_ref<'u, F: MockFn2>(
+    stored: &'u <F::OutputOld<'u> as StoreOutputOld<'u>>::Stored,
+) -> Option<<F::OutputOld<'u> as OutputOld<'u>>::Type>
+where
+    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+{
+    <F::OutputOld<'u> as StoreOutputOld<'u>>::load_ref(stored)
 }
 
 impl<'u> EvalCtx<'u> {
@@ -38,6 +171,33 @@ impl<'u> EvalCtx<'u> {
         Self {
             mock_fn: DynMockFn::new::<F>(),
             shared_state,
+        }
+    }
+
+    pub(crate) fn eval2_owned<'i, F: MockFn2>(
+        self,
+        inputs: F::Inputs<'i>,
+    ) -> MockResult<Evaluation2<'static, 'i, F>>
+    where
+        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
+    {
+        let input_debugger = &|| "TODO: Implement input debug".to_string();
+        let dyn_ctx = self.into_dyn_ctx(input_debugger);
+
+        match dyn_ctx.eval2(&|pattern| pattern.match_inputs2::<F>(&inputs))? {
+            EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
+                DynResponder2::Owned(inner) => {
+                    match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
+                        Some(value) => Ok(Evaluation2::Evaluated(*value)),
+                        None => Err(MockError::CannotReturnValueMoreThanOnce {
+                            fn_call: dyn_ctx.fn_call(),
+                            pattern: eval_rsp.debug_pattern(),
+                        }),
+                    }
+                }
+                _ => todo!(),
+            },
+            EvalResult2::Unmock => Ok(Evaluation2::Skipped(inputs)),
         }
     }
 
@@ -53,7 +213,7 @@ impl<'u> EvalCtx<'u> {
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
         match dyn_ctx.eval(&|pattern| pattern.match_inputs::<F>(&inputs))? {
-            Eval::Responder(eval_rsp) => match eval_rsp.responder {
+            EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder::Value(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
                         Some(value) => Ok(Evaluation::Evaluated(*value)),
@@ -69,7 +229,7 @@ impl<'u> EvalCtx<'u> {
                 DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
                 _ => Err(dyn_ctx.sized_error(eval_rsp)),
             },
-            Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
+            EvalResult::Unmock => Ok(Evaluation::Skipped(inputs)),
         }
     }
 
@@ -81,7 +241,7 @@ impl<'u> EvalCtx<'u> {
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
         match dyn_ctx.eval(&|pattern| pattern.match_inputs::<F>(&inputs))? {
-            Eval::Responder(eval_rsp) => match eval_rsp.responder {
+            EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder::Value(inner) => Ok(Evaluation::Evaluated(
                     inner.downcast::<F>()?.stored_value.borrow_stored(),
                 )),
@@ -97,7 +257,7 @@ impl<'u> EvalCtx<'u> {
                 DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
                 _ => Err(dyn_ctx.unsized_self_borrowed_error(eval_rsp)),
             },
-            Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
+            EvalResult::Unmock => Ok(Evaluation::Skipped(inputs)),
         }
     }
 
@@ -110,14 +270,14 @@ impl<'u> EvalCtx<'u> {
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
         match dyn_ctx.eval(&|pattern| pattern.match_inputs::<F>(&inputs))? {
-            Eval::Responder(eval_rsp) => match eval_rsp.responder {
+            EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder::StaticRefClosure(inner) => {
                     Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
                 }
                 DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
                 _ => Err(dyn_ctx.unsized_static_borrow_error(eval_rsp, lender)),
             },
-            Eval::Unmock => Ok(Evaluation::Skipped(inputs)),
+            EvalResult::Unmock => Ok(Evaluation::Skipped(inputs)),
         }
     }
 
@@ -204,10 +364,10 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 
     #[inline(never)]
-    fn eval(
+    fn eval2(
         &self,
         match_inputs: &dyn Fn(&CallPattern) -> MockResult<bool>,
-    ) -> MockResult<Eval<'u>> {
+    ) -> MockResult<EvalResult2<'u>> {
         let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
             None => match self.shared_state.fallback_mode {
                 FallbackMode::Error => {
@@ -215,14 +375,14 @@ impl<'u, 's> DynCtx<'u, 's> {
                         name: self.mock_fn.name,
                     })
                 }
-                FallbackMode::Unmock => return Ok(Eval::Unmock),
+                FallbackMode::Unmock => return Ok(EvalResult2::Unmock),
             },
             Some(fn_mocker) => fn_mocker,
         };
 
         match self.match_call_pattern(fn_mocker, match_inputs)? {
-            Some((pat_index, pattern)) => match pattern.next_responder() {
-                Some(responder) => Ok(Eval::Responder(EvalResponder {
+            Some((pat_index, pattern)) => match pattern.next_responder2() {
+                Some(responder) => Ok(EvalResult2::Responder(EvalResponder2 {
                     fn_mocker,
                     pat_index,
                     responder,
@@ -236,7 +396,45 @@ impl<'u, 's> DynCtx<'u, 's> {
                 FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
                     fn_call: self.fn_call(),
                 }),
-                FallbackMode::Unmock => Ok(Eval::Unmock),
+                FallbackMode::Unmock => Ok(EvalResult2::Unmock),
+            },
+        }
+    }
+
+    #[inline(never)]
+    fn eval(
+        &self,
+        match_inputs: &dyn Fn(&CallPattern) -> MockResult<bool>,
+    ) -> MockResult<EvalResult<'u>> {
+        let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
+            None => match self.shared_state.fallback_mode {
+                FallbackMode::Error => {
+                    return Err(MockError::NoMockImplementation {
+                        name: self.mock_fn.name,
+                    })
+                }
+                FallbackMode::Unmock => return Ok(EvalResult::Unmock),
+            },
+            Some(fn_mocker) => fn_mocker,
+        };
+
+        match self.match_call_pattern(fn_mocker, match_inputs)? {
+            Some((pat_index, pattern)) => match pattern.next_responder() {
+                Some(responder) => Ok(EvalResult::Responder(EvalResponder {
+                    fn_mocker,
+                    pat_index,
+                    responder,
+                })),
+                None => Err(MockError::NoOutputAvailableForCallPattern {
+                    fn_call: self.fn_call(),
+                    pattern: fn_mocker.debug_pattern(pat_index),
+                }),
+            },
+            None => match self.shared_state.fallback_mode {
+                FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
+                    fn_call: self.fn_call(),
+                }),
+                FallbackMode::Unmock => Ok(EvalResult::Unmock),
             },
         }
     }

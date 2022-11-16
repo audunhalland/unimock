@@ -1,77 +1,162 @@
 use crate::possess::Possess;
 use std::borrow::Borrow;
 
-pub trait Output<'u> {
+pub trait Output {
+    type Type: 'static;
+}
+
+pub trait OutputSig<'u, O: Output> {
+    type Sig;
+}
+
+pub trait OutputOld<'u> {
     type Type;
 }
 
-pub trait StoreOutput<'u>: Output<'u> {
-    type Stored: Send + Sync;
+pub trait StoreOutputOld<'u>: OutputOld<'u> {
+    type Stored: Send + Sync + 'static;
 
-    fn reborrow_complex(stored: &'u Self::Stored) -> Option<Self::Type> {
+    fn load(stored: Self::Stored) -> Option<Self::Type>;
+
+    fn load_ref(stored: &'u Self::Stored) -> Option<Self::Type>;
+}
+
+pub trait OwnedOutput<'u>: StoreOutputOld<'u> {}
+pub trait RefOutput<'u>: StoreOutputOld<'u> {}
+pub trait StaticRefOutput: StoreOutputOld<'static> {}
+pub trait ComplexOutput<'u>: StoreOutputOld<'u> {}
+
+pub struct Owned<T>(std::marker::PhantomData<T>);
+
+impl<T: 'static> Output for Owned<T> {
+    type Type = T;
+}
+
+impl<'u, T: 'static> OutputSig<'u, Self> for Owned<T> {
+    type Sig = T;
+}
+
+impl<'u, T: 'static> OutputOld<'u> for Owned<T> {
+    type Type = T;
+}
+
+impl<'u, T: Send + Sync + 'static> StoreOutputOld<'u> for Owned<T> {
+    type Stored = T;
+
+    fn load(stored: Self::Stored) -> Option<Self::Type> {
+        Some(stored)
+    }
+
+    fn load_ref(_: &'u Self::Stored) -> Option<Self::Type> {
         None
     }
 }
 
-pub trait OwnedOutput<'u>: StoreOutput<'u> {}
-pub trait RefOutput<'u>: StoreOutput<'u> {}
-pub trait StaticRefOutput: StoreOutput<'static> {}
-pub trait ComplexOutput<'u>: StoreOutput<'u> {}
+impl<'u, T: Send + Sync + 'static> OwnedOutput<'u> for Owned<T> {}
 
-pub struct Owned<T: ?Sized>(std::marker::PhantomData<T>);
+pub struct Ref<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 
-impl<'u, T> Output<'u> for Owned<T> {
-    type Type = T;
+impl<T: ?Sized + 'static> Output for Ref<T> {
+    type Type = Box<dyn Borrow<T> + Send + Sync>;
 }
 
-impl<'u, T: Send + Sync> StoreOutput<'u> for Owned<T> {
-    type Stored = T;
+pub struct RefSig<'u, T: ?Sized + 'static>(std::marker::PhantomData<&'u T>);
+
+impl<'u, T: ?Sized + 'static> OutputSig<'u, Ref<T>> for RefSig<'u, T> {
+    type Sig = &'u T;
 }
 
-impl<'u, T: Send + Sync> OwnedOutput<'u> for Owned<T> {}
+pub struct RefOld<'a, T: ?Sized>(std::marker::PhantomData<&'a T>);
 
-pub struct Ref<'a, T: ?Sized>(std::marker::PhantomData<&'a T>);
-
-impl<'u, T: ?Sized> Output<'u> for Ref<'u, T> {
+impl<'u, T: ?Sized> OutputOld<'u> for RefOld<'u, T> {
     type Type = &'u T;
 }
 
-impl<'u, T: ?Sized> StoreOutput<'u> for Ref<'u, T> {
+impl<'u, T: ?Sized + 'static> StoreOutputOld<'u> for RefOld<'u, T> {
     type Stored = Box<dyn Borrow<T> + Send + Sync>;
+
+    fn load(_: Self::Stored) -> Option<Self::Type> {
+        None
+    }
+
+    fn load_ref(stored: &'u Self::Stored) -> Option<Self::Type> {
+        Some(stored.as_ref().borrow())
+    }
 }
 
-impl<'u, T: ?Sized> RefOutput<'u> for Ref<'u, T> {}
+impl<'u, T: ?Sized + 'static> RefOutput<'u> for RefOld<'u, T> {}
 
 pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
 
-impl<'u, T: ?Sized + 'static> Output<'u> for StaticRef<T> {
+impl<T: ?Sized + 'static> Output for StaticRef<T> {
     type Type = &'static T;
 }
 
-impl<T: ?Sized + 'static + Send + Sync> StoreOutput<'static> for StaticRef<T> {
+impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for StaticRef<T> {
+    type Sig = &'static T;
+}
+
+impl<'u, T: ?Sized + 'static> OutputOld<'u> for StaticRef<T> {
+    type Type = &'static T;
+}
+
+impl<T: ?Sized + 'static + Send + Sync> StoreOutputOld<'static> for StaticRef<T> {
     type Stored = &'static T;
+
+    fn load(stored: Self::Stored) -> Option<Self::Type> {
+        Some(stored)
+    }
+
+    fn load_ref(stored: &'static Self::Stored) -> Option<Self::Type> {
+        Some(*stored)
+    }
 }
 
 impl<T: ?Sized + 'static + Send + Sync> StaticRefOutput for StaticRef<T> {}
 
-pub struct Complex<'u, T: ?Sized + Possess<'u>>(std::marker::PhantomData<&'u T>);
+pub struct Complex<T>(std::marker::PhantomData<T>);
+pub struct ComplexSig<T>(std::marker::PhantomData<T>);
 
-impl<'u, T: Possess<'u>> Output<'u> for Complex<'u, T> {
+impl<T: Possess<'static>> Output for Complex<T> {
+    type Type = <T as Possess<'static>>::Possessed;
+}
+
+impl<'a, T, O> OutputSig<'a, O> for ComplexSig<T>
+where
+    O: Output,
+    T: Possess<'a, Possessed = O::Type>,
+{
+    type Sig = T;
+
+    /*
+    fn project_ref(value: &'a <O as Output>::Type) -> Option<Self::Sig> {
+        Some(<S as Possess>::reborrow(value))
+    }
+    */
+}
+
+pub struct ComplexOld<'u, T: ?Sized + Possess<'u>>(std::marker::PhantomData<&'u T>);
+
+impl<'u, T: Possess<'u>> OutputOld<'u> for ComplexOld<'u, T> {
     type Type = T;
 }
 
-impl<'u, T: Possess<'u>> StoreOutput<'u> for Complex<'u, T>
+impl<'u, T: Possess<'u>> StoreOutputOld<'u> for ComplexOld<'u, T>
 where
     <T as Possess<'u>>::Possessed: Send + Sync,
 {
     type Stored = <T as Possess<'u>>::Possessed;
 
-    fn reborrow_complex(stored: &'u Self::Stored) -> Option<Self::Type> {
+    fn load(_: Self::Stored) -> Option<Self::Type> {
+        None
+    }
+
+    fn load_ref(stored: &'u Self::Stored) -> Option<Self::Type> {
         Some(<T as Possess>::reborrow(stored))
     }
 }
 
-impl<'u, T: Possess<'u>> ComplexOutput<'u> for Complex<'u, T> where
+impl<'u, T: Possess<'u>> ComplexOutput<'u> for ComplexOld<'u, T> where
     <T as Possess<'u>>::Possessed: Send + Sync
 {
 }
