@@ -7,6 +7,14 @@ pub trait Output {
 
 pub trait OutputSig<'u, O: Output> {
     type Sig;
+
+    fn project(value: O::Type) -> Option<Self::Sig> {
+        None
+    }
+
+    fn project_ref(value: &'u O::Type) -> Option<Self::Sig> {
+        None
+    }
 }
 
 pub trait OutputOld<'u> {
@@ -21,10 +29,14 @@ pub trait StoreOutputOld<'u>: OutputOld<'u> {
     fn load_ref(stored: &'u Self::Stored) -> Option<Self::Type>;
 }
 
-pub trait OwnedOutput<'u>: StoreOutputOld<'u> {}
-pub trait RefOutput<'u>: StoreOutputOld<'u> {}
-pub trait StaticRefOutput: StoreOutputOld<'static> {}
-pub trait ComplexOutput<'u>: StoreOutputOld<'u> {}
+pub trait OwnedOutput: Output {}
+
+pub trait OwnedOutputOld<'u>: StoreOutputOld<'u> {}
+pub trait RefOutputOld<'u>: StoreOutputOld<'u> {}
+pub trait StaticRefOutputOld: StoreOutputOld<'static> {}
+pub trait ComplexOutputOld<'u>: StoreOutputOld<'u> {}
+
+// Owned
 
 pub struct Owned<T>(std::marker::PhantomData<T>);
 
@@ -35,6 +47,8 @@ impl<T: 'static> Output for Owned<T> {
 impl<'u, T: 'static> OutputSig<'u, Self> for Owned<T> {
     type Sig = T;
 }
+
+impl<T: 'static> OwnedOutput for Owned<T> {}
 
 impl<'u, T: 'static> OutputOld<'u> for Owned<T> {
     type Type = T;
@@ -52,7 +66,9 @@ impl<'u, T: Send + Sync + 'static> StoreOutputOld<'u> for Owned<T> {
     }
 }
 
-impl<'u, T: Send + Sync + 'static> OwnedOutput<'u> for Owned<T> {}
+impl<'u, T: Send + Sync + 'static> OwnedOutputOld<'u> for Owned<T> {}
+
+// Ref
 
 pub struct Ref<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 
@@ -84,7 +100,9 @@ impl<'u, T: ?Sized + 'static> StoreOutputOld<'u> for RefOld<'u, T> {
     }
 }
 
-impl<'u, T: ?Sized + 'static> RefOutput<'u> for RefOld<'u, T> {}
+impl<'u, T: ?Sized + 'static> RefOutputOld<'u> for RefOld<'u, T> {}
+
+// Static
 
 pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
 
@@ -112,7 +130,9 @@ impl<T: ?Sized + 'static + Send + Sync> StoreOutputOld<'static> for StaticRef<T>
     }
 }
 
-impl<T: ?Sized + 'static + Send + Sync> StaticRefOutput for StaticRef<T> {}
+impl<T: ?Sized + 'static + Send + Sync> StaticRefOutputOld for StaticRef<T> {}
+
+// Complex
 
 pub struct Complex<T>(std::marker::PhantomData<T>);
 pub struct ComplexSig<T>(std::marker::PhantomData<T>);
@@ -156,7 +176,7 @@ where
     }
 }
 
-impl<'u, T: Possess<'u>> ComplexOutput<'u> for ComplexOld<'u, T> where
+impl<'u, T: Possess<'u>> ComplexOutputOld<'u> for ComplexOld<'u, T> where
     <T as Possess<'u>>::Possessed: Send + Sync
 {
 }

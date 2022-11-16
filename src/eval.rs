@@ -6,7 +6,7 @@ use crate::error;
 use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, Evaluation2};
-use crate::output::{ComplexOutput, OutputOld, StoreOutputOld};
+use crate::output::{ComplexOutputOld, Output, OutputOld, OutputSig, StoreOutputOld};
 use crate::state::SharedState;
 use crate::DynMockFn;
 use crate::{debug, MockFn2};
@@ -142,7 +142,7 @@ where
 
 fn load_from_dyn<F: MockFn2>()
 where
-    for<'a> F::OutputOld<'a>: ComplexOutput<'a>,
+    for<'a> F::OutputOld<'a>: ComplexOutputOld<'a>,
 {
     let dyn_complex = fake_dyn_complex();
     let complex_resp = match dyn_complex.downcast::<F>() {
@@ -166,6 +166,12 @@ where
     <F::OutputOld<'u> as StoreOutputOld<'u>>::load_ref(stored)
 }
 
+fn to_output_sig_owned<'u, F: MockFn2>(
+    value: <F::Output as Output>::Type,
+) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project(value).unwrap()
+}
+
 impl<'u> EvalCtx<'u> {
     pub fn new<F: MockFn>(shared_state: &'u SharedState) -> Self {
         Self {
@@ -177,7 +183,7 @@ impl<'u> EvalCtx<'u> {
     pub(crate) fn eval2_owned<'i, F: MockFn2>(
         self,
         inputs: F::Inputs<'i>,
-    ) -> MockResult<Evaluation2<'static, 'i, F>>
+    ) -> MockResult<Evaluation2<'u, 'i, F>>
     where
         for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
     {
@@ -188,7 +194,10 @@ impl<'u> EvalCtx<'u> {
             EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder2::Owned(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
-                        Some(value) => Ok(Evaluation2::Evaluated(*value)),
+                        Some(value) => {
+                            let output_sig = to_output_sig_owned::<F>(*value);
+                            Ok(Evaluation2::Evaluated(output_sig))
+                        }
                         None => Err(MockError::CannotReturnValueMoreThanOnce {
                             fn_call: dyn_ctx.fn_call(),
                             pattern: eval_rsp.debug_pattern(),

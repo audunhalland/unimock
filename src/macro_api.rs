@@ -1,5 +1,5 @@
 use crate::debug;
-use crate::output::OutputOld;
+use crate::output::{Output, OutputOld, OutputSig};
 use crate::{call_pattern::MatchingFn, *};
 
 /// The evaluation of a [MockFn].
@@ -32,7 +32,7 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
 
 pub enum Evaluation2<'u, 'i, F: MockFn2> {
     /// Function evaluated to its output.
-    Evaluated(<F::OutputOld<'u> as OutputOld<'u>>::Type),
+    Evaluated(<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig),
     /// Function not yet evaluated.
     Skipped(F::Inputs<'i>),
 }

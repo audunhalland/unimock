@@ -1,7 +1,8 @@
 use crate::debug;
 use crate::error::{MockError, MockResult};
 use crate::output::{
-    ComplexOutput, OutputOld, OwnedOutput, RefOutput, StaticRefOutput, StoreOutputOld,
+    ComplexOutputOld, Output, OutputOld, OwnedOutputOld, RefOutputOld, StaticRefOutputOld,
+    StoreOutputOld,
 };
 use crate::*;
 
@@ -216,17 +217,13 @@ impl DynComplexValueResponder2 {
     }
 }
 
-pub(crate) struct OwnedResponder2<F: MockFn2>
-where
-    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-{
-    pub stored_value:
-        Box<dyn CloneOrTakeOrBorrow<<F::OutputOld<'static> as OutputOld<'static>>::Type>>,
+pub(crate) struct OwnedResponder2<F: MockFn2> {
+    pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output as Output>::Type>>,
 }
 
 pub(crate) struct RefResponder2<F: MockFn2>
 where
-    for<'a> F::OutputOld<'a>: RefOutput<'a>,
+    for<'a> F::OutputOld<'a>: RefOutputOld<'a>,
 {
     pub borrowable:
         Box<dyn Borrow<<F::OutputOld<'static> as OutputOld<'static>>::Type> + Send + Sync>,
@@ -234,7 +231,7 @@ where
 
 pub(crate) struct StaticRefClosureResponder2<F: MockFn2>
 where
-    for<'a> F::OutputOld<'a>: StaticRefOutput,
+    for<'a> F::OutputOld<'a>: StaticRefOutputOld,
 {
     #[allow(clippy::type_complexity)]
     pub func: Box<
@@ -252,10 +249,7 @@ where
         Box<dyn CloneOrTakeOrBorrow<<F::OutputOld<'static> as StoreOutputOld<'static>>::Stored>>,
 }
 
-impl<F: MockFn2> OwnedResponder2<F>
-where
-    for<'u> F::OutputOld<'u>: OwnedOutput<'u>,
-{
+impl<F: MockFn2> OwnedResponder2<F> {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Owned(DynOwnedResponder2(Box::new(self)))
     }
@@ -263,7 +257,7 @@ where
 
 impl<F: MockFn2> RefResponder2<F>
 where
-    for<'u> F::OutputOld<'u>: RefOutput<'u>,
+    for<'u> F::OutputOld<'u>: RefOutputOld<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Ref(DynRefResponder2(Box::new(self)))
@@ -272,7 +266,7 @@ where
 
 impl<F: MockFn2> StaticRefClosureResponder2<F>
 where
-    for<'u> F::OutputOld<'u>: StaticRefOutput,
+    for<'u> F::OutputOld<'u>: StaticRefOutputOld,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::StaticRefClosure(DynStaticRefClosureResponder2(Box::new(self)))
@@ -281,7 +275,7 @@ where
 
 impl<F: MockFn2> ComplexValueResponder2<F>
 where
-    for<'u> F::OutputOld<'u>: ComplexOutput<'u>,
+    for<'u> F::OutputOld<'u>: ComplexOutputOld<'u>,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::ComplexValue(DynComplexValueResponder2(Box::new(self)))
