@@ -822,7 +822,6 @@ pub trait MockFn2: Sized + 'static {
     type Inputs<'i>;
     type Output: output::Output;
     type OutputSig<'u>: output::OutputSig<'u, Self::Output>;
-    type OutputOld<'u>: output::OutputOld<'u>;
 
     fn some_call(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
         build::v2::DefineResponse::with_owned_builder(

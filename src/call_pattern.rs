@@ -321,7 +321,7 @@ fn find_responder_by_call_index2(
 
 #[cfg(test)]
 mod tests {
-    use crate::output::{Complex, ComplexOld, ComplexSig, OutputSig};
+    use crate::output::{Complex, ComplexSig, OutputSig};
 
     use super::*;
 
@@ -360,7 +360,6 @@ mod tests {
             type Inputs<'i> = ();
             type Output = Complex<Option<&'static str>>;
             type OutputSig<'u> = ComplexSig<Option<&'u str>>;
-            type OutputOld<'u> = ComplexOld<'u, Option<&'u str>>;
         }
 
         let q = Test.some_call().returns(Some("fancy".to_string()));

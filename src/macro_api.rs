@@ -1,5 +1,5 @@
 use crate::debug;
-use crate::output::{Output, OutputOld, OutputSig};
+use crate::output::OutputSig;
 use crate::{call_pattern::MatchingFn, *};
 
 /// The evaluation of a [MockFn].
