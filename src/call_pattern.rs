@@ -383,7 +383,7 @@ mod tests {
 
     fn load_sig<'u, 'i, F: MockFn2>(
         stored: &'u <F::Output as Output>::Type,
-    ) -> Option<<F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::Sig> {
-        <F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::project_ref(stored)
+    ) -> Option<<F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig> {
+        <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::project_ref(stored)
     }
 }
