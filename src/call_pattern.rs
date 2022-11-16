@@ -321,7 +321,7 @@ fn find_responder_by_call_index2(
 
 #[cfg(test)]
 mod tests {
-    use crate::output::{Mixed, MixedBorrowSelf, OutputSig};
+    use crate::output::{Mixed, OutputSig};
 
     use super::*;
 
@@ -359,7 +359,7 @@ mod tests {
         impl MockFn2 for Test {
             type Inputs<'i> = ();
             type Output = Mixed<Option<&'static str>>;
-            type OutputSig<'u, 'i> = MixedBorrowSelf<Option<&'u str>>;
+            type OutputSig<'u, 'i> = Mixed<Option<&'u str>>;
             const NAME: &'static str = "Test";
         }
 
@@ -376,14 +376,17 @@ mod tests {
             Err(_) => panic!(),
         };
         let borrowed_stored: &Option<String> = complex_resp.stored_value.borrow_stored();
-        let reborrowed: Option<&str> = load_sig::<Test>(borrowed_stored).unwrap();
+        let reborrowed: Option<&str> = load_sig::<Test>(borrowed_stored);
 
         assert_eq!(Some("fancy"), reborrowed);
     }
 
     fn load_sig<'u, 'i, F: MockFn2>(
         stored: &'u <F::Output as Output>::Type,
-    ) -> Option<<F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig> {
-        <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::borrow_sig(stored)
+    ) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
+        match <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_borrow_sig(stored) {
+            Ok(sig) => sig,
+            Err(_) => panic!(),
+        }
     }
 }

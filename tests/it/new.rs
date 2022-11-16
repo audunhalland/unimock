@@ -46,7 +46,7 @@ impl MockFn2 for MockStatic {
 impl MockFn2 for MockMixed {
     type Inputs<'i> = ();
     type Output = output::Mixed<Option<&'static str>>;
-    type OutputSig<'u, 'i> = output::MixedBorrowSelf<Option<&'u str>>;
+    type OutputSig<'u, 'i> = output::Mixed<Option<&'u str>>;
     const NAME: &'static str = "";
 }
 

@@ -3,7 +3,7 @@ use crate::error;
 use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, Evaluation2};
-use crate::output::{Output, OutputSig};
+use crate::output::{IntoSigError, Output, OutputSig};
 use crate::state::SharedState;
 use crate::DynMockFn;
 use crate::{debug, MockFn2};
@@ -77,10 +77,10 @@ impl<'u> EvalCtx<'u> {
             EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder2::Owned(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
-                        Some(value) => {
-                            let output_sig = into_sig::<F>(*value);
-                            Ok(Evaluation2::Evaluated(output_sig))
-                        }
+                        Some(value) => match try_into_sig::<F>(*value) {
+                            Ok(output) => Ok(Evaluation2::Evaluated(output)),
+                            Err(_) => todo!(),
+                        },
                         None => Err(MockError::CannotReturnValueMoreThanOnce {
                             fn_call: dyn_ctx.fn_call(),
                             pattern: eval_rsp.debug_pattern(),
@@ -89,8 +89,10 @@ impl<'u> EvalCtx<'u> {
                 }
                 DynResponder2::Borrow(inner) => {
                     let downcasted = inner.downcast::<F>()?;
-                    let value = borrow_sig::<F>(&downcasted.borrowable);
-                    Ok(Evaluation2::Evaluated(value))
+                    match try_borrow_sig::<F>(&downcasted.borrowable) {
+                        Ok(output) => Ok(Evaluation2::Evaluated(output)),
+                        Err(_) => todo!(),
+                    }
                 }
             },
             EvalResult2::Unmock => Ok(Evaluation2::Skipped(inputs)),
@@ -390,16 +392,14 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 }
 
-fn into_sig<'u, 'i, F: MockFn2>(
+fn try_into_sig<'u, 'i, F: MockFn2>(
     value: <F::Output as Output>::Type,
-) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
-    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::into_sig(value)
-        .expect("BUG: Expected to be able to move the output value")
+) -> Result<<F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig, IntoSigError> {
+    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_into_sig(value)
 }
 
-fn borrow_sig<'u, 'i, F: MockFn2>(
+fn try_borrow_sig<'u, 'i, F: MockFn2>(
     value: &'u <F::Output as Output>::Type,
-) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
-    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::borrow_sig(value)
-        .expect("BUG: Expected to be able to reference the value")
+) -> Result<<F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig, IntoSigError> {
+    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_borrow_sig(value)
 }
