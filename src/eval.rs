@@ -78,7 +78,7 @@ impl<'u> EvalCtx<'u> {
                 DynResponder2::Owned(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
                         Some(value) => {
-                            let output_sig = move_to_output_sig::<F>(*value);
+                            let output_sig = into_sig::<F>(*value);
                             Ok(Evaluation2::Evaluated(output_sig))
                         }
                         None => Err(MockError::CannotReturnValueMoreThanOnce {
@@ -89,7 +89,7 @@ impl<'u> EvalCtx<'u> {
                 }
                 DynResponder2::Borrow(inner) => {
                     let downcasted = inner.downcast::<F>()?;
-                    let value = reference_output_sig::<F>(&downcasted.borrowable);
+                    let value = borrow_sig::<F>(&downcasted.borrowable);
                     Ok(Evaluation2::Evaluated(value))
                 }
             },
@@ -390,16 +390,16 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 }
 
-fn move_to_output_sig<'u, 'i, F: MockFn2>(
+fn into_sig<'u, 'i, F: MockFn2>(
     value: <F::Output as Output>::Type,
 ) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
-    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::project(value)
+    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::into_sig(value)
         .expect("BUG: Expected to be able to move the output value")
 }
 
-fn reference_output_sig<'u, 'i, F: MockFn2>(
+fn borrow_sig<'u, 'i, F: MockFn2>(
     value: &'u <F::Output as Output>::Type,
 ) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
-    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::project_ref(value)
+    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::borrow_sig(value)
         .expect("BUG: Expected to be able to reference the value")
 }

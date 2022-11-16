@@ -9,13 +9,9 @@ pub trait Output {
 pub trait OutputSig<'u, 'i, O: Output> {
     type Sig;
 
-    fn project(value: O::Type) -> Option<Self::Sig> {
-        None
-    }
+    fn into_sig(value: O::Type) -> Option<Self::Sig>;
 
-    fn project_ref(value: &'u O::Type) -> Option<Self::Sig> {
-        None
-    }
+    fn borrow_sig(value: &'u O::Type) -> Option<Self::Sig>;
 }
 
 pub trait OwnedOutput: Output {}
@@ -41,6 +37,14 @@ impl<T: 'static> Output for Owned<T> {
 
 impl<'u, 'i, T: 'static> OutputSig<'u, 'i, Self> for Owned<T> {
     type Sig = T;
+
+    fn into_sig(value: <Self as Output>::Type) -> Option<Self::Sig> {
+        Some(value)
+    }
+
+    fn borrow_sig(_: &'u <Self as Output>::Type) -> Option<Self::Sig> {
+        None
+    }
 }
 
 impl<T: 'static> OwnedOutput for Owned<T> {}
@@ -67,12 +71,28 @@ pub struct BorrowSelf<'u, T: ?Sized + 'static>(std::marker::PhantomData<&'u T>);
 
 impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for BorrowSelf<'u, T> {
     type Sig = &'u T;
+
+    fn into_sig(value: <Borrowed<T> as Output>::Type) -> Option<Self::Sig> {
+        None
+    }
+
+    fn borrow_sig(value: &'u <Borrowed<T> as Output>::Type) -> Option<Self::Sig> {
+        Some(value.as_ref().borrow())
+    }
 }
 
 pub struct BorrowInputs<'i, T: ?Sized + 'static>(std::marker::PhantomData<&'i T>);
 
 impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for BorrowInputs<'i, T> {
     type Sig = &'i T;
+
+    fn into_sig(value: <Borrowed<T> as Output>::Type) -> Option<Self::Sig> {
+        None
+    }
+
+    fn borrow_sig(value: &'u <Borrowed<T> as Output>::Type) -> Option<Self::Sig> {
+        None
+    }
 }
 
 // Static
@@ -87,12 +107,20 @@ impl<T: ?Sized + 'static> OwnedOutput for StaticRef<T> {}
 
 impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Self> for StaticRef<T> {
     type Sig = &'static T;
+
+    fn into_sig(value: <Self as Output>::Type) -> Option<Self::Sig> {
+        Some(value)
+    }
+
+    fn borrow_sig(value: &'u <Self as Output>::Type) -> Option<Self::Sig> {
+        Some(*value)
+    }
 }
 
 // Mixed
 
 pub struct Mixed<T>(std::marker::PhantomData<T>);
-pub struct MixedSig<T>(std::marker::PhantomData<T>);
+pub struct MixedBorrowSelf<T>(std::marker::PhantomData<T>);
 
 impl<T: Possess<'static>> Output for Mixed<T> {
     type Type = <T as Possess<'static>>::Possessed;
@@ -100,14 +128,18 @@ impl<T: Possess<'static>> Output for Mixed<T> {
 
 impl<T: Possess<'static>> OwnedOutput for Mixed<T> {}
 
-impl<'u, 'i, T, O> OutputSig<'u, 'i, O> for MixedSig<T>
+impl<'u, 'i, T, O> OutputSig<'u, 'i, O> for MixedBorrowSelf<T>
 where
     O: Output,
     T: Possess<'u, Possessed = O::Type>,
 {
     type Sig = T;
 
-    fn project_ref(value: &'u <O as Output>::Type) -> Option<Self::Sig> {
+    fn into_sig(value: <O as Output>::Type) -> Option<Self::Sig> {
+        None
+    }
+
+    fn borrow_sig(value: &'u <O as Output>::Type) -> Option<Self::Sig> {
         Some(<T as Possess>::reborrow(value))
     }
 }

@@ -30,8 +30,9 @@ impl MockFn2 for MockBorrowed {
 
 impl MockFn2 for MockBorrowedParam {
     type Inputs<'i> = &'i str;
-    type Output = output::Borrowed<str>;
-    type OutputSig<'u, 'i> = output::BorrowInputs<'i, str>;
+    // There is now way to store an "owned" version of something borrowed from inputs
+    type Output = output::StaticRef<str>;
+    type OutputSig<'u, 'i> = output::StaticRef<str>;
     const NAME: &'static str = "";
 }
 
@@ -45,7 +46,7 @@ impl MockFn2 for MockStatic {
 impl MockFn2 for MockMixed {
     type Inputs<'i> = ();
     type Output = output::Mixed<Option<&'static str>>;
-    type OutputSig<'u, 'i> = output::MixedSig<Option<&'u str>>;
+    type OutputSig<'u, 'i> = output::MixedBorrowSelf<Option<&'u str>>;
     const NAME: &'static str = "";
 }
 
@@ -53,10 +54,9 @@ impl MockFn2 for MockMixed {
 fn test_owned() {
     MockOwned.some_call().returns("foo");
     MockOwned.some_call().returns("too".to_string());
-    MockBorrowed.some_call().returns_ref("foo");
-    MockBorrowed.some_call().returns_ref("foo".to_string());
-    MockBorrowedParam.some_call().returns_ref("foo");
-    MockBorrowedParam.some_call().returns_ref("foo".to_string());
+    MockBorrowed.some_call().returns_borrow("foo");
+    MockBorrowed.some_call().returns_borrow("foo".to_string());
+    MockBorrowedParam.some_call().returns("foo");
     MockStatic.some_call().returns("foo");
     MockMixed.some_call().returns(Some("foo".to_string()));
     MockMixed.some_call().returns(None);

@@ -643,7 +643,7 @@ pub mod v2 {
         F::Output: BorrowOutput,
         <F::Output as Output>::Type: Send + Sync,
     {
-        pub fn returns_ref<T: ?Sized + Send + Sync>(
+        pub fn returns_borrow<T: ?Sized + Send + Sync>(
             mut self,
             value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
         ) -> QuantifyTodo<'p, F, O>
