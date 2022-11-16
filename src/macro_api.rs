@@ -32,7 +32,7 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
 
 pub enum Evaluation2<'u, 'i, F: MockFn2> {
     /// Function evaluated to its output.
-    Evaluated(<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig),
+    Evaluated(<F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::Sig),
     /// Function not yet evaluated.
     Skipped(F::Inputs<'i>),
 }

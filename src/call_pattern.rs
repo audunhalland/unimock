@@ -359,7 +359,7 @@ mod tests {
         impl MockFn2 for Test {
             type Inputs<'i> = ();
             type Output = Complex<Option<&'static str>>;
-            type OutputSig<'u> = ComplexSig<Option<&'u str>>;
+            type OutputSig<'u, 'i> = ComplexSig<Option<&'u str>>;
             const NAME: &'static str = "Test";
         }
 
@@ -381,9 +381,9 @@ mod tests {
         assert_eq!(Some("fancy"), reborrowed);
     }
 
-    fn load_sig<'u, F: MockFn2>(
+    fn load_sig<'u, 'i, F: MockFn2>(
         stored: &'u <F::Output as Output>::Type,
-    ) -> Option<<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig> {
-        <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project_ref(stored)
+    ) -> Option<<F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::Sig> {
+        <F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::project_ref(stored)
     }
 }

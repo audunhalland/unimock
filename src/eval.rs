@@ -390,16 +390,16 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 }
 
-fn move_to_output_sig<'u, F: MockFn2>(
+fn move_to_output_sig<'u, 'i, F: MockFn2>(
     value: <F::Output as Output>::Type,
-) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project(value)
+) -> <F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::Sig {
+    <F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::project(value)
         .expect("BUG: Expected to be able to move the output value")
 }
 
-fn reference_output_sig<'u, F: MockFn2>(
+fn reference_output_sig<'u, 'i, F: MockFn2>(
     value: &'u <F::Output as Output>::Type,
-) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project_ref(value)
+) -> <F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::Sig {
+    <F::OutputSig<'u, 'i> as OutputSig<'u, F::Output>>::project_ref(value)
         .expect("BUG: Expected to be able to reference the value")
 }
