@@ -1,12 +1,9 @@
-use crate::call_pattern::{
-    CallPattern, ComplexValueResponder2, DynComplexValueResponder2, DynResponder, DynResponder2,
-    PatIndex,
-};
+use crate::call_pattern::{CallPattern, DynResponder, DynResponder2, PatIndex};
 use crate::error;
 use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, Evaluation2};
-use crate::output::{ComplexOutputOld, Output, OutputOld, OutputSig, StoreOutputOld};
+use crate::output::{Output, OutputSig, StoreOutputOld};
 use crate::state::SharedState;
 use crate::DynMockFn;
 use crate::{debug, MockFn2};
@@ -52,132 +49,6 @@ impl<'u> EvalResponder2<'u> {
 pub(crate) struct EvalCtx<'u> {
     mock_fn: DynMockFn,
     shared_state: &'u SharedState,
-}
-
-pub(crate) fn eval2_complex<'u, 'i, F: MockFn2>(
-    mock_fn: DynMockFn,
-    shared_state: &'u SharedState,
-    inputs: F::Inputs<'i>,
-) -> MockResult<Evaluation2<'u, 'i, F>>
-where
-    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-{
-    let input_debugger = &|| "TODO: Implement input debug".to_string();
-    let dyn_ctx = DynCtx {
-        mock_fn,
-        shared_state,
-        input_debugger,
-    };
-
-    match dyn_ctx.eval2(&|pattern| pattern.match_inputs2::<F>(&inputs))? {
-        EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
-            DynResponder2::ComplexValue(inner) => {
-                let responder = inner.downcast::<F>()?;
-                //let stored = inner.downcast::<F>()?.stored_value.borrow_stored();
-                //let r = <F::Output<'_>>::load_ref(stored);
-
-                todo!();
-            }
-            _ => todo!(),
-        },
-        EvalResult2::Unmock => Ok(Evaluation2::Skipped(inputs)),
-    }
-}
-
-pub(crate) fn get_complex_responder<'u, 'i, F: MockFn2>(
-    mock_fn: DynMockFn,
-    shared_state: &'u SharedState,
-    inputs: F::Inputs<'i>,
-) -> MockResult<&'u ComplexValueResponder2<F>>
-where
-    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-{
-    let input_debugger = &|| "TODO: Implement input debug".to_string();
-    let dyn_ctx = DynCtx {
-        mock_fn,
-        shared_state,
-        input_debugger,
-    };
-
-    match dyn_ctx.eval2(&|pattern| pattern.match_inputs2::<F>(&inputs))? {
-        EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
-            DynResponder2::ComplexValue(inner) => {
-                match inner.downcast::<F>() {
-                    Ok(r) => Ok(r),
-                    Err(_) => panic!(),
-                }
-                //let stored = inner.downcast::<F>()?.stored_value.borrow_stored();
-                //let r = <F::Output<'_>>::load_ref(stored);
-            }
-            _ => todo!(),
-        },
-        EvalResult2::Unmock => panic!(),
-    }
-}
-
-pub(crate) fn test_complex_answer<'u, F: MockFn2>(
-    resp: &'u ComplexValueResponder2<F>,
-) -> Option<<F::OutputOld<'u> as OutputOld>::Type>
-where
-    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-{
-    panic!();
-    /*
-    let stored = resp.stored_value.borrow_stored();
-    load_ref(stored);
-    */
-    // <F::Output<'u> as StoreOutput<'u>>::load_ref(value);
-
-    todo!()
-}
-
-pub(crate) fn just_load<F: MockFn2>(resp: &ComplexValueResponder2<F>)
-where
-    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-{
-    todo!()
-    //let stored = resp.stored_value.borrow_stored();
-    //load_ref(stored);
-}
-
-fn load_from_dyn<F: MockFn2>()
-where
-    for<'a> F::OutputOld<'a>: ComplexOutputOld<'a>,
-{
-    let dyn_complex = fake_dyn_complex();
-    let complex_resp = match dyn_complex.downcast::<F>() {
-        Ok(r) => r,
-        Err(_) => panic!(),
-    };
-    let borrowed_stored = complex_resp.stored_value.borrow_stored();
-    // let reborrowed: <F::Output<'_> as Output>::Type = load_ref::<F>(borrowed_stored).unwrap();
-}
-
-fn fake_dyn_complex() -> DynComplexValueResponder2 {
-    panic!()
-}
-
-fn load_ref<'u, F: MockFn2>(
-    stored: &'u <F::OutputOld<'u> as StoreOutputOld<'u>>::Stored,
-) -> Option<<F::OutputOld<'u> as OutputOld<'u>>::Type>
-where
-    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-{
-    <F::OutputOld<'u> as StoreOutputOld<'u>>::load_ref(stored)
-}
-
-fn move_to_output_sig<'u, F: MockFn2>(
-    value: <F::Output as Output>::Type,
-) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project(value)
-        .expect("BUG: Expected to be able to move the output value")
-}
-
-fn reference_output_sig<'u, F: MockFn2>(
-    value: &'u <F::Output as Output>::Type,
-) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project_ref(value)
-        .expect("BUG: Expected to be able to reference the value")
 }
 
 impl<'u> EvalCtx<'u> {
@@ -514,4 +385,18 @@ impl<'u, 's> DynCtx<'u, 's> {
     fn debug_inputs(&self) -> String {
         (self.input_debugger)()
     }
+}
+
+fn move_to_output_sig<'u, F: MockFn2>(
+    value: <F::Output as Output>::Type,
+) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project(value)
+        .expect("BUG: Expected to be able to move the output value")
+}
+
+fn reference_output_sig<'u, F: MockFn2>(
+    value: &'u <F::Output as Output>::Type,
+) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project_ref(value)
+        .expect("BUG: Expected to be able to reference the value")
 }

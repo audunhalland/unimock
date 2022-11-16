@@ -37,15 +37,15 @@ where
 {
 }
 pub trait IntoRefOutput<T: ?Sized>: Output {
-    fn into_ref_output(value: impl std::borrow::Borrow<T> + Send + Sync) -> <Self as Output>::Type;
+    fn into_ref_output(
+        value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
+    ) -> <Self as Output>::Type;
 }
 pub trait StaticRefOutput: Output {}
-pub trait ComplexOutput: Output {}
 
 pub trait OwnedOutputOld<'u>: StoreOutputOld<'u> {}
 pub trait RefOutputOld<'u>: StoreOutputOld<'u> {}
 pub trait StaticRefOutputOld: StoreOutputOld<'static> {}
-pub trait ComplexOutputOld<'u>: StoreOutputOld<'u> {}
 
 // Owned
 
@@ -90,8 +90,10 @@ impl<T: ?Sized + 'static> Output for Ref<T> {
 impl<T: ?Sized + 'static> RefOutput for Ref<T> {}
 
 impl<T: ?Sized + 'static> IntoRefOutput<T> for Ref<T> {
-    fn into_ref_output(value: impl std::borrow::Borrow<T> + Send + Sync) -> <Self as Output>::Type {
-        panic!()
+    fn into_ref_output(
+        value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
+    ) -> <Self as Output>::Type {
+        Box::new(value)
     }
 }
 
@@ -160,6 +162,8 @@ impl<T: Possess<'static>> Output for Complex<T> {
     type Type = <T as Possess<'static>>::Possessed;
 }
 
+impl<T: Possess<'static>> OwnedOutput for Complex<T> {}
+
 impl<'a, T, O> OutputSig<'a, O> for ComplexSig<T>
 where
     O: Output,
@@ -193,9 +197,4 @@ where
     fn load_ref(stored: &'u Self::Stored) -> Option<Self::Type> {
         Some(<T as Possess>::reborrow(stored))
     }
-}
-
-impl<'u, T: Possess<'u>> ComplexOutputOld<'u> for ComplexOld<'u, T> where
-    <T as Possess<'u>>::Possessed: Send + Sync
-{
 }

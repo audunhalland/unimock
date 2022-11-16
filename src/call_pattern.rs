@@ -1,9 +1,6 @@
 use crate::debug;
 use crate::error::{MockError, MockResult};
-use crate::output::{
-    ComplexOutputOld, Output, OutputOld, OwnedOutputOld, RefOutput, RefOutputOld,
-    StaticRefOutputOld, StoreOutputOld,
-};
+use crate::output::{Output, OutputOld, RefOutput, StaticRefOutputOld};
 use crate::*;
 
 use std::any::Any;
@@ -191,13 +188,11 @@ pub(crate) enum DynResponder2 {
     Owned(DynOwnedResponder2),
     Ref(DynRefResponder2),
     StaticRefClosure(DynStaticRefClosureResponder2),
-    ComplexValue(DynComplexValueResponder2),
 }
 
 pub(crate) struct DynOwnedResponder2(AnyBox);
 pub(crate) struct DynRefResponder2(AnyBox);
 pub(crate) struct DynStaticRefClosureResponder2(AnyBox);
-pub(crate) struct DynComplexValueResponder2(AnyBox);
 
 impl DynOwnedResponder2 {
     pub fn downcast<F: MockFn2>(&self) -> MockResult<&OwnedResponder2<F>> {
@@ -207,15 +202,6 @@ impl DynOwnedResponder2 {
 
 impl DynRefResponder2 {
     pub fn downcast<F: MockFn2>(&self) -> MockResult<&RefResponder2<F>> {
-        downcast_box(&self.0, "FAKE NAME")
-    }
-}
-
-impl DynComplexValueResponder2 {
-    pub fn downcast<F: MockFn2>(&self) -> MockResult<&ComplexValueResponder2<F>>
-    where
-        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-    {
         downcast_box(&self.0, "FAKE NAME")
     }
 }
@@ -240,14 +226,6 @@ where
     >,
 }
 
-pub(crate) struct ComplexValueResponder2<F: MockFn2>
-where
-    for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-{
-    pub stored_value:
-        Box<dyn CloneOrTakeOrBorrow<<F::OutputOld<'static> as StoreOutputOld<'static>>::Stored>>,
-}
-
 impl<F: MockFn2> OwnedResponder2<F> {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Owned(DynOwnedResponder2(Box::new(self)))
@@ -270,15 +248,6 @@ where
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::StaticRefClosure(DynStaticRefClosureResponder2(Box::new(self)))
-    }
-}
-
-impl<F: MockFn2> ComplexValueResponder2<F>
-where
-    for<'u> F::OutputOld<'u>: ComplexOutputOld<'u>,
-{
-    pub fn into_dyn_responder(self) -> DynResponder2 {
-        DynResponder2::ComplexValue(DynComplexValueResponder2(Box::new(self)))
     }
 }
 
@@ -376,7 +345,7 @@ fn find_responder_by_call_index2(
 
 #[cfg(test)]
 mod tests {
-    use crate::output::{Complex, ComplexOld, ComplexSig};
+    use crate::output::{Complex, ComplexOld, ComplexSig, OutputSig};
 
     use super::*;
 
@@ -422,7 +391,7 @@ mod tests {
         let call_pattern_builder = q.builder.inner();
         let resp = &call_pattern_builder.responders2[0];
         let dyn_complex_resp = match &resp.responder {
-            DynResponder2::ComplexValue(c) => c,
+            DynResponder2::Owned(c) => c,
             _ => panic!(),
         };
 
@@ -431,47 +400,14 @@ mod tests {
             Err(_) => panic!(),
         };
         let borrowed_stored: &Option<String> = complex_resp.stored_value.borrow_stored();
-        let reborrowed = load_ref::<Test>(borrowed_stored).unwrap();
+        let reborrowed: Option<&str> = load_sig::<Test>(borrowed_stored).unwrap();
 
         assert_eq!(Some("fancy"), reborrowed);
     }
 
-    fn load_stored_complex<'u, 'u2, F: MockFn2>(
-        responder: &'u DynCallOrderResponder2,
-    ) -> &'u <F::OutputOld<'u2> as StoreOutputOld<'u2>>::Stored
-    where
-        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-    {
-        let complex_resp = downcast_complex(responder);
-        let stored = complex_resp.stored_value.borrow_stored();
-
-        // stored
-        todo!()
-    }
-
-    fn downcast_complex<'u, F: MockFn2>(
-        responder: &'u DynCallOrderResponder2,
-    ) -> &'u ComplexValueResponder2<F>
-    where
-        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-    {
-        let dyn_complex_resp = match &responder.responder {
-            DynResponder2::ComplexValue(c) => c,
-            _ => panic!(),
-        };
-
-        match dyn_complex_resp.downcast::<F>() {
-            Ok(r) => r,
-            Err(_) => panic!(),
-        }
-    }
-
-    fn load_ref<'u, F: MockFn2>(
-        stored: &'u <F::OutputOld<'u> as StoreOutputOld<'u>>::Stored,
-    ) -> Option<<F::OutputOld<'u> as OutputOld<'u>>::Type>
-    where
-        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-    {
-        <F::OutputOld<'u> as StoreOutputOld<'u>>::load_ref(stored)
+    fn load_sig<'u, F: MockFn2>(
+        stored: &'u <F::Output as Output>::Type,
+    ) -> Option<<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig> {
+        <F::OutputSig<'u> as OutputSig<'u, F::Output>>::project_ref(stored)
     }
 }

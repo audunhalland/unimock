@@ -645,7 +645,7 @@ pub mod v2 {
     {
         pub fn returns_ref<T: ?Sized + Send + Sync>(
             mut self,
-            value: impl std::borrow::Borrow<T> + Send + Sync,
+            value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
         ) -> QuantifyTodo<'p, F, O>
         where
             F::Output: IntoRefOutput<T>,
@@ -669,26 +669,6 @@ pub mod v2 {
             self.builder.push_responder2(
                 StaticRefClosureResponder2::<F> {
                     func: Box::new(move |_| value),
-                }
-                .into_dyn_responder(),
-            );
-            self.quantify()
-        }
-    }
-
-    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
-    where
-        for<'u> F::OutputOld<'u>: ComplexOutputOld<'u>,
-        for<'u> <F::OutputOld<'u> as StoreOutputOld<'u>>::Stored: Clone + Send + Sync,
-    {
-        pub fn returns(
-            mut self,
-            value: impl Into<<F::OutputOld<'static> as StoreOutputOld<'static>>::Stored>,
-        ) -> QuantifyTodo<'p, F, O> {
-            let value = value.into();
-            self.builder.push_responder2(
-                ComplexValueResponder2 {
-                    stored_value: Box::new(StoredValueSlot(value)),
                 }
                 .into_dyn_responder(),
             );
