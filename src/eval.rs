@@ -3,7 +3,7 @@ use crate::error;
 use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, Evaluation2};
-use crate::output::{Output, OutputSig, StoreOutputOld};
+use crate::output::{Output, OutputSig};
 use crate::state::SharedState;
 use crate::DynMockFn;
 use crate::{debug, MockFn2};
@@ -62,10 +62,7 @@ impl<'u> EvalCtx<'u> {
     pub(crate) fn eval2_generic<'i, F: MockFn2>(
         self,
         inputs: F::Inputs<'i>,
-    ) -> MockResult<Evaluation2<'u, 'i, F>>
-    where
-        for<'a> F::OutputOld<'a>: StoreOutputOld<'a>,
-    {
+    ) -> MockResult<Evaluation2<'u, 'i, F>> {
         let input_debugger = &|| "TODO: Implement input debug".to_string();
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 

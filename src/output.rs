@@ -171,11 +171,9 @@ where
 {
     type Sig = T;
 
-    /*
     fn project_ref(value: &'a <O as Output>::Type) -> Option<Self::Sig> {
-        Some(<S as Possess>::reborrow(value))
+        Some(<T as Possess>::reborrow(value))
     }
-    */
 }
 
 pub struct ComplexOld<'u, T: ?Sized + Possess<'u>>(std::marker::PhantomData<&'u T>);
