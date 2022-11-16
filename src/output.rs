@@ -31,7 +31,14 @@ pub trait StoreOutputOld<'u>: OutputOld<'u> {
 }
 
 pub trait OwnedOutput: Output {}
-pub trait RefOutput: Output {}
+pub trait RefOutput: Output
+where
+    <Self as Output>::Type: Send + Sync,
+{
+}
+pub trait IntoRefOutput<T: ?Sized>: Output {
+    fn into_ref_output(value: impl std::borrow::Borrow<T> + Send + Sync) -> <Self as Output>::Type;
+}
 pub trait StaticRefOutput: Output {}
 pub trait ComplexOutput: Output {}
 
@@ -81,6 +88,12 @@ impl<T: ?Sized + 'static> Output for Ref<T> {
 }
 
 impl<T: ?Sized + 'static> RefOutput for Ref<T> {}
+
+impl<T: ?Sized + 'static> IntoRefOutput<T> for Ref<T> {
+    fn into_ref_output(value: impl std::borrow::Borrow<T> + Send + Sync) -> <Self as Output>::Type {
+        panic!()
+    }
+}
 
 pub struct RefSig<'u, T: ?Sized + 'static>(std::marker::PhantomData<&'u T>);
 

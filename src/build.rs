@@ -641,24 +641,20 @@ pub mod v2 {
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
         F::Output: RefOutput,
+        <F::Output as Output>::Type: Send + Sync,
     {
-        /*
-        pub fn returns_ref_old(
+        pub fn returns_ref<T: ?Sized + Send + Sync>(
             mut self,
-            value: impl std::borrow::Borrow<<F::OutputOld<'static> as OutputOld<'static>>::Type>
-                + Send
-                + Sync
-                + 'static,
-        ) -> QuantifyTodo<'p, F, O> {
-            self.builder.push_responder2(
-                RefResponder2 {
-                    borrowable: Box::new(value),
-                }
-                .into_dyn_responder(),
-            );
+            value: impl std::borrow::Borrow<T> + Send + Sync,
+        ) -> QuantifyTodo<'p, F, O>
+        where
+            F::Output: IntoRefOutput<T>,
+        {
+            let borrowable = <F::Output as IntoRefOutput<T>>::into_ref_output(value);
+            self.builder
+                .push_responder2(RefResponder2::<F> { borrowable }.into_dyn_responder());
             self.quantify()
         }
-        */
     }
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
@@ -673,12 +669,14 @@ pub mod v2 {
                 + Sync
                 + 'static,
         ) -> QuantifyTodo<'p, F, O> {
+            /*
             self.builder.push_responder2(
                 RefResponder2 {
                     borrowable: Box::new(value),
                 }
                 .into_dyn_responder(),
             );
+            */
             self.quantify()
         }
     }

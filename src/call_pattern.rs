@@ -1,8 +1,8 @@
 use crate::debug;
 use crate::error::{MockError, MockResult};
 use crate::output::{
-    ComplexOutputOld, Output, OutputOld, OwnedOutputOld, RefOutputOld, StaticRefOutputOld,
-    StoreOutputOld,
+    ComplexOutputOld, Output, OutputOld, OwnedOutputOld, RefOutput, RefOutputOld,
+    StaticRefOutputOld, StoreOutputOld,
 };
 use crate::*;
 
@@ -221,12 +221,8 @@ pub(crate) struct OwnedResponder2<F: MockFn2> {
     pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output as Output>::Type>>,
 }
 
-pub(crate) struct RefResponder2<F: MockFn2>
-where
-    for<'a> F::OutputOld<'a>: RefOutputOld<'a>,
-{
-    pub borrowable:
-        Box<dyn Borrow<<F::OutputOld<'static> as OutputOld<'static>>::Type> + Send + Sync>,
+pub(crate) struct RefResponder2<F: MockFn2> {
+    pub borrowable: <F::Output as Output>::Type,
 }
 
 pub(crate) struct StaticRefClosureResponder2<F: MockFn2>
@@ -257,7 +253,8 @@ impl<F: MockFn2> OwnedResponder2<F> {
 
 impl<F: MockFn2> RefResponder2<F>
 where
-    for<'u> F::OutputOld<'u>: RefOutputOld<'u>,
+    <F::Output as Output>::Type: Send + Sync,
+    F::Output: RefOutput,
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Ref(DynRefResponder2(Box::new(self)))
