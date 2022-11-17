@@ -183,10 +183,14 @@ pub(crate) struct DynCallOrderResponder2 {
 pub(crate) enum DynResponder2 {
     Owned(DynOwnedResponder2),
     Borrow(DynBorrowResponder2),
+    Closure(DynClosureResponder2),
+    Panic(String),
+    Unmock,
 }
 
 pub(crate) struct DynOwnedResponder2(AnyBox);
 pub(crate) struct DynBorrowResponder2(AnyBox);
+pub(crate) struct DynClosureResponder2(AnyBox);
 
 impl DynOwnedResponder2 {
     pub fn downcast<F: MockFn>(&self) -> MockResult<&OwnedResponder2<F>> {
@@ -200,12 +204,23 @@ impl DynBorrowResponder2 {
     }
 }
 
+impl DynClosureResponder2 {
+    pub fn downcast<F: MockFn>(&self) -> MockResult<&ClosureResponder2<F>> {
+        downcast_box(&self.0, F::NAME)
+    }
+}
+
 pub(crate) struct OwnedResponder2<F: MockFn> {
     pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output as Output>::Type>>,
 }
 
 pub(crate) struct BorrowResponder2<F: MockFn> {
     pub borrowable: <F::Output as Output>::Type,
+}
+
+pub(crate) struct ClosureResponder2<F: MockFn> {
+    #[allow(clippy::type_complexity)]
+    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Output as Output>::Type) + Send + Sync>,
 }
 
 impl<F: MockFn> OwnedResponder2<F> {
@@ -220,6 +235,12 @@ where
 {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Borrow(DynBorrowResponder2(Box::new(self)))
+    }
+}
+
+impl<F: MockFn> ClosureResponder2<F> {
+    pub fn into_dyn_responder(self) -> DynResponder2 {
+        DynResponder2::Closure(DynClosureResponder2(Box::new(self)))
     }
 }
 

@@ -290,6 +290,23 @@ macro_rules! define_response_common_impl {
                 self.quantify()
             }
 
+            /// Specify the output of the call pattern by calling `Default::default()`.
+            pub fn returns_default2(mut self) -> Quantify<'p, F, O>
+            where
+                <F::Output as Output>::Type: Default,
+            {
+                self.builder.push_responder2(
+                    ClosureResponder2::<F> {
+                        func: Box::new(|_| Default::default()),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
+            /// Specify the output of the call to be a borrow of the provided value.
+            /// This works well when the lifetime of the returned reference is the same as `self`.
+            /// Using this for `'static` references will produce a runtime error. For static references, use [DefineResponse::returns_static].
             pub fn returns_borrow<T: ?Sized + Send + Sync>(
                 mut self,
                 value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
@@ -351,6 +368,22 @@ macro_rules! define_response_common_impl {
                 self.quantify()
             }
 
+            /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
+            pub fn answers2<A, R>(mut self, func: A) -> Quantify<'p, F, O>
+            where
+                A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
+                R: Into<<F::Output as Output>::Type>,
+                F::OutputOld: Sized,
+            {
+                self.builder.push_responder2(
+                    ClosureResponder2::<F> {
+                        func: Box::new(move |inputs| func(inputs).into()),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
             /// Specify the output of the call pattern to be a static reference to leaked memory.
             ///
             /// The value may be based on the value of input parameters.
@@ -380,8 +413,10 @@ macro_rules! define_response_common_impl {
 
             /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
             pub fn panics(mut self, message: impl Into<String>) -> Quantify<'p, F, O> {
+                let message = message.into();
                 self.builder
-                    .push_responder(DynResponder::Panic(message.into()));
+                    .push_responder(DynResponder::Panic(message.clone()));
+                self.builder.push_responder2(DynResponder2::Panic(message));
                 self.quantify()
             }
 
@@ -391,6 +426,7 @@ macro_rules! define_response_common_impl {
             /// If unimock doesn't find a way to unmock the function, this will panic when the function is called.
             pub fn unmocked(mut self) -> Quantify<'p, F, O> {
                 self.builder.push_responder(DynResponder::Unmock);
+                self.builder.push_responder2(DynResponder2::Unmock);
                 self.quantify()
             }
 
