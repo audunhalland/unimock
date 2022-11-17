@@ -639,7 +639,6 @@ pub mod v2 {
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
-        F::Output: BorrowOutput,
         <F::Output as Output>::Type: Send + Sync,
     {
         pub fn returns_borrow<T: ?Sized + Send + Sync>(
@@ -647,9 +646,9 @@ pub mod v2 {
             value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
         ) -> QuantifyTodo<'p, F, O>
         where
-            F::Output: IntoBorrowOutputType<T>,
+            F::Output: FromBorrow<T>,
         {
-            let borrowable = <F::Output as IntoBorrowOutputType<T>>::into_borrow_output_type(value);
+            let borrowable = <F::Output as FromBorrow<T>>::from_borrow(value);
             self.builder
                 .push_responder2(BorrowResponder2::<F> { borrowable }.into_dyn_responder());
             self.quantify()

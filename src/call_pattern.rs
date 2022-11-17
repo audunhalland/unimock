@@ -384,7 +384,7 @@ mod tests {
     fn load_sig<'u, 'i, F: MockFn2>(
         stored: &'u <F::Output as Output>::Type,
     ) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
-        match <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_borrow_sig(stored) {
+        match <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_borrow_output(stored) {
             Ok(sig) => sig,
             Err(_) => panic!(),
         }

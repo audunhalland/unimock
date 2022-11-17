@@ -7,35 +7,33 @@ pub trait Output {
     type Type: 'static;
 }
 
-pub enum IntoSigError {
-    NotOwned,
-    NotBorrowed,
-}
-
 /// Trait that describes the output signature of a mocked function.
 pub trait OutputSig<'u, 'i, O: Output> {
     /// The type of the output compatible with the function signature.
     type Sig;
 
-    fn try_into_sig(value: O::Type) -> Result<Self::Sig, IntoSigError>;
+    #[doc(hidden)]
+    fn try_from_output(value: O::Type) -> Result<Self::Sig, SignatureError>;
 
-    fn try_borrow_sig(value: &'u O::Type) -> Result<Self::Sig, IntoSigError>;
+    #[doc(hidden)]
+    fn try_borrow_output(value: &'u O::Type) -> Result<Self::Sig, SignatureError>;
 }
 
-pub trait BorrowOutput: Output
-where
-    <Self as Output>::Type: Send + Sync,
-{
+#[doc(hidden)]
+pub enum SignatureError {
+    NotOwned,
+    NotBorrowed,
 }
-pub trait IntoBorrowOutputType<T: ?Sized>: Output {
-    fn into_borrow_output_type(
+
+/// Trait for constructing an output by borrowing from another value.
+pub trait FromBorrow<T: ?Sized>: Output {
+    /// Construct an output by using some value that can be borrowed from to produce the output.
+    fn from_borrow(
         value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
     ) -> <Self as Output>::Type;
 }
-pub trait StaticRefOutput: Output {}
 
-// Owned
-
+#[doc(hidden)]
 pub struct Owned<T>(std::marker::PhantomData<T>);
 
 impl<T: 'static> Output for Owned<T> {
@@ -45,12 +43,12 @@ impl<T: 'static> Output for Owned<T> {
 impl<'u, 'i, T: 'static> OutputSig<'u, 'i, Self> for Owned<T> {
     type Sig = T;
 
-    fn try_into_sig(value: <Self as Output>::Type) -> Result<Self::Sig, IntoSigError> {
+    fn try_from_output(value: <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
         Ok(value)
     }
 
-    fn try_borrow_sig(_: &'u <Self as Output>::Type) -> Result<Self::Sig, IntoSigError> {
-        Err(IntoSigError::NotOwned)
+    fn try_borrow_output(_: &'u <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
+        Err(SignatureError::NotOwned)
     }
 }
 
@@ -61,10 +59,8 @@ impl<T: ?Sized + 'static> Output for Borrowed<T> {
     type Type = Box<dyn Borrow<T> + Send + Sync>;
 }
 
-impl<T: ?Sized + 'static> BorrowOutput for Borrowed<T> {}
-
-impl<T: ?Sized + 'static> IntoBorrowOutputType<T> for Borrowed<T> {
-    fn into_borrow_output_type(
+impl<T: ?Sized + 'static> FromBorrow<T> for Borrowed<T> {
+    fn from_borrow(
         value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
     ) -> <Self as Output>::Type {
         Box::new(value)
@@ -74,16 +70,18 @@ impl<T: ?Sized + 'static> IntoBorrowOutputType<T> for Borrowed<T> {
 impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for Borrowed<T> {
     type Sig = &'u T;
 
-    fn try_into_sig(_: <Borrowed<T> as Output>::Type) -> Result<Self::Sig, IntoSigError> {
-        Err(IntoSigError::NotBorrowed)
+    fn try_from_output(_: <Borrowed<T> as Output>::Type) -> Result<Self::Sig, SignatureError> {
+        Err(SignatureError::NotBorrowed)
     }
 
-    fn try_borrow_sig(value: &'u <Borrowed<T> as Output>::Type) -> Result<Self::Sig, IntoSigError> {
+    fn try_borrow_output(
+        value: &'u <Borrowed<T> as Output>::Type,
+    ) -> Result<Self::Sig, SignatureError> {
         Ok(value.as_ref().borrow())
     }
 }
 
-/// This type describes a function output that is a static reference.
+#[doc(hidden)]
 pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
 
 impl<T: ?Sized + 'static> Output for StaticRef<T> {
@@ -93,18 +91,19 @@ impl<T: ?Sized + 'static> Output for StaticRef<T> {
 impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Self> for StaticRef<T> {
     type Sig = &'static T;
 
-    fn try_into_sig(value: <Self as Output>::Type) -> Result<Self::Sig, IntoSigError> {
+    fn try_from_output(value: <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
         Ok(value)
     }
 
-    fn try_borrow_sig(value: &'u <Self as Output>::Type) -> Result<Self::Sig, IntoSigError> {
+    fn try_borrow_output(value: &'u <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
         Ok(*value)
     }
 }
 
-/// This type describes a function output that is a mix of owned and borrowed data.
-///
-/// The typical example is `Option<&T>`.
+#[doc(hidden)]
+// This type describes a function output that is a mix of owned and borrowed data.
+//
+// The typical example is `Option<&T>`.
 pub struct Mixed<T>(std::marker::PhantomData<T>);
 
 impl<T: Possess<'static>> Output for Mixed<T> {
@@ -118,11 +117,11 @@ where
 {
     type Sig = T;
 
-    fn try_into_sig(_: <O as Output>::Type) -> Result<Self::Sig, IntoSigError> {
-        Err(IntoSigError::NotBorrowed)
+    fn try_from_output(_: <O as Output>::Type) -> Result<Self::Sig, SignatureError> {
+        Err(SignatureError::NotBorrowed)
     }
 
-    fn try_borrow_sig(value: &'u <O as Output>::Type) -> Result<Self::Sig, IntoSigError> {
+    fn try_borrow_output(value: &'u <O as Output>::Type) -> Result<Self::Sig, SignatureError> {
         Ok(<T as Possess>::reborrow(value))
     }
 }
