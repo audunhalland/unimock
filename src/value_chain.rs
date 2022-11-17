@@ -11,7 +11,7 @@ pub struct ValueChain {
 }
 
 impl ValueChain {
-    pub fn insert<T: Any + Send + Sync>(&self, value: T) -> &T {
+    pub fn push<T: Any + Send + Sync>(&self, value: T) -> &T {
         self.push_back(Node::new(value));
         let last_node = self.borrow_back().unwrap();
 
@@ -22,14 +22,9 @@ impl ValueChain {
         if let Err(mut new_node) = self.root_node.fill(new_node) {
             let mut parent_node = self.root_node.borrow().unwrap();
 
-            loop {
-                match parent_node.next.fill(new_node) {
-                    Ok(()) => return,
-                    Err(node) => {
-                        parent_node = parent_node.next.borrow().unwrap();
-                        new_node = node;
-                    }
-                }
+            while let Err(node) = parent_node.next.fill(new_node) {
+                parent_node = parent_node.next.borrow().unwrap();
+                new_node = node;
             }
         }
     }
@@ -61,11 +56,11 @@ impl Node {
 #[test]
 fn it_works() {
     let value_chain = ValueChain::default();
-    let first = value_chain.insert(1);
-    let second = value_chain.insert(2);
-    let third = value_chain.insert(3);
+    let first = value_chain.push(1);
+    let second = value_chain.push("");
+    let third = value_chain.push(42.0);
 
     assert_eq!(&1, first);
-    assert_eq!(&2, second);
-    assert_eq!(&3, third);
+    assert_eq!(&"", second);
+    assert_eq!(&42.0, third);
 }
