@@ -185,7 +185,7 @@ fn def_mock_fn(
     let impl_blocks = quote! {
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
-            type Output = #output_static;
+            type OutputOld = #output_static;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -220,7 +220,7 @@ fn def_mock_fn(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = (#(#inputs_tuple),*),
-                        Output = #output_static
+                        OutputOld = #output_static
                     >
                         #where_clause
                     {

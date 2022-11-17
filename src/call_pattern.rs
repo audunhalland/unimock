@@ -141,18 +141,18 @@ pub(crate) trait IntoDynResponder: Sized {
 }
 
 pub(crate) struct ValueResponder<F: MockFn> {
-    pub stored_value: Box<dyn CloneOrTakeOrBorrow<F::Output>>,
+    pub stored_value: Box<dyn CloneOrTakeOrBorrow<F::OutputOld>>,
 }
 pub(crate) struct BorrowableResponder<F: MockFn> {
-    pub borrowable: Box<dyn Borrow<F::Output> + Send + Sync>,
+    pub borrowable: Box<dyn Borrow<F::OutputOld> + Send + Sync>,
 }
 pub(crate) struct ClosureResponder<F: MockFn> {
     #[allow(clippy::type_complexity)]
-    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::Output) + Send + Sync>,
+    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> F::OutputOld) + Send + Sync>,
 }
 pub(crate) struct StaticRefClosureResponder<F: MockFn> {
     #[allow(clippy::type_complexity)]
-    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> &'static F::Output) + Send + Sync>,
+    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> &'static F::OutputOld) + Send + Sync>,
 }
 
 impl<F: MockFn> IntoDynResponder for ValueResponder<F> {

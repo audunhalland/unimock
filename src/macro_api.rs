@@ -108,10 +108,10 @@ where
 pub fn eval<'i, F>(
     unimock: &Unimock,
     inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, F::Output, F>
+) -> macro_api::Evaluation<'i, F::OutputOld, F>
 where
     F: MockFn + 'static,
-    F::Output: Sized,
+    F::OutputOld: Sized,
 {
     unimock.handle_error(eval::EvalCtx::new::<F>(&unimock.shared_state).eval_sized(inputs))
 }
@@ -121,7 +121,7 @@ where
 pub fn eval_borrowed<'u, 'i, F>(
     unimock: &'u Unimock,
     inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, &'u F::Output, F>
+) -> macro_api::Evaluation<'i, &'u F::OutputOld, F>
 where
     F: MockFn + 'static,
 {
@@ -135,7 +135,7 @@ where
 pub fn eval_borrowed_param<'u, 'i, F>(
     unimock: &'u Unimock,
     inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, &'i F::Output, F>
+) -> macro_api::Evaluation<'i, &'i F::OutputOld, F>
 where
     F: MockFn + 'static,
 {
@@ -150,7 +150,7 @@ where
 pub fn eval_static_ref<'i, F>(
     unimock: &Unimock,
     inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, &'static F::Output, F>
+) -> macro_api::Evaluation<'i, &'static F::OutputOld, F>
 where
     F: MockFn + 'static,
 {

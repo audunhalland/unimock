@@ -743,7 +743,7 @@ pub trait MockFn: Sized + 'static {
     type Inputs<'i>;
 
     /// The output of the function.
-    type Output: ?Sized;
+    type OutputOld: ?Sized;
 
     /// The name to use for runtime errors.
     const NAME: &'static str;

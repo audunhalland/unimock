@@ -168,9 +168,9 @@ where
     /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
     /// To be able to return this value multiple times, quantify it explicitly.
-    pub fn returns<V: Into<F::Output>>(self, value: V) -> QuantifyReturnValue<'p, F, O>
+    pub fn returns<V: Into<F::OutputOld>>(self, value: V) -> QuantifyReturnValue<'p, F, O>
     where
-        F::Output: Send + Sync + Sized + 'static,
+        F::OutputOld: Send + Sync + Sized + 'static,
     {
         QuantifyReturnValue {
             builder: self.builder,
@@ -196,9 +196,9 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns<V: Into<F::Output>>(mut self, value: V) -> Quantify<'p, F, O>
+    pub fn returns<V: Into<F::OutputOld>>(mut self, value: V) -> Quantify<'p, F, O>
     where
-        F::Output: Clone + Send + Sync + Sized + 'static,
+        F::OutputOld: Clone + Send + Sync + Sized + 'static,
     {
         let value = value.into();
         self.builder.push_responder(
@@ -237,7 +237,7 @@ macro_rules! define_response_common_impl {
             /// Specify the output of the call pattern by calling `Default::default()`.
             pub fn returns_default(mut self) -> Quantify<'p, F, O>
             where
-                F::Output: Default,
+                F::OutputOld: Default,
             {
                 self.builder.push_responder(
                     ClosureResponder::<F> {
@@ -253,7 +253,7 @@ macro_rules! define_response_common_impl {
             /// Using this for `'static` references will produce a runtime error. For static references, use [DefineResponse::returns_static].
             pub fn returns_ref<T>(mut self, value: T) -> Quantify<'p, F, O>
             where
-                T: std::borrow::Borrow<F::Output> + Sized + Send + Sync + 'static,
+                T: std::borrow::Borrow<F::OutputOld> + Sized + Send + Sync + 'static,
             {
                 self.builder.push_responder(
                     BorrowableResponder::<F> {
@@ -266,9 +266,9 @@ macro_rules! define_response_common_impl {
 
             /// Specify the output of the call to be a reference to static value.
             /// This must be used when the returned reference in the mocked trait is `'static`.
-            pub fn returns_static(mut self, value: &'static F::Output) -> Quantify<'p, F, O>
+            pub fn returns_static(mut self, value: &'static F::OutputOld) -> Quantify<'p, F, O>
             where
-                F::Output: Send + Sync + 'static,
+                F::OutputOld: Send + Sync + 'static,
             {
                 self.builder.push_responder(
                     StaticRefClosureResponder::<F> {
@@ -283,8 +283,8 @@ macro_rules! define_response_common_impl {
             pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
             where
                 A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
-                R: Into<F::Output>,
-                F::Output: Sized,
+                R: Into<F::OutputOld>,
+                F::OutputOld: Sized,
             {
                 self.builder.push_responder(
                     ClosureResponder::<F> {
@@ -306,15 +306,15 @@ macro_rules! define_response_common_impl {
             pub fn answers_leaked_ref<A, R>(mut self, func: A) -> Quantify<'p, F, O>
             where
                 A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
-                R: std::borrow::Borrow<F::Output> + 'static,
-                F::Output: Sized,
+                R: std::borrow::Borrow<F::OutputOld> + 'static,
+                F::OutputOld: Sized,
             {
                 self.builder.push_responder(
                     StaticRefClosureResponder::<F> {
                         func: Box::new(move |inputs| {
                             let value = func(inputs);
                             let leaked_ref = Box::leak(Box::new(value));
-                            <R as std::borrow::Borrow<F::Output>>::borrow(leaked_ref)
+                            <R as std::borrow::Borrow<F::OutputOld>>::borrow(leaked_ref)
                         }),
                     }
                     .into_dyn_responder(),
@@ -356,10 +356,10 @@ define_response_common_impl!(DefineMultipleResponses);
 pub struct QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
-    F::Output: Sized + Send + Sync,
+    F::OutputOld: Sized + Send + Sync,
 {
     builder: BuilderWrapper<'p>,
-    value: Option<F::Output>,
+    value: Option<F::OutputOld>,
     mock_fn: PhantomData<F>,
     ordering: O,
 }
@@ -367,7 +367,7 @@ where
 impl<'p, F, O> QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
-    F::Output: Sized + Send + Sync,
+    F::OutputOld: Sized + Send + Sync,
     O: Copy,
 {
     /// Expect this call pattern to be called exactly once.
@@ -392,7 +392,7 @@ where
     /// Expect this call pattern to be called exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
     where
-        F::Output: Clone,
+        F::OutputOld: Clone,
     {
         self.builder.push_responder(
             ValueResponder::<F> {
@@ -412,7 +412,7 @@ where
     /// Expect this call pattern to be called at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
-        F::Output: Clone,
+        F::OutputOld: Clone,
     {
         self.builder.push_responder(
             ValueResponder::<F> {
@@ -433,7 +433,7 @@ where
 impl<'p, F, O> ClauseSealed for QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
-    F::Output: Sized + Send + Sync,
+    F::OutputOld: Sized + Send + Sync,
     O: Copy + Ordering,
 {
     fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
@@ -449,7 +449,7 @@ where
 impl<'p, F, O> Drop for QuantifyReturnValue<'p, F, O>
 where
     F: MockFn,
-    F::Output: Sized + Send + Sync,
+    F::OutputOld: Sized + Send + Sync,
 {
     fn drop(&mut self) {
         if let Some(value) = self.value.take() {

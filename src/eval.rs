@@ -104,9 +104,9 @@ impl<'u> EvalCtx<'u> {
     pub fn eval_sized<'i, F: MockFn>(
         self,
         inputs: F::Inputs<'i>,
-    ) -> MockResult<Evaluation<'i, F::Output, F>>
+    ) -> MockResult<Evaluation<'i, F::OutputOld, F>>
     where
-        F::Output: Sized,
+        F::OutputOld: Sized,
     {
         let input_debugger = &|| F::debug_inputs(&inputs);
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
@@ -135,7 +135,7 @@ impl<'u> EvalCtx<'u> {
     pub fn eval_unsized_self_borrowed<'i, F: MockFn>(
         self,
         inputs: F::Inputs<'i>,
-    ) -> MockResult<Evaluation<'i, &'u F::Output, F>> {
+    ) -> MockResult<Evaluation<'i, &'u F::OutputOld, F>> {
         let input_debugger = &|| F::debug_inputs(&inputs);
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
@@ -148,7 +148,7 @@ impl<'u> EvalCtx<'u> {
                     Ok(Evaluation::Evaluated((inner.downcast::<F>()?.func)(inputs)))
                 }
                 DynResponder::Borrowable(inner) => {
-                    let borrowable: &dyn Borrow<<F as MockFn>::Output> =
+                    let borrowable: &dyn Borrow<<F as MockFn>::OutputOld> =
                         inner.downcast::<F>()?.borrowable.as_ref();
                     let borrow = borrowable.borrow();
                     Ok(Evaluation::Evaluated(borrow))
@@ -164,7 +164,7 @@ impl<'u> EvalCtx<'u> {
         self,
         inputs: F::Inputs<'i>,
         lender: Lender,
-    ) -> MockResult<Evaluation<'i, &'static F::Output, F>> {
+    ) -> MockResult<Evaluation<'i, &'static F::OutputOld, F>> {
         let input_debugger = &|| F::debug_inputs(&inputs);
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
