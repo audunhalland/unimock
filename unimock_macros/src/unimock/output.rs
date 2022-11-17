@@ -195,9 +195,9 @@ fn determine_reference_ownership(
 }
 
 fn determine_mixed_ownership(borrow_info: &BorrowInfo) -> OutputOwnership {
-    if borrow_info.has_input {
+    if borrow_info.has_input_lifetime {
         OutputOwnership::Owned
-    } else if borrow_info.has_elided || borrow_info.has_self {
+    } else if borrow_info.has_elided_reference || borrow_info.has_self_reference {
         OutputOwnership::Mixed
     } else {
         OutputOwnership::Owned
@@ -236,12 +236,14 @@ struct ReturnTypeAnalyzer<'s> {
 
 #[derive(Default)]
 struct BorrowInfo {
-    has_nonstatic: bool,
-    has_elided: bool,
-    has_static: bool,
-    has_self: bool,
-    has_input: bool,
-    has_undeclared: bool,
+    has_nonstatic_lifetime: bool,
+    has_elided_lifetime: bool,
+    has_elided_reference: bool,
+    has_static_lifetime: bool,
+    has_self_lifetime: bool,
+    has_self_reference: bool,
+    has_input_lifetime: bool,
+    has_undeclared_lifetime: bool,
 }
 
 impl<'s> ReturnTypeAnalyzer<'s> {
@@ -255,32 +257,34 @@ impl<'s> ReturnTypeAnalyzer<'s> {
         analyzer.borrow_info
     }
 
-    fn analyze_lifetime(&mut self, lifetime: Option<&syn::Lifetime>) {
+    fn analyze_lifetime(&mut self, lifetime: Option<&syn::Lifetime>, is_reference: bool) {
         match lifetime {
             Some(lifetime) => match lifetime.ident.to_string().as_ref() {
                 "static" => {
-                    self.borrow_info.has_static = true;
+                    self.borrow_info.has_static_lifetime = true;
                 }
                 _ => match find_param_lifetime(self.sig, &lifetime.ident) {
                     Some(index) => match index {
                         0 => {
-                            self.borrow_info.has_nonstatic = true;
-                            self.borrow_info.has_self = true;
+                            self.borrow_info.has_nonstatic_lifetime = true;
+                            self.borrow_info.has_self_lifetime = true;
+                            self.borrow_info.has_self_reference |= is_reference;
                         }
                         _ => {
-                            self.borrow_info.has_nonstatic = true;
-                            self.borrow_info.has_input = true;
+                            self.borrow_info.has_nonstatic_lifetime = true;
+                            self.borrow_info.has_input_lifetime = true;
                         }
                     },
                     None => {
-                        self.borrow_info.has_nonstatic = true;
-                        self.borrow_info.has_undeclared = true;
+                        self.borrow_info.has_nonstatic_lifetime = true;
+                        self.borrow_info.has_undeclared_lifetime = true;
                     }
                 },
             },
             None => {
-                self.borrow_info.has_nonstatic = true;
-                self.borrow_info.has_elided = true;
+                self.borrow_info.has_nonstatic_lifetime = true;
+                self.borrow_info.has_elided_lifetime = true;
+                self.borrow_info.has_elided_reference |= is_reference;
             }
         }
     }
@@ -288,18 +292,18 @@ impl<'s> ReturnTypeAnalyzer<'s> {
 
 impl<'s> syn::visit_mut::VisitMut for ReturnTypeAnalyzer<'s> {
     fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
-        self.analyze_lifetime(reference.lifetime.as_ref());
+        self.analyze_lifetime(reference.lifetime.as_ref(), true);
         syn::visit_mut::visit_type_reference_mut(self, reference);
     }
 
     fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
-        self.analyze_lifetime(Some(lifetime));
+        self.analyze_lifetime(Some(lifetime), false);
         syn::visit_mut::visit_lifetime_mut(self, lifetime);
     }
 }
 
 fn rename_lifetimes_static(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
-    if !borrow_info.has_nonstatic {
+    if !borrow_info.has_nonstatic_lifetime {
         return;
     }
 
@@ -307,7 +311,7 @@ fn rename_lifetimes_static(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
 }
 
 fn rename_lifetimes_sig(ty: &mut syn::Type, borrow_info: &BorrowInfo, ownership: OutputOwnership) {
-    if !borrow_info.has_nonstatic {
+    if !borrow_info.has_nonstatic_lifetime {
         return;
     }
 
