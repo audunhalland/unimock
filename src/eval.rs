@@ -392,14 +392,14 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 }
 
-fn try_into_sig<'u, 'i, F: MockFn2>(
+fn try_into_sig<'u, F: MockFn2>(
     value: <F::Output as Output>::Type,
-) -> Result<<F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig, SignatureError> {
-    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_from_output(value)
+) -> Result<<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig, SignatureError> {
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_from_output(value)
 }
 
-fn try_borrow_sig<'u, 'i, F: MockFn2>(
+fn try_borrow_sig<'u, F: MockFn2>(
     value: &'u <F::Output as Output>::Type,
-) -> Result<<F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig, SignatureError> {
-    <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_borrow_output(value)
+) -> Result<<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig, SignatureError> {
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_borrow_output(value)
 }

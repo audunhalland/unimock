@@ -359,7 +359,7 @@ mod tests {
         impl MockFn2 for Test {
             type Inputs<'i> = ();
             type Output = Mixed<Option<&'static str>>;
-            type OutputSig<'u, 'i> = Mixed<Option<&'u str>>;
+            type OutputSig<'u> = Mixed<Option<&'u str>>;
             const NAME: &'static str = "Test";
         }
 
@@ -381,10 +381,10 @@ mod tests {
         assert_eq!(Some("fancy"), reborrowed);
     }
 
-    fn load_sig<'u, 'i, F: MockFn2>(
+    fn load_sig<'u, F: MockFn2>(
         stored: &'u <F::Output as Output>::Type,
-    ) -> <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::Sig {
-        match <F::OutputSig<'u, 'i> as OutputSig<'u, 'i, F::Output>>::try_borrow_output(stored) {
+    ) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
+        match <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_borrow_output(stored) {
             Ok(sig) => sig,
             Err(_) => panic!(),
         }

@@ -830,7 +830,7 @@ pub trait MockFn2: Sized + 'static {
     type Output: output::Output;
 
     /// Type describing the output of the function the way it's seen in the function signature.
-    type OutputSig<'u, 'i>: output::OutputSig<'u, 'i, Self::Output>;
+    type OutputSig<'u>: output::OutputSig<'u, Self::Output>;
 
     /// The name to use for runtime errors.
     const NAME: &'static str;

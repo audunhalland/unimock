@@ -8,7 +8,7 @@ pub trait Output {
 }
 
 /// Trait that describes the output signature of a mocked function.
-pub trait OutputSig<'u, 'i, O: Output> {
+pub trait OutputSig<'u, O: Output> {
     /// The type of the output compatible with the function signature.
     type Sig;
 
@@ -40,7 +40,7 @@ impl<T: 'static> Output for Owned<T> {
     type Type = T;
 }
 
-impl<'u, 'i, T: 'static> OutputSig<'u, 'i, Self> for Owned<T> {
+impl<'u, T: 'static> OutputSig<'u, Self> for Owned<T> {
     type Sig = T;
 
     fn try_from_output(value: <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
@@ -67,7 +67,7 @@ impl<T: ?Sized + 'static> FromBorrow<T> for Borrowed<T> {
     }
 }
 
-impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for Borrowed<T> {
+impl<'u, T: ?Sized + 'static> OutputSig<'u, Borrowed<T>> for Borrowed<T> {
     type Sig = &'u T;
 
     fn try_from_output(_: <Borrowed<T> as Output>::Type) -> Result<Self::Sig, SignatureError> {
@@ -88,7 +88,7 @@ impl<T: ?Sized + 'static> Output for StaticRef<T> {
     type Type = &'static T;
 }
 
-impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Self> for StaticRef<T> {
+impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for StaticRef<T> {
     type Sig = &'static T;
 
     fn try_from_output(value: <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
@@ -110,7 +110,7 @@ impl<T: Possess<'static>> Output for Mixed<T> {
     type Type = <T as Possess<'static>>::Possessed;
 }
 
-impl<'u, 'i, T, O> OutputSig<'u, 'i, O> for Mixed<T>
+impl<'u, T, O> OutputSig<'u, O> for Mixed<T>
 where
     O: Output,
     T: Possess<'u, Possessed = O::Type>,

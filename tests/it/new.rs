@@ -17,14 +17,14 @@ struct MockMixed;
 impl MockFn2 for MockOwned {
     type Inputs<'i> = ();
     type Output = output::Owned<String>;
-    type OutputSig<'u, 'i> = output::Owned<String>;
+    type OutputSig<'u> = output::Owned<String>;
     const NAME: &'static str = "";
 }
 
 impl MockFn2 for MockBorrowed {
     type Inputs<'i> = ();
     type Output = output::Borrowed<str>;
-    type OutputSig<'u, 'i> = output::Borrowed<str>;
+    type OutputSig<'u> = output::Borrowed<str>;
     const NAME: &'static str = "";
 }
 
@@ -32,21 +32,21 @@ impl MockFn2 for MockBorrowedParam {
     type Inputs<'i> = &'i str;
     // There is now way to store an "owned" version of something borrowed from inputs
     type Output = output::StaticRef<str>;
-    type OutputSig<'u, 'i> = output::StaticRef<str>;
+    type OutputSig<'u> = output::StaticRef<str>;
     const NAME: &'static str = "";
 }
 
 impl MockFn2 for MockStatic {
     type Inputs<'i> = ();
     type Output = output::StaticRef<str>;
-    type OutputSig<'u, 'i> = output::StaticRef<str>;
+    type OutputSig<'u> = output::StaticRef<str>;
     const NAME: &'static str = "";
 }
 
 impl MockFn2 for MockMixed {
     type Inputs<'i> = ();
     type Output = output::Mixed<Option<&'static str>>;
-    type OutputSig<'u, 'i> = output::Mixed<Option<&'u str>>;
+    type OutputSig<'u> = output::Mixed<Option<&'u str>>;
     const NAME: &'static str = "";
 }
 
