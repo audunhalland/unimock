@@ -169,7 +169,7 @@ where
     /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
     /// To be able to return this value multiple times, quantify it explicitly.
-    pub fn returns<V: Into<F::OutputOld>>(self, value: V) -> QuantifyReturnValue<'p, F, O>
+    pub fn returns1<V: Into<F::OutputOld>>(self, value: V) -> QuantifyReturnValue<'p, F, O>
     where
         F::OutputOld: Send + Sync + Sized + 'static,
     {
@@ -184,7 +184,7 @@ where
 
 impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O>
 where
-    <F::Output as Output>::Type: Clone + Send + Sync,
+    <F::Output as Output>::Type: Send + Sync,
 {
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
@@ -193,7 +193,7 @@ where
     /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
     /// To be able to return this value multiple times, quantify it explicitly.
-    pub fn returns2(
+    pub fn returns(
         self,
         value: impl Into<<F::Output as Output>::Type>,
     ) -> QuantifyReturnValue2<'p, F, O> {
@@ -221,7 +221,7 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns<V: Into<F::OutputOld>>(mut self, value: V) -> Quantify<'p, F, O>
+    pub fn returns1<V: Into<F::OutputOld>>(mut self, value: V) -> Quantify<'p, F, O>
     where
         F::OutputOld: Clone + Send + Sync + Sized + 'static,
     {
@@ -238,7 +238,7 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns2<V: Into<<F::Output as Output>::Type>>(mut self, value: V) -> Quantify<'p, F, O>
+    pub fn returns<V: Into<<F::Output as Output>::Type>>(mut self, value: V) -> Quantify<'p, F, O>
     where
         <F::Output as Output>::Type: Clone + Send + Sync + Sized + 'static,
     {
@@ -277,7 +277,7 @@ macro_rules! define_response_common_impl {
             }
 
             /// Specify the output of the call pattern by calling `Default::default()`.
-            pub fn returns_default(mut self) -> Quantify<'p, F, O>
+            pub fn returns_default1(mut self) -> Quantify<'p, F, O>
             where
                 F::OutputOld: Default,
             {
@@ -291,7 +291,7 @@ macro_rules! define_response_common_impl {
             }
 
             /// Specify the output of the call pattern by calling `Default::default()`.
-            pub fn returns_default2(mut self) -> Quantify<'p, F, O>
+            pub fn returns_default(mut self) -> Quantify<'p, F, O>
             where
                 <F::Output as Output>::Type: Default,
             {
@@ -324,7 +324,7 @@ macro_rules! define_response_common_impl {
             /// Specify the output of the call to be a borrow of the provided value.
             /// This works well when the lifetime of the returned reference is the same as `self`.
             /// Using this for `'static` references will produce a runtime error. For static references, use [DefineResponse::returns_static].
-            pub fn returns_ref<T>(mut self, value: T) -> Quantify<'p, F, O>
+            pub fn returns_ref1<T>(mut self, value: T) -> Quantify<'p, F, O>
             where
                 T: std::borrow::Borrow<F::OutputOld> + Sized + Send + Sync + 'static,
             {
@@ -339,7 +339,7 @@ macro_rules! define_response_common_impl {
 
             /// Specify the output of the call to be a reference to static value.
             /// This must be used when the returned reference in the mocked trait is `'static`.
-            pub fn returns_static(mut self, value: &'static F::OutputOld) -> Quantify<'p, F, O>
+            pub fn returns_static1(mut self, value: &'static F::OutputOld) -> Quantify<'p, F, O>
             where
                 F::OutputOld: Send + Sync + 'static,
             {
@@ -353,7 +353,7 @@ macro_rules! define_response_common_impl {
             }
 
             /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
-            pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
+            pub fn answers1<A, R>(mut self, func: A) -> Quantify<'p, F, O>
             where
                 A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
                 R: Into<F::OutputOld>,
@@ -369,7 +369,7 @@ macro_rules! define_response_common_impl {
             }
 
             /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
-            pub fn answers2<A, R>(mut self, func: A) -> Quantify<'p, F, O>
+            pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
             where
                 A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
                 R: Into<<F::Output as Output>::Type>,

@@ -213,6 +213,7 @@ fn def_mock_fn(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = (#(#inputs_tuple),*),
+                        Output = #prefix::output::#output_mediator<#output_static>,
                         OutputOld = #output_static
                     >
                         #where_clause
@@ -287,14 +288,14 @@ fn def_method_impl(
 
         quote! {
             use #prefix::macro_api::*;
-            match #eval_fn::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
-                Evaluation::Evaluated(output) => output,
-                Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
+            match eval2::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
+                Evaluation2::Evaluated(output) => output,
+                Evaluation2::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #prefix::macro_api::#eval_fn::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)).unwrap(&self)
+            #prefix::macro_api::eval2::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)).unwrap(&self)
         }
     };
 

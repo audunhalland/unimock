@@ -45,11 +45,11 @@ mod param {
             GenericParamMock::generic_param
                 .with_types::<&'static str>()
                 .each_call(matching!("foobar"))
-                .returns_static("a string"),
+                .returns("a string"),
             GenericParamMock::generic_param
                 .with_types::<i32>()
                 .each_call(matching!(42))
-                .returns_static("a number"),
+                .returns("a number"),
         ));
 
         assert_eq!("a string", deps.generic_param("foobar"));
@@ -66,7 +66,7 @@ mod param {
             GenericParamMock::generic_param
                 .with_types::<i32>()
                 .each_call(matching!(1337))
-                .returns_static("a number"),
+                .returns("a number"),
         );
 
         deps.generic_param(42_i32);
@@ -87,7 +87,7 @@ mod param {
             GenericParamDebugMock::generic_param_debug
                 .with_types::<i32>()
                 .each_call(matching!(1337))
-                .returns_static("a number"),
+                .returns("a number"),
         );
 
         deps.generic_param_debug(42_i32);

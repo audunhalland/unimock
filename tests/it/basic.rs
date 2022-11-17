@@ -149,7 +149,8 @@ mod referenced {
             "answer",
             takes_referenced(
                 &Unimock::new(ReferencedMock::foo.stub(|each| {
-                    each.call(matching!("a")).returns_ref("answer".to_string());
+                    each.call(matching!("a"))
+                        .returns_borrow("answer".to_string());
                 })),
                 "a",
             )
@@ -163,7 +164,7 @@ mod referenced {
             takes_referenced(
                 &Unimock::new(ReferencedMock::foo.stub(|each| {
                     each.call(matching!("Æ")).panics("Should not be called");
-                    each.call(matching!("a")).returns_ref(String::new());
+                    each.call(matching!("a")).returns_borrow(String::new());
                 })),
                 "a",
             )
@@ -176,7 +177,7 @@ mod referenced {
             "foobar",
             takes_referenced(
                 &Unimock::new(ReferencedMock::foo.stub(|each| {
-                    each.call(matching!("a")).returns_static("foobar");
+                    each.call(matching!("a")).returns_borrow("foobar");
                 })),
                 "a",
             )
@@ -264,13 +265,13 @@ fn test_multiple() {
         takes_single_multi(&Unimock::new((
             SingleArgMock::method1.stub(|each| {
                 each.call(matching!("b"))
-                    .returns_ref("B".to_string())
+                    .returns_borrow("B".to_string())
                     .once();
             }),
             MultiArgMock::method2.stub(|each| {
                 each.call(matching!("a", _)).panics("should not call this");
                 each.call(matching!("B", "B"))
-                    .returns_ref("success".to_string())
+                    .returns_borrow("success".to_string())
                     .once();
             })
         )))
@@ -350,14 +351,14 @@ fn should_be_able_to_borrow_a_returns_value() {
         Unimock::new(
             BorrowsRetMock::borrows_ret
                 .each_call(matching!())
-                .returns(Ret(42))
+                .returns_borrow(Ret(42))
         )
         .borrows_ret()
     );
 }
 
 #[test]
-fn borrowing_with_memory_leak() {
+fn various_borrowing() {
     #[unimock(api=BorrowingMock)]
     trait Borrowing {
         fn borrow(&self, input: String) -> &String;
@@ -372,7 +373,7 @@ fn borrowing_with_memory_leak() {
             &Unimock::new(
                 BorrowingMock::borrow
                     .next_call(matching!(_))
-                    .returns_ref("foo".to_string())
+                    .returns_borrow("foo".to_string())
                     .once()
             ),
             ""
@@ -410,7 +411,7 @@ mod custom_api_module {
         Unimock::new(
             FakeSingle::func
                 .next_call(matching!(_))
-                .returns_ref(MyType)
+                .returns_borrow(MyType)
                 .once(),
         );
     }
@@ -658,7 +659,7 @@ fn borrow_static_should_not_work_with_returns_ref() {
         Unimock::new(
             BorrowStaticMock::static_str
                 .next_call(matching!(_))
-                .returns_ref("foo")
+                .returns("foo")
         )
         .static_str(33)
     );
@@ -671,7 +672,7 @@ fn borrow_static_should_work_with_returns_static() {
         Unimock::new(
             BorrowStaticMock::static_str
                 .next_call(matching!(_))
-                .returns_static("foo")
+                .returns("foo")
         )
         .static_str(33)
     );
@@ -691,7 +692,7 @@ mod async_argument_borrowing {
         let unimock = Unimock::new(
             BorrowParamMock::borrow_param
                 .each_call(matching!(_))
-                .returns_static("foobar"),
+                .returns("foobar"),
         );
 
         assert_eq!("foobar", unimock.borrow_param("input").await);
@@ -705,7 +706,7 @@ mod async_argument_borrowing {
         let unimock = Unimock::new(
             BorrowParamMock::borrow_param
                 .each_call(matching!(_))
-                .returns_ref("foobar"),
+                .returns("foobar"),
         );
 
         unimock.borrow_param("input").await;
