@@ -128,7 +128,8 @@ pub fn extract_methods<'s>(
                 syn::ReturnType::Default => output::OutputStructure {
                     wrapping: output::OutputWrapping::None,
                     ownership: output::OutputOwnership::Owned,
-                    ty: None,
+                    unsized_ty_static: None,
+                    unsized_ty_u: None,
                 },
                 syn::ReturnType::Type(_, ty) => {
                     output::determine_output_structure(item_trait, &method.sig, ty)

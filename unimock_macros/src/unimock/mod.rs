@@ -159,12 +159,16 @@ fn def_mock_fn(
         method.mockfn_doc_attrs(trait_info.ident())
     };
 
-    let output = match &method.output_structure.ty {
+    let output_static = match &method.output_structure.unsized_ty_static {
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
-    let output_type_name = syn::Ident::new(
-        method.output_structure.ownership.output_type_name(),
+    let output_u = match &method.output_structure.unsized_ty_u {
+        Some(ty) => quote! { #ty },
+        None => quote! { () },
+    };
+    let output_mediator = syn::Ident::new(
+        method.output_structure.ownership.output_mediator(),
         proc_macro2::Span::call_site(),
     );
 
@@ -181,7 +185,7 @@ fn def_mock_fn(
     let impl_blocks = quote! {
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
-            type Output = #output;
+            type Output = #output_static;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -189,8 +193,8 @@ fn def_mock_fn(
 
         impl #generic_params #prefix::MockFn2 for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
-            type Output = #prefix::output::#output_type_name<#output>;
-            type OutputSig<'u> = #prefix::output::#output_type_name<#output>;
+            type Output = #prefix::output::#output_mediator<#output_static>;
+            type OutputSig<'u> = #prefix::output::#output_mediator<#output_u>;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -216,7 +220,7 @@ fn def_mock_fn(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = (#(#inputs_tuple),*),
-                        Output = #output
+                        Output = #output_static
                     >
                         #where_clause
                     {

@@ -184,7 +184,7 @@ mod referenced {
     }
 }
 
-mod reference_in_wrapper {
+mod mixed_output {
     use super::*;
 
     #[unimock]
@@ -192,8 +192,9 @@ mod reference_in_wrapper {
         fn foo(&self, a: &str) -> Option<&str>;
     }
 
+    // Note: This should only be mockable with static lifetimes
     #[unimock]
-    trait InResultWithLifetimes {
+    trait InResultWithComplexLifetimes {
         fn foo<'s, 'i>(&'s self, a: &'i str) -> Result<&'s str, &'i str>;
     }
 }
