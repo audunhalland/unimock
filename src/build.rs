@@ -1,7 +1,7 @@
 use crate::call_pattern::*;
 use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{FromBorrow, Output};
+use crate::output::{FromBorrow, IntoOutput, Output};
 use crate::property::*;
 use crate::*;
 
@@ -193,13 +193,10 @@ where
     /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
     /// To be able to return this value multiple times, quantify it explicitly.
-    pub fn returns(
-        self,
-        value: impl Into<<F::Output as Output>::Type>,
-    ) -> QuantifyReturnValue2<'p, F, O> {
+    pub fn returns(self, value: impl IntoOutput<F::Output>) -> QuantifyReturnValue2<'p, F, O> {
         QuantifyReturnValue2 {
             builder: self.builder,
-            value: Some(value.into()),
+            value: Some(value.into_output()),
             mock_fn: self.mock_fn,
             ordering: self.ordering,
         }
@@ -238,14 +235,14 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns<V: Into<<F::Output as Output>::Type>>(mut self, value: V) -> Quantify<'p, F, O>
+    pub fn returns<V: IntoOutput<F::Output>>(mut self, value: V) -> Quantify<'p, F, O>
     where
         <F::Output as Output>::Type: Clone + Send + Sync + Sized + 'static,
     {
-        let value = value.into();
+        let output = value.into_output();
         self.builder.push_responder2(
             OwnedResponder2::<F> {
-                stored_value: Box::new(StoredValueSlot(value)),
+                stored_value: Box::new(StoredValueSlot(output)),
             }
             .into_dyn_responder(),
         );
@@ -372,12 +369,12 @@ macro_rules! define_response_common_impl {
             pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
             where
                 A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
-                R: Into<<F::Output as Output>::Type>,
+                R: IntoOutput<F::Output>,
                 F::OutputOld: Sized,
             {
                 self.builder.push_responder2(
                     ClosureResponder2::<F> {
-                        func: Box::new(move |inputs| func(inputs).into()),
+                        func: Box::new(move |inputs| func(inputs).into_output()),
                     }
                     .into_dyn_responder(),
                 );

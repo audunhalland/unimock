@@ -373,6 +373,18 @@ fn various_borrowing() {
             &Unimock::new(
                 BorrowingMock::borrow
                     .next_call(matching!(_))
+                    .returns("foo".to_string())
+                    .once()
+            ),
+            ""
+        )
+    );
+    assert_eq!(
+        "foo",
+        get_str(
+            &Unimock::new(
+                BorrowingMock::borrow
+                    .next_call(matching!(_))
                     .returns_borrow("foo".to_string())
                     .once()
             ),
@@ -381,6 +393,18 @@ fn various_borrowing() {
     );
     assert_eq!(
         "yoyo",
+        get_str(
+            &Unimock::new(
+                BorrowingMock::borrow
+                    .next_call(matching!(_))
+                    .answers(|input| format!("{input}{input}"))
+                    .once()
+            ),
+            "yo"
+        )
+    );
+    assert_eq!(
+        "yoyoyo",
         get_str(
             &Unimock::new(
                 BorrowingMock::borrow

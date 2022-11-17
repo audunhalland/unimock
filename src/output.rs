@@ -7,6 +7,10 @@ pub trait Output {
     type Type: 'static;
 }
 
+pub trait IntoOutput<O: Output> {
+    fn into_output(self) -> <O as Output>::Type;
+}
+
 /// Trait that describes the output signature of a mocked function.
 pub trait OutputSig<'u, O: Output> {
     /// The type of the output compatible with the function signature.
@@ -40,6 +44,15 @@ impl<T: 'static> Output for Owned<T> {
     type Type = T;
 }
 
+impl<I, T: 'static> IntoOutput<Owned<T>> for I
+where
+    I: Into<T>,
+{
+    fn into_output(self) -> <Owned<T> as Output>::Type {
+        self.into()
+    }
+}
+
 impl<'u, T: 'static> OutputSig<'u, Self> for Owned<T> {
     type Sig = T;
 
@@ -57,6 +70,16 @@ pub struct Borrowed<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 
 impl<T: ?Sized + 'static> Output for Borrowed<T> {
     type Type = Box<dyn Borrow<T> + Send + Sync>;
+}
+
+impl<I, T> IntoOutput<Borrowed<T>> for I
+where
+    I: Borrow<T> + Send + Sync + 'static,
+    T: ?Sized + 'static,
+{
+    fn into_output(self) -> <Borrowed<T> as Output>::Type {
+        Box::new(self)
+    }
 }
 
 impl<T: ?Sized + 'static> FromBorrow<T> for Borrowed<T> {
@@ -90,6 +113,12 @@ impl<T: ?Sized + 'static> Output for StaticRef<T> {
     type Type = &'static T;
 }
 
+impl<T: ?Sized> IntoOutput<StaticRef<T>> for &'static T {
+    fn into_output(self) -> <StaticRef<T> as Output>::Type {
+        self
+    }
+}
+
 impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for StaticRef<T> {
     type Sig = &'static T;
 
@@ -110,6 +139,12 @@ pub struct Mixed<T>(std::marker::PhantomData<T>);
 
 impl<T: AsOwned<'static>> Output for Mixed<T> {
     type Type = <T as AsOwned<'static>>::Owned;
+}
+
+impl<T: AsOwned<'static>> IntoOutput<Mixed<T>> for <T as AsOwned<'static>>::Owned {
+    fn into_output(self) -> <Mixed<T> as Output>::Type {
+        self
+    }
 }
 
 impl<'u, T, O> OutputSig<'u, O> for Mixed<T>
