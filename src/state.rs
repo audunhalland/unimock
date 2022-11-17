@@ -1,6 +1,7 @@
 use crate::debug;
 use crate::error;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
+use crate::value_chain::ValueChain;
 use crate::FallbackMode;
 
 use std::any::TypeId;
@@ -12,6 +13,10 @@ pub(crate) struct SharedState {
     pub fallback_mode: FallbackMode,
     pub fn_mockers: HashMap<TypeId, FnMocker>,
 
+    // A value chain for "dumping" owned return values that
+    // a function signature needs to *borrow* instead.
+    pub value_chain: ValueChain,
+
     next_ordered_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
@@ -21,6 +26,7 @@ impl SharedState {
         Self {
             fallback_mode,
             fn_mockers,
+            value_chain: ValueChain::default(),
             next_ordered_call_index: AtomicUsize::new(0),
             panic_reasons: Mutex::new(vec![]),
         }

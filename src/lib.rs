@@ -352,6 +352,8 @@ pub mod output;
 pub mod possess;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
+#[doc(hidden)]
+pub mod value_chain;
 
 mod assemble;
 mod call_pattern;

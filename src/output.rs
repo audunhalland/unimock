@@ -1,4 +1,4 @@
-use crate::possess::Possess;
+use crate::{possess::Possess, value_chain::ValueChain};
 use std::borrow::Borrow;
 
 /// Trait that describes how an output value is temporarily stored by Unimock.
@@ -13,7 +13,7 @@ pub trait OutputSig<'u, O: Output> {
     type Sig;
 
     #[doc(hidden)]
-    fn try_from_output(value: O::Type) -> Result<Self::Sig, SignatureError>;
+    fn from_output(value: O::Type, value_chain: &'u ValueChain) -> Self::Sig;
 
     #[doc(hidden)]
     fn try_borrow_output(value: &'u O::Type) -> Result<Self::Sig, SignatureError>;
@@ -43,8 +43,8 @@ impl<T: 'static> Output for Owned<T> {
 impl<'u, T: 'static> OutputSig<'u, Self> for Owned<T> {
     type Sig = T;
 
-    fn try_from_output(value: <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
-        Ok(value)
+    fn from_output(value: <Self as Output>::Type, _: &'u ValueChain) -> Self::Sig {
+        value
     }
 
     fn try_borrow_output(_: &'u <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
@@ -67,11 +67,13 @@ impl<T: ?Sized + 'static> FromBorrow<T> for Borrowed<T> {
     }
 }
 
-impl<'u, T: ?Sized + 'static> OutputSig<'u, Borrowed<T>> for Borrowed<T> {
+impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for Borrowed<T> {
     type Sig = &'u T;
 
-    fn try_from_output(_: <Borrowed<T> as Output>::Type) -> Result<Self::Sig, SignatureError> {
-        Err(SignatureError::NotBorrowed)
+    fn from_output(value: <Borrowed<T> as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
+        let value_ref = value_chain.insert(value);
+
+        value_ref.as_ref().borrow()
     }
 
     fn try_borrow_output(
@@ -91,8 +93,8 @@ impl<T: ?Sized + 'static> Output for StaticRef<T> {
 impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for StaticRef<T> {
     type Sig = &'static T;
 
-    fn try_from_output(value: <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
-        Ok(value)
+    fn from_output(value: <Self as Output>::Type, _: &ValueChain) -> Self::Sig {
+        value
     }
 
     fn try_borrow_output(value: &'u <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
@@ -113,12 +115,14 @@ impl<T: Possess<'static>> Output for Mixed<T> {
 impl<'u, T, O> OutputSig<'u, O> for Mixed<T>
 where
     O: Output,
+    <O as Output>::Type: Send + Sync,
     T: Possess<'u, Possessed = O::Type>,
 {
     type Sig = T;
 
-    fn try_from_output(_: <O as Output>::Type) -> Result<Self::Sig, SignatureError> {
-        Err(SignatureError::NotBorrowed)
+    fn from_output(value: <O as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
+        let value_ref = value_chain.insert(value);
+        <T as Possess>::reborrow(value_ref)
     }
 
     fn try_borrow_output(value: &'u <O as Output>::Type) -> Result<Self::Sig, SignatureError> {

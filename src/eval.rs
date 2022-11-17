@@ -5,6 +5,7 @@ use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, Evaluation2};
 use crate::output::{Output, OutputSig, SignatureError};
 use crate::state::SharedState;
+use crate::value_chain::ValueChain;
 use crate::DynMockFn;
 use crate::{debug, MockFn2};
 use crate::{FallbackMode, MockFn};
@@ -77,10 +78,10 @@ impl<'u> EvalCtx<'u> {
             EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder2::Owned(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
-                        Some(value) => match try_into_sig::<F>(*value) {
-                            Ok(output) => Ok(Evaluation2::Evaluated(output)),
-                            Err(_) => todo!(),
-                        },
+                        Some(value) => {
+                            let sig = into_sig::<F>(*value, &dyn_ctx.shared_state.value_chain);
+                            Ok(Evaluation2::Evaluated(sig))
+                        }
                         None => Err(MockError::CannotReturnValueMoreThanOnce {
                             fn_call: dyn_ctx.fn_call(),
                             pattern: eval_rsp.debug_pattern(),
@@ -392,10 +393,11 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 }
 
-fn try_into_sig<'u, F: MockFn2>(
+fn into_sig<'u, F: MockFn2>(
     value: <F::Output as Output>::Type,
-) -> Result<<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig, SignatureError> {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_from_output(value)
+    value_chain: &'u ValueChain,
+) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
+    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::from_output(value, value_chain)
 }
 
 fn try_borrow_sig<'u, F: MockFn2>(
