@@ -792,17 +792,6 @@ pub trait MockFn: Sized + 'static {
         )
     }
 
-    fn some_call2(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
-        build::v2::DefineResponse::with_owned_builder(
-            DynInputMatcher {
-                func: None,
-                pat_debug: None,
-            },
-            fn_mocker::PatternMatchMode::InAnyOrder,
-            property::InAnyOrder,
-        )
-    }
-
     /// Define a stub-like call pattern directly on this [MockFn].
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern

@@ -364,7 +364,7 @@ mod tests {
             }
         }
 
-        let q = Test.some_call2().returns(Some("fancy".to_string()));
+        let q = Test.each_call(&|_| ()).returns2(Some("fancy".to_string()));
         let call_pattern_builder = q.builder.inner();
         let resp = &call_pattern_builder.responders2[0];
         let dyn_complex_resp = match &resp.responder {
