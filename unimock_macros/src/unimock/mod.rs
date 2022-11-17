@@ -163,6 +163,10 @@ fn def_mock_fn(
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
+    let output_type_name = syn::Ident::new(
+        method.output_structure.ownership.output_type_name(),
+        proc_macro2::Span::call_site(),
+    );
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
@@ -178,6 +182,15 @@ fn def_mock_fn(
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #output;
+            const NAME: &'static str = #mock_fn_name;
+
+            #debug_inputs_fn
+        }
+
+        impl #generic_params #prefix::MockFn2 for #mock_fn_path #generic_args #where_clause {
+            type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
+            type Output = #prefix::output::#output_type_name<#output>;
+            type OutputSig<'u> = #prefix::output::#output_type_name<#output>;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn

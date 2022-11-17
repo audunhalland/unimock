@@ -840,7 +840,7 @@ pub trait MockFn2: Sized + 'static {
         String::new()
     }
 
-    fn some_call(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
+    fn some_call2(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
         build::v2::DefineResponse::with_owned_builder(
             DynInputMatcher {
                 func: None,

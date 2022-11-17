@@ -25,6 +25,15 @@ impl OutputOwnership {
             Self::StaticReference => "eval_static_ref",
         }
     }
+
+    pub fn output_type_name(&self) -> &'static str {
+        match self {
+            Self::Owned => "Owned",
+            Self::SelfReference => "Borrowed",
+            Self::ParamReference => "StaticRef",
+            Self::StaticReference => "StaticRef",
+        }
+    }
 }
 
 pub fn determine_output_structure<'t>(

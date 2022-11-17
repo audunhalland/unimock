@@ -52,14 +52,14 @@ impl MockFn2 for MockMixed {
 
 #[test]
 fn test_owned() {
-    MockOwned.some_call().returns("foo");
-    MockOwned.some_call().returns("too".to_string());
-    MockBorrowed.some_call().returns_borrow("foo");
-    MockBorrowed.some_call().returns_borrow("foo".to_string());
-    MockBorrowedParam.some_call().returns("foo");
-    MockStatic.some_call().returns("foo");
-    MockMixed.some_call().returns(Some("foo".to_string()));
-    MockMixed.some_call().returns(None);
+    MockOwned.some_call2().returns("foo");
+    MockOwned.some_call2().returns("too".to_string());
+    MockBorrowed.some_call2().returns_borrow("foo");
+    MockBorrowed.some_call2().returns_borrow("foo".to_string());
+    MockBorrowedParam.some_call2().returns("foo");
+    MockStatic.some_call2().returns("foo");
+    MockMixed.some_call2().returns(Some("foo".to_string()));
+    MockMixed.some_call2().returns(None);
 }
 
 fn test_borrow_self_compiles<'u>(unimock: &Unimock) -> &str {
