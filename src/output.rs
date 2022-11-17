@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 
 /// Trait that describes how an output value is temporarily stored by Unimock.
 pub trait Output {
-    /// Version of output without lifetimes
+    /// The type of the output temporarily stored inside Unimock.
     type Type: 'static;
 }
 
@@ -14,6 +14,7 @@ pub enum IntoSigError {
 
 /// Trait that describes the output signature of a mocked function.
 pub trait OutputSig<'u, 'i, O: Output> {
+    /// The type of the output compatible with the function signature.
     type Sig;
 
     fn try_into_sig(value: O::Type) -> Result<Self::Sig, IntoSigError>;
@@ -21,7 +22,6 @@ pub trait OutputSig<'u, 'i, O: Output> {
     fn try_borrow_sig(value: &'u O::Type) -> Result<Self::Sig, IntoSigError>;
 }
 
-pub trait OwnedOutput: Output {}
 pub trait BorrowOutput: Output
 where
     <Self as Output>::Type: Send + Sync,
@@ -54,10 +54,7 @@ impl<'u, 'i, T: 'static> OutputSig<'u, 'i, Self> for Owned<T> {
     }
 }
 
-impl<T: 'static> OwnedOutput for Owned<T> {}
-
-// Borrowed
-
+/// This type describes a function output that is a reference borrowed from `Self`.
 pub struct Borrowed<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 
 impl<T: ?Sized + 'static> Output for Borrowed<T> {
@@ -74,10 +71,7 @@ impl<T: ?Sized + 'static> IntoBorrowOutputType<T> for Borrowed<T> {
     }
 }
 
-// TODO: Just use Borrowed?
-pub struct BorrowSelf<'u, T: ?Sized + 'static>(std::marker::PhantomData<&'u T>);
-
-impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for BorrowSelf<'u, T> {
+impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for Borrowed<T> {
     type Sig = &'u T;
 
     fn try_into_sig(_: <Borrowed<T> as Output>::Type) -> Result<Self::Sig, IntoSigError> {
@@ -89,15 +83,12 @@ impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Borrowed<T>> for BorrowSelf<
     }
 }
 
-// Static
-
+/// This type describes a function output that is a static reference.
 pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
 
 impl<T: ?Sized + 'static> Output for StaticRef<T> {
     type Type = &'static T;
 }
-
-impl<T: ?Sized + 'static> OwnedOutput for StaticRef<T> {}
 
 impl<'u, 'i, T: ?Sized + 'static> OutputSig<'u, 'i, Self> for StaticRef<T> {
     type Sig = &'static T;
@@ -119,8 +110,6 @@ pub struct Mixed<T>(std::marker::PhantomData<T>);
 impl<T: Possess<'static>> Output for Mixed<T> {
     type Type = <T as Possess<'static>>::Possessed;
 }
-
-impl<T: Possess<'static>> OwnedOutput for Mixed<T> {}
 
 impl<'u, 'i, T, O> OutputSig<'u, 'i, O> for Mixed<T>
 where

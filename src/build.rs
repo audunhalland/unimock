@@ -619,7 +619,6 @@ pub mod v2 {
 
     impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
     where
-        F::Output: OwnedOutput,
         <F::Output as Output>::Type: Clone + Send + Sync,
     {
         // FIXME: Should return a Quantify object and not require clone

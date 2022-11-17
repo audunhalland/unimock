@@ -24,7 +24,7 @@ impl MockFn2 for MockOwned {
 impl MockFn2 for MockBorrowed {
     type Inputs<'i> = ();
     type Output = output::Borrowed<str>;
-    type OutputSig<'u, 'i> = output::BorrowSelf<'u, str>;
+    type OutputSig<'u, 'i> = output::Borrowed<str>;
     const NAME: &'static str = "";
 }
 
