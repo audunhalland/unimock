@@ -51,7 +51,17 @@ mod with_unmock {
 mod reference_argument_works_with_explicit_lifetime {
     use super::*;
 
+    #[derive(Clone)]
     pub struct Error;
+
+    // TODO: Derive macro!
+    impl<'a> unimock::as_owned::AsOwned<'a> for Error {
+        type Owned = Error;
+
+        fn from_owned(value: &'a Self::Owned) -> Self {
+            value.clone()
+        }
+    }
 
     #[unimock]
     trait WithoutReturning {

@@ -122,10 +122,10 @@ where
 
     fn from_output(value: <O as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
         let value_ref = value_chain.push(value);
-        <T as AsOwned>::reborrow(value_ref)
+        <T as AsOwned>::from_owned(value_ref)
     }
 
     fn try_borrow_output(value: &'u <O as Output>::Type) -> Result<Self::Sig, SignatureError> {
-        Ok(<T as AsOwned>::reborrow(value))
+        Ok(<T as AsOwned>::from_owned(value))
     }
 }
