@@ -192,6 +192,11 @@ mod mixed_output {
         fn foo(&self, a: &str) -> Option<&str>;
     }
 
+    #[unimock]
+    trait InResult {
+        fn foo(&self, a: &str) -> Result<&[u8], ()>;
+    }
+
     // Note: This should only be mockable with static lifetimes
     #[unimock]
     trait InResultWithComplexLifetimes {

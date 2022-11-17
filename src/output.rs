@@ -1,4 +1,4 @@
-use crate::{possess::Possess, value_chain::ValueChain};
+use crate::{as_owned::AsOwned, value_chain::ValueChain};
 use std::borrow::Borrow;
 
 /// Trait that describes how an output value is temporarily stored by Unimock.
@@ -108,24 +108,24 @@ impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for StaticRef<T> {
 // The typical example is `Option<&T>`.
 pub struct Mixed<T>(std::marker::PhantomData<T>);
 
-impl<T: Possess<'static>> Output for Mixed<T> {
-    type Type = <T as Possess<'static>>::Possessed;
+impl<T: AsOwned<'static>> Output for Mixed<T> {
+    type Type = <T as AsOwned<'static>>::Owned;
 }
 
 impl<'u, T, O> OutputSig<'u, O> for Mixed<T>
 where
     O: Output,
     <O as Output>::Type: Send + Sync,
-    T: Possess<'u, Possessed = O::Type>,
+    T: AsOwned<'u, Owned = O::Type>,
 {
     type Sig = T;
 
     fn from_output(value: <O as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
         let value_ref = value_chain.push(value);
-        <T as Possess>::reborrow(value_ref)
+        <T as AsOwned>::reborrow(value_ref)
     }
 
     fn try_borrow_output(value: &'u <O as Output>::Type) -> Result<Self::Sig, SignatureError> {
-        Ok(<T as Possess>::reborrow(value))
+        Ok(<T as AsOwned>::reborrow(value))
     }
 }

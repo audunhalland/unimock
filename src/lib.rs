@@ -342,14 +342,14 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+/// Trait used in complex output borrowing scenarios
+pub mod as_owned;
 /// Types used for building and defining mock behaviour.
 pub mod build;
 /// APIs used by macros, not intended to be used directly.
 pub mod macro_api;
 /// Function outputs
 pub mod output;
-/// Trait used in complex output borrowing scenarios
-pub mod possess;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
 #[doc(hidden)]
