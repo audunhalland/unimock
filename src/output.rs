@@ -71,7 +71,7 @@ impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for Borrowed<T> {
     type Sig = &'u T;
 
     fn from_output(value: <Borrowed<T> as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
-        let value_ref = value_chain.push(value);
+        let value_ref = value_chain.add(value);
 
         value_ref.as_ref().borrow()
     }
@@ -121,7 +121,7 @@ where
     type Sig = T;
 
     fn from_output(value: <O as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
-        let value_ref = value_chain.push(value);
+        let value_ref = value_chain.add(value);
         <T as AsOwned>::from_owned(value_ref)
     }
 

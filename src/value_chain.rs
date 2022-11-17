@@ -4,21 +4,20 @@ use lazycell::AtomicLazyCell;
 
 /// A collection that can store values, but never remove them until dropped.
 ///
-/// This allows retaining shared references to inserted nodes.
+/// This allows retaining shared references to inserted values.
 #[derive(Default)]
 pub struct ValueChain {
     root_node: AtomicLazyCell<Node>,
 }
 
 impl ValueChain {
-    pub fn push<T: Any + Send + Sync>(&self, value: T) -> &T {
-        self.push_back(Node::new(value));
-        let last_node = self.borrow_back().unwrap();
+    pub fn add<T: Any + Send + Sync>(&self, value: T) -> &T {
+        let node = self.push_node(Node::new(value));
 
-        last_node.value.as_ref().downcast_ref::<T>().unwrap()
+        node.value.as_ref().downcast_ref::<T>().unwrap()
     }
 
-    fn push_back(&self, new_node: Node) {
+    fn push_node(&self, new_node: Node) -> &Node {
         if let Err(mut new_node) = self.root_node.fill(new_node) {
             let mut parent_node = self.root_node.borrow().unwrap();
 
@@ -26,16 +25,11 @@ impl ValueChain {
                 parent_node = parent_node.next.borrow().unwrap();
                 new_node = node;
             }
-        }
-    }
 
-    fn borrow_back(&self) -> Option<&Node> {
-        let mut node = self.root_node.borrow()?;
-        while let Some(next_node) = node.next.borrow() {
-            node = next_node;
+            parent_node.next.borrow().unwrap()
+        } else {
+            self.root_node.borrow().unwrap()
         }
-
-        Some(node)
     }
 }
 
@@ -56,9 +50,9 @@ impl Node {
 #[test]
 fn it_works() {
     let value_chain = ValueChain::default();
-    let first = value_chain.push(1);
-    let second = value_chain.push("");
-    let third = value_chain.push(42.0);
+    let first = value_chain.add(1);
+    let second = value_chain.add("");
+    let third = value_chain.add(42.0);
 
     assert_eq!(&1, first);
     assert_eq!(&"", second);
