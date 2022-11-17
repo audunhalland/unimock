@@ -38,10 +38,6 @@ impl CallPattern {
         Ok((func.0)(inputs))
     }
 
-    pub fn match_inputs2<F: MockFn2>(&self, inputs: &F::Inputs<'_>) -> MockResult<bool> {
-        Ok(true)
-    }
-
     pub fn debug_location(&self, pat_index: PatIndex) -> debug::CallPatternLocation {
         if let Some(debug) = self.input_matcher.pat_debug {
             debug::CallPatternLocation::Debug(debug)
@@ -193,32 +189,32 @@ pub(crate) struct DynOwnedResponder2(AnyBox);
 pub(crate) struct DynBorrowResponder2(AnyBox);
 
 impl DynOwnedResponder2 {
-    pub fn downcast<F: MockFn2>(&self) -> MockResult<&OwnedResponder2<F>> {
+    pub fn downcast<F: MockFn>(&self) -> MockResult<&OwnedResponder2<F>> {
         downcast_box(&self.0, F::NAME)
     }
 }
 
 impl DynBorrowResponder2 {
-    pub fn downcast<F: MockFn2>(&self) -> MockResult<&BorrowResponder2<F>> {
+    pub fn downcast<F: MockFn>(&self) -> MockResult<&BorrowResponder2<F>> {
         downcast_box(&self.0, F::NAME)
     }
 }
 
-pub(crate) struct OwnedResponder2<F: MockFn2> {
+pub(crate) struct OwnedResponder2<F: MockFn> {
     pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output as Output>::Type>>,
 }
 
-pub(crate) struct BorrowResponder2<F: MockFn2> {
+pub(crate) struct BorrowResponder2<F: MockFn> {
     pub borrowable: <F::Output as Output>::Type,
 }
 
-impl<F: MockFn2> OwnedResponder2<F> {
+impl<F: MockFn> OwnedResponder2<F> {
     pub fn into_dyn_responder(self) -> DynResponder2 {
         DynResponder2::Owned(DynOwnedResponder2(Box::new(self)))
     }
 }
 
-impl<F: MockFn2> BorrowResponder2<F>
+impl<F: MockFn> BorrowResponder2<F>
 where
     <F::Output as Output>::Type: Send + Sync,
 {
@@ -356,11 +352,16 @@ mod tests {
     fn can_convert_complex_back_to_borrowed() {
         struct Test;
 
-        impl MockFn2 for Test {
+        impl MockFn for Test {
             type Inputs<'i> = ();
             type Output = Mixed<Option<&'static str>>;
             type OutputSig<'u> = Mixed<Option<&'u str>>;
+            type OutputOld = ();
             const NAME: &'static str = "Test";
+
+            fn debug_inputs(_: &Self::Inputs<'_>) -> String {
+                String::new()
+            }
         }
 
         let q = Test.some_call2().returns(Some("fancy".to_string()));
@@ -381,7 +382,7 @@ mod tests {
         assert_eq!(Some("fancy"), reborrowed);
     }
 
-    fn load_sig<'u, F: MockFn2>(
+    fn load_sig<'u, F: MockFn>(
         stored: &'u <F::Output as Output>::Type,
     ) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
         match <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_borrow_output(stored) {

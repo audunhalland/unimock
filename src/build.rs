@@ -580,19 +580,19 @@ pub mod v2 {
     use super::*;
     use crate::output::*;
 
-    pub struct DefineResponse<'p, F: MockFn2, O: Ordering> {
+    pub struct DefineResponse<'p, F: MockFn, O: Ordering> {
         builder: BuilderWrapper<'p>,
         mock_fn: PhantomData<F>,
         ordering: O,
     }
 
-    pub struct QuantifyTodo<'p, F: MockFn2, O: Ordering> {
+    pub struct QuantifyTodo<'p, F: MockFn, O: Ordering> {
         pub(crate) builder: BuilderWrapper<'p>,
         mock_fn: PhantomData<F>,
         ordering: O,
     }
 
-    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O> {
+    impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O> {
         pub(crate) fn with_owned_builder(
             input_matcher: DynInputMatcher,
             pattern_match_mode: PatternMatchMode,
@@ -617,7 +617,7 @@ pub mod v2 {
         }
     }
 
-    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
+    impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O>
     where
         <F::Output as Output>::Type: Clone + Send + Sync,
     {
@@ -637,7 +637,7 @@ pub mod v2 {
         }
     }
 
-    impl<'p, F: MockFn2, O: Ordering> DefineResponse<'p, F, O>
+    impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O>
     where
         <F::Output as Output>::Type: Send + Sync,
     {

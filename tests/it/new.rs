@@ -14,40 +14,65 @@ struct MockBorrowedParam;
 struct MockStatic;
 struct MockMixed;
 
-impl MockFn2 for MockOwned {
+impl MockFn for MockOwned {
     type Inputs<'i> = ();
     type Output = output::Owned<String>;
     type OutputSig<'u> = output::Owned<String>;
+    type OutputOld = ();
     const NAME: &'static str = "";
+
+    fn debug_inputs(_: &Self::Inputs<'_>) -> String {
+        String::new()
+    }
 }
 
-impl MockFn2 for MockBorrowed {
+impl MockFn for MockBorrowed {
     type Inputs<'i> = ();
     type Output = output::Borrowed<str>;
     type OutputSig<'u> = output::Borrowed<str>;
+    type OutputOld = ();
     const NAME: &'static str = "";
+
+    fn debug_inputs(_: &Self::Inputs<'_>) -> String {
+        String::new()
+    }
 }
 
-impl MockFn2 for MockBorrowedParam {
+impl MockFn for MockBorrowedParam {
     type Inputs<'i> = &'i str;
     // There is now way to store an "owned" version of something borrowed from inputs
     type Output = output::StaticRef<str>;
     type OutputSig<'u> = output::StaticRef<str>;
+    type OutputOld = ();
     const NAME: &'static str = "";
+
+    fn debug_inputs(_: &Self::Inputs<'_>) -> String {
+        String::new()
+    }
 }
 
-impl MockFn2 for MockStatic {
+impl MockFn for MockStatic {
     type Inputs<'i> = ();
     type Output = output::StaticRef<str>;
     type OutputSig<'u> = output::StaticRef<str>;
+    type OutputOld = ();
     const NAME: &'static str = "";
+
+    fn debug_inputs(_: &Self::Inputs<'_>) -> String {
+        String::new()
+    }
 }
 
-impl MockFn2 for MockMixed {
+impl MockFn for MockMixed {
     type Inputs<'i> = ();
     type Output = output::Mixed<Option<&'static str>>;
     type OutputSig<'u> = output::Mixed<Option<&'u str>>;
+    type OutputOld = ();
     const NAME: &'static str = "";
+
+    fn debug_inputs(_: &Self::Inputs<'_>) -> String {
+        String::new()
+    }
 }
 
 #[test]

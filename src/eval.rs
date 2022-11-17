@@ -1,4 +1,5 @@
 use crate::call_pattern::{CallPattern, DynResponder, DynResponder2, PatIndex};
+use crate::debug;
 use crate::error;
 use crate::error::{Lender, MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
@@ -7,7 +8,6 @@ use crate::output::{Output, OutputSig, SignatureError};
 use crate::state::SharedState;
 use crate::value_chain::ValueChain;
 use crate::DynMockFn;
-use crate::{debug, MockFn2};
 use crate::{FallbackMode, MockFn};
 
 use std::borrow::Borrow;
@@ -60,21 +60,14 @@ impl<'u> EvalCtx<'u> {
         }
     }
 
-    pub fn new2<F: MockFn2>(shared_state: &'u SharedState) -> Self {
-        Self {
-            mock_fn: DynMockFn::new2::<F>(),
-            shared_state,
-        }
-    }
-
-    pub(crate) fn eval2<'i, F: MockFn2>(
+    pub(crate) fn eval2<'i, F: MockFn>(
         self,
         inputs: F::Inputs<'i>,
     ) -> MockResult<Evaluation2<'u, 'i, F>> {
         let input_debugger = &|| F::debug_inputs(&inputs);
         let dyn_ctx = self.into_dyn_ctx(input_debugger);
 
-        match dyn_ctx.eval2(&|pattern| pattern.match_inputs2::<F>(&inputs))? {
+        match dyn_ctx.eval2(&|pattern| pattern.match_inputs::<F>(&inputs))? {
             EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
                 DynResponder2::Owned(inner) => {
                     match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
@@ -393,14 +386,14 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 }
 
-fn into_sig<'u, F: MockFn2>(
+fn into_sig<'u, F: MockFn>(
     value: <F::Output as Output>::Type,
     value_chain: &'u ValueChain,
 ) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
     <F::OutputSig<'u> as OutputSig<'u, F::Output>>::from_output(value, value_chain)
 }
 
-fn try_borrow_sig<'u, F: MockFn2>(
+fn try_borrow_sig<'u, F: MockFn>(
     value: &'u <F::Output as Output>::Type,
 ) -> Result<<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig, SignatureError> {
     <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_borrow_output(value)

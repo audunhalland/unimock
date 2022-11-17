@@ -742,6 +742,12 @@ pub trait MockFn: Sized + 'static {
     /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
     type Inputs<'i>;
 
+    /// Type describing the output of the function in a way that unimock can store (i.e. without lifetime parameters).
+    type Output: output::Output;
+
+    /// Type describing the output of the function the way it's seen in the function signature.
+    type OutputSig<'u>: output::OutputSig<'u, Self::Output>;
+
     /// The output of the function.
     type OutputOld: ?Sized;
 
@@ -786,6 +792,17 @@ pub trait MockFn: Sized + 'static {
         )
     }
 
+    fn some_call2(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
+        build::v2::DefineResponse::with_owned_builder(
+            DynInputMatcher {
+                func: None,
+                pat_debug: None,
+            },
+            fn_mocker::PatternMatchMode::InAnyOrder,
+            property::InAnyOrder,
+        )
+    }
+
     /// Define a stub-like call pattern directly on this [MockFn].
     ///
     /// This is a shorthand to avoid calling [MockFn::stub] if there is only one call pattern
@@ -816,40 +833,6 @@ pub trait MockFn: Sized + 'static {
             DynInputMatcher::from_matching_fn(matching_fn),
             fn_mocker::PatternMatchMode::InOrder,
             property::InOrder,
-        )
-    }
-}
-
-pub trait MockFn2: Sized + 'static {
-    /// The inputs to a mockable function.
-    ///
-    /// * For a function with no parameters, the type should be the empty tuple `()`.
-    /// * For a function with 1 parameter `T`, the type should be `T`.
-    /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
-    type Inputs<'i>;
-
-    /// Type describing the output of the function in a way that unimock can store (i.e. without lifetime parameters).
-    type Output: output::Output;
-
-    /// Type describing the output of the function the way it's seen in the function signature.
-    type OutputSig<'u>: output::OutputSig<'u, Self::Output>;
-
-    /// The name to use for runtime errors.
-    const NAME: &'static str;
-
-    /// Compute some debug representation of the inputs.
-    fn debug_inputs(_: &Self::Inputs<'_>) -> String {
-        String::new()
-    }
-
-    fn some_call2(self) -> build::v2::DefineResponse<'static, Self, property::InAnyOrder> {
-        build::v2::DefineResponse::with_owned_builder(
-            DynInputMatcher {
-                func: None,
-                pat_debug: None,
-            },
-            fn_mocker::PatternMatchMode::InAnyOrder,
-            property::InAnyOrder,
         )
     }
 }
@@ -904,13 +887,6 @@ pub(crate) struct DynMockFn {
 
 impl DynMockFn {
     pub fn new<F: crate::MockFn>() -> Self {
-        Self {
-            type_id: TypeId::of::<F>(),
-            name: F::NAME,
-        }
-    }
-
-    pub fn new2<F: crate::MockFn2>() -> Self {
         Self {
             type_id: TypeId::of::<F>(),
             name: F::NAME,

@@ -185,16 +185,9 @@ fn def_mock_fn(
     let impl_blocks = quote! {
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
-            type OutputOld = #output_static;
-            const NAME: &'static str = #mock_fn_name;
-
-            #debug_inputs_fn
-        }
-
-        impl #generic_params #prefix::MockFn2 for #mock_fn_path #generic_args #where_clause {
-            type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #prefix::output::#output_mediator<#output_static>;
             type OutputSig<'u> = #prefix::output::#output_mediator<#output_sig>;
+            type OutputOld = #output_static;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn

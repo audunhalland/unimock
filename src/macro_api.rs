@@ -30,14 +30,14 @@ impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
     }
 }
 
-pub enum Evaluation2<'u, 'i, F: MockFn2> {
+pub enum Evaluation2<'u, 'i, F: MockFn> {
     /// Function evaluated to its output.
     Evaluated(<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig),
     /// Function not yet evaluated.
     Skipped(F::Inputs<'i>),
 }
 
-impl<'u, 'i, F: MockFn2> Evaluation2<'u, 'i, F> {
+impl<'u, 'i, F: MockFn> Evaluation2<'u, 'i, F> {
     /// Unwrap the `Evaluated` variant, or panic.
     /// The unimock instance must be passed in order to register that an eventual panic happened.
     pub fn unwrap(self, unimock: &Unimock) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
@@ -98,9 +98,9 @@ where
 #[track_caller]
 pub fn eval2<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation2<'u, 'i, F>
 where
-    F: MockFn2 + 'static,
+    F: MockFn + 'static,
 {
-    unimock.handle_error(eval::EvalCtx::new2::<F>(&unimock.shared_state).eval2(inputs))
+    unimock.handle_error(eval::EvalCtx::new::<F>(&unimock.shared_state).eval2(inputs))
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
