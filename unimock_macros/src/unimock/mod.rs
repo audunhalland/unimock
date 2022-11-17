@@ -163,7 +163,7 @@ fn def_mock_fn(
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
-    let output_u = match &method.output_structure.unsized_ty_u {
+    let output_sig = match &method.output_structure.unsized_ty_sig {
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
@@ -194,7 +194,7 @@ fn def_mock_fn(
         impl #generic_params #prefix::MockFn2 for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #prefix::output::#output_mediator<#output_static>;
-            type OutputSig<'u> = #prefix::output::#output_mediator<#output_u>;
+            type OutputSig<'u> = #prefix::output::#output_mediator<#output_sig>;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn

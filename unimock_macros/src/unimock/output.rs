@@ -1,8 +1,10 @@
+use syn::visit_mut::VisitMut;
+
 pub struct OutputStructure<'t> {
     pub wrapping: OutputWrapping<'t>,
     pub ownership: OutputOwnership,
     pub unsized_ty_static: Option<syn::Type>,
-    pub unsized_ty_u: Option<syn::Type>,
+    pub unsized_ty_sig: Option<syn::Type>,
 }
 
 pub enum OutputWrapping<'t> {
@@ -10,11 +12,13 @@ pub enum OutputWrapping<'t> {
     ImplTraitFuture(&'t syn::TraitItemType),
 }
 
+#[derive(Clone, Copy)]
 pub enum OutputOwnership {
     Owned,
     SelfReference,
     ParamReference,
     StaticReference,
+    Mixed,
 }
 
 impl OutputOwnership {
@@ -24,6 +28,7 @@ impl OutputOwnership {
             Self::SelfReference => "eval_borrowed",
             Self::ParamReference => "eval_borrowed_param",
             Self::StaticReference => "eval_static_ref",
+            Self::Mixed => "eval",
         }
     }
 
@@ -33,6 +38,7 @@ impl OutputOwnership {
             Self::SelfReference => "Borrowed",
             Self::ParamReference => "StaticRef",
             Self::StaticReference => "StaticRef",
+            Self::Mixed => "Mixed",
         }
     }
 }
@@ -43,34 +49,54 @@ pub fn determine_output_structure<'t>(
     ty: &'t syn::Type,
 ) -> OutputStructure<'t> {
     match ty {
-        syn::Type::Reference(type_reference) => OutputStructure {
-            wrapping: OutputWrapping::None,
-            ownership: determine_reference_ownership(sig, type_reference),
-            unsized_ty_static: Some(rename_lifetimes_to_static(*type_reference.elem.clone())),
-            unsized_ty_u: Some(rename_nonstatic_lifetimes_to_u(
-                *type_reference.elem.clone(),
-            )),
-        },
+        syn::Type::Reference(type_reference) => {
+            let mut unsized_ty_static = *type_reference.elem.clone();
+            let mut unsized_ty_sig = unsized_ty_static.clone();
+
+            let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut unsized_ty_static);
+            let ownership = determine_reference_ownership(sig, type_reference);
+
+            rename_lifetimes_static(&mut unsized_ty_static, &borrow_info);
+            rename_lifetimes_sig(&mut unsized_ty_sig, &borrow_info, ownership);
+
+            OutputStructure {
+                wrapping: OutputWrapping::None,
+                ownership: determine_reference_ownership(sig, type_reference),
+                unsized_ty_static: Some(unsized_ty_static),
+                unsized_ty_sig: Some(unsized_ty_sig),
+            }
+        }
         syn::Type::Path(path)
             if path.qself.is_none()
                 && is_self_segment(path.path.segments.first())
                 && (path.path.segments.len() == 2) =>
         {
-            determine_associated_future_structure(item_trait, sig, &path.path).unwrap_or_else(
-                || OutputStructure {
-                    wrapping: OutputWrapping::None,
-                    ownership: OutputOwnership::Owned,
-                    unsized_ty_static: Some(rename_lifetimes_to_static(ty.clone())),
-                    unsized_ty_u: Some(rename_nonstatic_lifetimes_to_u(ty.clone())),
-                },
-            )
+            determine_associated_future_structure(item_trait, sig, &path.path)
+                .unwrap_or_else(|| determine_owned_or_mixed_output_structure(sig, ty))
         }
-        _ => OutputStructure {
-            wrapping: OutputWrapping::None,
-            ownership: OutputOwnership::Owned,
-            unsized_ty_static: Some(rename_lifetimes_to_static(ty.clone())),
-            unsized_ty_u: Some(rename_nonstatic_lifetimes_to_u(ty.clone())),
-        },
+        _ => determine_owned_or_mixed_output_structure(sig, ty),
+    }
+}
+
+/// Determine output structure that is not a reference nor a future
+pub fn determine_owned_or_mixed_output_structure<'t>(
+    sig: &'t syn::Signature,
+    ty: &'t syn::Type,
+) -> OutputStructure<'t> {
+    let mut unsized_ty_static = ty.clone();
+    let mut unsized_ty_sig = ty.clone();
+
+    let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut unsized_ty_static);
+    let ownership = determine_mixed_ownership(&borrow_info);
+
+    rename_lifetimes_static(&mut unsized_ty_static, &borrow_info);
+    rename_lifetimes_sig(&mut unsized_ty_sig, &borrow_info, ownership);
+
+    OutputStructure {
+        wrapping: OutputWrapping::None,
+        ownership,
+        unsized_ty_static: Some(unsized_ty_static),
+        unsized_ty_sig: Some(unsized_ty_sig),
     }
 }
 
@@ -142,7 +168,7 @@ fn determine_associated_future_structure<'t>(
         .next()?;
 
     let mut future_output_structure =
-        determine_output_structure(item_trait, sig, &output_binding.ty);
+        determine_owned_or_mixed_output_structure(sig, &output_binding.ty);
     future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty);
 
     Some(future_output_structure)
@@ -165,6 +191,16 @@ fn determine_reference_ownership(
         }
     } else {
         OutputOwnership::SelfReference
+    }
+}
+
+fn determine_mixed_ownership(borrow_info: &BorrowInfo) -> OutputOwnership {
+    if borrow_info.has_input {
+        OutputOwnership::Owned
+    } else if borrow_info.has_elided || borrow_info.has_self {
+        OutputOwnership::Mixed
+    } else {
+        OutputOwnership::Owned
     }
 }
 
@@ -193,22 +229,104 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
     None
 }
 
-fn rename_lifetimes_to_static(ty: syn::Type) -> syn::Type {
-    rename_lifetimes(ty, "'static", &|_| true)
+struct ReturnTypeAnalyzer<'s> {
+    sig: &'s syn::Signature,
+    borrow_info: BorrowInfo,
 }
 
-fn rename_nonstatic_lifetimes_to_u(ty: syn::Type) -> syn::Type {
-    rename_lifetimes(ty, "'u", &|lifetime| match lifetime {
-        Some(lifetime) => lifetime.ident != "static",
-        None => true,
-    })
+#[derive(Default)]
+struct BorrowInfo {
+    has_nonstatic: bool,
+    has_elided: bool,
+    has_static: bool,
+    has_self: bool,
+    has_input: bool,
+    has_undeclared: bool,
+}
+
+impl<'s> ReturnTypeAnalyzer<'s> {
+    fn analyze_borrows(sig: &'s syn::Signature, ty: &mut syn::Type) -> BorrowInfo {
+        let mut analyzer = Self {
+            sig,
+            borrow_info: Default::default(),
+        };
+        analyzer.visit_type_mut(ty);
+
+        analyzer.borrow_info
+    }
+
+    fn analyze_lifetime(&mut self, lifetime: Option<&syn::Lifetime>) {
+        match lifetime {
+            Some(lifetime) => match lifetime.ident.to_string().as_ref() {
+                "static" => {
+                    self.borrow_info.has_static = true;
+                }
+                _ => match find_param_lifetime(self.sig, &lifetime.ident) {
+                    Some(index) => match index {
+                        0 => {
+                            self.borrow_info.has_nonstatic = true;
+                            self.borrow_info.has_self = true;
+                        }
+                        _ => {
+                            self.borrow_info.has_nonstatic = true;
+                            self.borrow_info.has_input = true;
+                        }
+                    },
+                    None => {
+                        self.borrow_info.has_nonstatic = true;
+                        self.borrow_info.has_undeclared = true;
+                    }
+                },
+            },
+            None => {
+                self.borrow_info.has_nonstatic = true;
+                self.borrow_info.has_elided = true;
+            }
+        }
+    }
+}
+
+impl<'s> syn::visit_mut::VisitMut for ReturnTypeAnalyzer<'s> {
+    fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
+        self.analyze_lifetime(reference.lifetime.as_ref());
+        syn::visit_mut::visit_type_reference_mut(self, reference);
+    }
+
+    fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
+        self.analyze_lifetime(Some(lifetime));
+        syn::visit_mut::visit_lifetime_mut(self, lifetime);
+    }
+}
+
+fn rename_lifetimes_static(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
+    if !borrow_info.has_nonstatic {
+        return;
+    }
+
+    rename_lifetimes(ty, "'static", &|_| true);
+}
+
+fn rename_lifetimes_sig(ty: &mut syn::Type, borrow_info: &BorrowInfo, ownership: OutputOwnership) {
+    if !borrow_info.has_nonstatic {
+        return;
+    }
+
+    match ownership {
+        OutputOwnership::Owned => {
+            rename_lifetimes_static(ty, borrow_info);
+        }
+        _ => rename_lifetimes(ty, "'u", &|lifetime| match lifetime {
+            Some(lifetime) => lifetime.ident != "static",
+            None => true,
+        }),
+    }
 }
 
 fn rename_lifetimes(
-    mut ty: syn::Type,
+    ty: &mut syn::Type,
     name: &'static str,
     test: &dyn Fn(Option<&syn::Lifetime>) -> bool,
-) -> syn::Type {
+) {
     struct MakeStatic<'t> {
         name: &'static str,
         test: &'t dyn Fn(Option<&syn::Lifetime>) -> bool,
@@ -236,8 +354,5 @@ fn rename_lifetimes(
         }
     }
 
-    use syn::visit_mut::VisitMut;
-    MakeStatic { name, test }.visit_type_mut(&mut ty);
-
-    ty
+    MakeStatic { name, test }.visit_type_mut(ty);
 }
