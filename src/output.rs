@@ -59,7 +59,8 @@ impl<'u, T: 'static> OutputSig<'u, Self> for Owned<T> {
     }
 }
 
-/// This type describes a function output that is a reference borrowed from `Self`.
+// This type describes a function output that is a reference borrowed from `Self`.
+#[doc(hidden)]
 pub struct Borrowed<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 
 impl<T: ?Sized + 'static> Output for Borrowed<T> {

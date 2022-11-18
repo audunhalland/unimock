@@ -348,7 +348,7 @@ pub mod as_owned;
 pub mod build;
 /// APIs used by macros, not intended to be used directly.
 pub mod macro_api;
-/// Function outputs
+/// Function outputs.
 pub mod output;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
