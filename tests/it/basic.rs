@@ -187,7 +187,7 @@ mod referenced {
 mod mixed_output {
     use super::*;
 
-    #[unimock]
+    #[unimock(api=MockInOption)]
     trait InOption {
         fn foo(&self, a: &str) -> Option<&str>;
     }
@@ -205,7 +205,12 @@ mod mixed_output {
 
     #[test]
     fn in_option() {
-        todo!("Make sure this can be mocked");
+        let u = Unimock::new(
+            MockInOption::foo
+                .each_call(matching!(_))
+                .returns(Some("foobar".to_string())),
+        );
+        assert_eq!(Some("foobar"), <Unimock as InOption>::foo(&u, ""));
     }
 }
 
@@ -357,6 +362,7 @@ fn various_borrowing() {
     #[unimock(api=BorrowingMock)]
     trait Borrowing {
         fn borrow(&self, input: String) -> &String;
+        fn borrow_static(&self) -> &'static String;
     }
     fn get_str<'s>(t: &'s impl Borrowing, input: &str) -> &'s str {
         t.borrow(input.to_string()).as_str()
@@ -400,15 +406,12 @@ fn various_borrowing() {
     );
     assert_eq!(
         "yoyoyo",
-        get_str(
-            &Unimock::new(
-                BorrowingMock::borrow
-                    .next_call(matching!(_))
-                    .answers_leaked_ref(|input| format!("{input}{input}"))
-                    .once()
-            ),
-            "yo"
-        )
+        <Unimock as Borrowing>::borrow_static(&Unimock::new(
+            BorrowingMock::borrow_static
+                .next_call(matching!(_))
+                .answers_leaked_ref(|_| format!("yoyoyo"))
+                .once()
+        ))
     );
 }
 
@@ -424,7 +427,7 @@ mod custom_api_module {
 
     #[test]
     #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:407 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:435 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
         Unimock::new(
@@ -651,7 +654,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:602 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:630 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
@@ -666,22 +669,6 @@ mod responders_in_series {
 #[unimock(api=BorrowStaticMock)]
 trait BorrowStatic {
     fn static_str(&self, arg: i32) -> &'static str;
-}
-
-#[test]
-#[should_panic(
-    expected = "BorrowStatic::static_str(33): Cannot borrow output value statically from BorrowStatic::static_str(_) at tests/it/basic.rs:655. Consider using Match::returns_static() or Match::answers_leaked_ref()."
-)]
-fn borrow_static_should_not_work_with_returns_ref() {
-    assert_eq!(
-        "foo",
-        Unimock::new(
-            BorrowStaticMock::static_str
-                .next_call(matching!(_))
-                .returns("foo")
-        )
-        .static_str(33)
-    );
 }
 
 #[test]
@@ -718,10 +705,7 @@ mod async_argument_borrowing {
     }
 
     #[tokio::test]
-    #[should_panic(
-        expected = "BorrowParam::borrow_param(\"input\"): Cannot borrow output value from a parameter from BorrowParam::borrow_param(_) at tests/it/basic.rs:702. Consider using Match::returns_static() or Match::answers_leaked_ref()."
-    )]
-    async fn test_argument_borrowing_error() {
+    async fn test_argument_borrowing_works() {
         let unimock = Unimock::new(
             BorrowParamMock::borrow_param
                 .each_call(matching!(_))

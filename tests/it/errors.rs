@@ -43,7 +43,7 @@ fn should_panic_for_empty_stub_closure() {
 
 #[test]
 #[should_panic(
-    expected = "SingleArg::method1(\"whatever\"): No output available for after matching SingleArg::method1(_) at tests/it/errors.rs:52."
+    expected = "SingleArg::method1(\"whatever\"): No output available for after matching SingleArg::method1(_) at tests/it/errors.rs:50."
 )]
 fn call_pattern_without_output_factory_should_crash() {
     Unimock::new(SingleArgMock::method1.stub(|each| {
@@ -63,7 +63,7 @@ fn should_panic_if_no_call_patterns_in_stub_are_matched() {
 
 #[test]
 #[should_panic(
-    expected = "SingleArg::method1: Expected SingleArg::method1(\"a\") at tests/it/errors.rs:72 to match exactly 1 call, but it actually matched no calls."
+    expected = "SingleArg::method1: Expected SingleArg::method1(\"a\") at tests/it/errors.rs:70 to match exactly 1 call, but it actually matched no calls."
 )]
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     Unimock::new(SingleArgMock::method1.stub(|each| {
@@ -75,7 +75,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
 
 #[test]
 #[should_panic(
-    expected = "SingleArg::method1(\"b\"): Explicit panic from SingleArg::method1(_) at tests/it/errors.rs:84: foobar!"
+    expected = "SingleArg::method1(\"b\"): Explicit panic from SingleArg::method1(_) at tests/it/errors.rs:82: foobar!"
 )]
 fn should_panic_with_explicit_message() {
     Unimock::new(SingleArgMock::method1.stub(|each| {
@@ -114,7 +114,7 @@ fn multithread_error_reporting_works() {
 
 #[test]
 #[should_panic(
-    expected = "Foo::foo(2): Cannot return value more than once from Foo::foo(_) at tests/it/errors.rs:127, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
+    expected = "Foo::foo(2): Cannot return value more than once from Foo::foo(_) at tests/it/errors.rs:125, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
 )]
 fn should_complain_when_returning_unquantified_value_more_then_once() {
     #[unimock(api=FooMock)]
@@ -130,7 +130,7 @@ fn should_complain_when_returning_unquantified_value_more_then_once() {
 
 #[test]
 #[should_panic(
-    expected = "Foo::foo: Expected Foo::foo(2) at tests/it/errors.rs:145 to match exactly 1 call, but it actually matched no calls."
+    expected = "Foo::foo: Expected Foo::foo(2) at tests/it/errors.rs:143 to match exactly 1 call, but it actually matched no calls."
 )]
 fn should_require_both_calls_2_some_call() {
     #[unimock(api=FooMock)]
