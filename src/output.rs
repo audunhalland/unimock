@@ -7,7 +7,9 @@ pub trait Output {
     type Type: 'static;
 }
 
+/// Trait used to convert values into the desired function output.
 pub trait IntoOutput<O: Output> {
+    /// Convert this value into the needed type used for function output.
     fn into_output(self) -> <O as Output>::Type;
 }
 

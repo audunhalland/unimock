@@ -4,9 +4,24 @@ use std::{
     time::Duration,
 };
 
+/// A trait used to convert arbitrary values into
+/// owned values. This includes reference types.
+///
+/// A requirement for implementing this trait
+/// is that the implementor must trivially
+/// by able to borrow from its owned variant.
+///
+/// This trait is used for what is called as "mixed outputs",
+/// e.g. `fn foo(&self) -> Option<&str>`.
+///
+/// The trait is implemented for a handful of core/std types.
+/// Likely this trait should be moved to a separate crate
+/// with feature flags for third party types it should be implemented for.
 pub trait AsOwned<'a> {
+    /// The owned variant of this type.
     type Owned: 'static;
 
+    /// Convert the owned variant back to the original
     fn from_owned(value: &'a Self::Owned) -> Self;
 }
 
