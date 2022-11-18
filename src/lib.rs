@@ -588,7 +588,7 @@ impl Unimock {
     ///     fn foo(&self) -> &'static str;
     /// }
     ///
-    /// let mocked = Unimock::new(TraitMock::foo.some_call(matching!()).returns_static("mocked"));
+    /// let mocked = Unimock::new(TraitMock::foo.some_call(matching!()).returns("mocked"));
     ///
     /// assert_eq!("mocked", mocked.foo());
     /// ```
@@ -623,7 +623,7 @@ impl Unimock {
     /// assert_eq!("real thing", Unimock::new_partial(()).foo());
     ///
     /// // A partial mock that overrides the behaviour of `Trait::foo`:
-    /// let clause = TraitMock::foo.next_call(matching!()).returns_static("mocked");
+    /// let clause = TraitMock::foo.next_call(matching!()).returns("mocked");
     /// assert_eq!("mocked", Unimock::new_partial(clause).foo());
     /// ```
     #[track_caller]

@@ -1,7 +1,7 @@
 use crate::call_pattern::*;
 use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{IntoOutput, Output};
+use crate::output::{IntoOutput, Output, StaticRef};
 use crate::property::*;
 use crate::respond::{Respond, RespondOnce};
 use crate::*;
@@ -368,18 +368,20 @@ macro_rules! define_response_common_impl {
             ///
             /// This method should only be used when computing a reference based
             /// on input parameters is necessary, which should not be a common use case.
-            pub fn answers_leaked_ref<A, R>(mut self, func: A) -> Quantify<'p, F, O>
+            pub fn answers_leaked_ref<A, R, T>(mut self, func: A) -> Quantify<'p, F, O>
             where
+                F: MockFn<Output = StaticRef<T>>,
                 A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
-                R: std::borrow::Borrow<F::OutputOld> + 'static,
-                F::OutputOld: Sized,
+                R: std::borrow::Borrow<T> + 'static,
+                T: 'static,
             {
-                self.builder.push_responder(
-                    StaticRefClosureResponder::<F> {
+                self.builder.push_responder2(
+                    ClosureResponder2::<F> {
                         func: Box::new(move |inputs| {
                             let value = func(inputs);
                             let leaked_ref = Box::leak(Box::new(value));
-                            <R as std::borrow::Borrow<F::OutputOld>>::borrow(leaked_ref)
+
+                            <R as std::borrow::Borrow<T>>::borrow(leaked_ref)
                         }),
                     }
                     .into_dyn_responder(),
