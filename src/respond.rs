@@ -5,14 +5,14 @@ use crate::call_pattern::{
 use crate::output::{Borrowed, Mixed, Output, Owned, StaticRef};
 use crate::{MockFn, Responder};
 
-// Outputs that can respond at least once implement this trait.
+/// Outputs that can respond at least once implement this trait.
 pub trait RespondOnce<F: MockFn> {
     // Create a responder that can answer _at least_ once
     #[doc(hidden)]
     fn responder(output: <F::Output as Output>::Type) -> Responder;
 }
 
-// Outputs that can respond any number of times implement this trait.
+/// Outputs that can respond any number of times implement this trait.
 pub trait Respond<F: MockFn>: RespondOnce<F> {
     // Create a responder that can answer any number of times
     #[doc(hidden)]

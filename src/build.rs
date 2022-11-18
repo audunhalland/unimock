@@ -1,7 +1,7 @@
 use crate::call_pattern::*;
 use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{FromBorrow, IntoOutput, Output};
+use crate::output::{IntoOutput, Output};
 use crate::property::*;
 use crate::respond::{Respond, RespondOnce};
 use crate::*;

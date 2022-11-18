@@ -29,14 +29,6 @@ pub enum SignatureError {
     NotBorrowed,
 }
 
-/// Trait for constructing an output by borrowing from another value.
-pub trait FromBorrow<T: ?Sized>: Output {
-    /// Construct an output by using some value that can be borrowed from to produce the output.
-    fn from_borrow(
-        value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
-    ) -> <Self as Output>::Type;
-}
-
 #[doc(hidden)]
 pub struct Owned<T>(std::marker::PhantomData<T>);
 
@@ -79,14 +71,6 @@ where
 {
     fn into_output(self) -> <Borrowed<T> as Output>::Type {
         Box::new(self)
-    }
-}
-
-impl<T: ?Sized + 'static> FromBorrow<T> for Borrowed<T> {
-    fn from_borrow(
-        value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
-    ) -> <Self as Output>::Type {
-        Box::new(value)
     }
 }
 
