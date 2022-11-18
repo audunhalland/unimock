@@ -22,16 +22,6 @@ pub enum OutputOwnership {
 }
 
 impl OutputOwnership {
-    pub fn eval_fn(&self) -> &'static str {
-        match self {
-            Self::Owned => "eval",
-            Self::SelfReference => "eval_borrowed",
-            Self::ParamReference => "eval_borrowed_param",
-            Self::StaticReference => "eval_static_ref",
-            Self::Mixed => "eval",
-        }
-    }
-
     pub fn output_mediator(&self) -> &'static str {
         match self {
             Self::Owned => "Owned",

@@ -33,7 +33,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
     inputs: F::Inputs<'i>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
-        mock_fn: mock_fn,
+        mock_fn,
         shared_state,
         input_debugger: &|| F::debug_inputs(&inputs),
     };
