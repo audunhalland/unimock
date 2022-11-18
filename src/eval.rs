@@ -1,50 +1,50 @@
-use crate::call_pattern::{CallPattern, DynResponder2, PatIndex};
+use crate::call_pattern::{CallPattern, DynResponder, PatIndex};
 use crate::debug;
 use crate::error;
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::macro_api::Evaluation2;
+use crate::macro_api::Evaluation;
 use crate::output::{Output, OutputSig, SignatureError};
 use crate::state::SharedState;
 use crate::value_chain::ValueChain;
 use crate::DynMockFn;
 use crate::{FallbackMode, MockFn};
 
-enum EvalResult2<'u> {
-    Responder(EvalResponder2<'u>),
+enum EvalResult<'u> {
+    Responder(EvalResponder<'u>),
     Unmock,
 }
 
-struct EvalResponder2<'u> {
+struct EvalResponder<'u> {
     fn_mocker: &'u FnMocker,
     pat_index: PatIndex,
-    responder: &'u DynResponder2,
+    responder: &'u DynResponder,
 }
 
-impl<'u> EvalResponder2<'u> {
+impl<'u> EvalResponder<'u> {
     fn debug_pattern(&self) -> debug::CallPatternDebug {
         self.fn_mocker.debug_pattern(self.pat_index)
     }
 }
 
-pub(crate) fn eval2<'u, 'i, F: MockFn>(
+pub(crate) fn eval<'u, 'i, F: MockFn>(
     mock_fn: DynMockFn,
     shared_state: &'u SharedState,
     inputs: F::Inputs<'i>,
-) -> MockResult<Evaluation2<'u, 'i, F>> {
+) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
         mock_fn: mock_fn,
         shared_state,
         input_debugger: &|| F::debug_inputs(&inputs),
     };
 
-    match dyn_ctx.eval2(&|pattern| pattern.match_inputs::<F>(&inputs))? {
-        EvalResult2::Responder(eval_rsp) => match eval_rsp.responder {
-            DynResponder2::Owned(inner) => {
+    match dyn_ctx.eval_dyn(&|pattern| pattern.match_inputs::<F>(&inputs))? {
+        EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
+            DynResponder::Owned(inner) => {
                 match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
                     Some(value) => {
                         let sig = into_sig::<F>(*value, &dyn_ctx.shared_state.value_chain);
-                        Ok(Evaluation2::Evaluated(sig))
+                        Ok(Evaluation::Evaluated(sig))
                     }
                     None => Err(MockError::CannotReturnValueMoreThanOnce {
                         fn_call: dyn_ctx.fn_call(),
@@ -52,26 +52,26 @@ pub(crate) fn eval2<'u, 'i, F: MockFn>(
                     }),
                 }
             }
-            DynResponder2::Borrow(inner) => {
+            DynResponder::Borrow(inner) => {
                 let downcasted = inner.downcast::<F>()?;
                 match try_borrow_sig::<F>(&downcasted.borrowable) {
-                    Ok(output) => Ok(Evaluation2::Evaluated(output)),
+                    Ok(output) => Ok(Evaluation::Evaluated(output)),
                     Err(_) => todo!(),
                 }
             }
-            DynResponder2::Closure(inner) => {
+            DynResponder::Closure(inner) => {
                 let output = (inner.downcast::<F>()?.func)(inputs);
                 let sig = into_sig::<F>(output, &shared_state.value_chain);
-                Ok(Evaluation2::Evaluated(sig))
+                Ok(Evaluation::Evaluated(sig))
             }
-            DynResponder2::Panic(msg) => Err(MockError::ExplicitPanic {
+            DynResponder::Panic(msg) => Err(MockError::ExplicitPanic {
                 fn_call: dyn_ctx.fn_call(),
                 pattern: eval_rsp.debug_pattern(),
                 msg: msg.clone(),
             }),
-            DynResponder2::Unmock => Ok(Evaluation2::Skipped(inputs)),
+            DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
         },
-        EvalResult2::Unmock => Ok(Evaluation2::Skipped(inputs)),
+        EvalResult::Unmock => Ok(Evaluation::Skipped(inputs)),
     }
 }
 
@@ -84,10 +84,10 @@ struct DynCtx<'u, 's> {
 
 impl<'u, 's> DynCtx<'u, 's> {
     #[inline(never)]
-    fn eval2(
+    fn eval_dyn(
         &self,
         match_inputs: &dyn Fn(&CallPattern) -> MockResult<bool>,
-    ) -> MockResult<EvalResult2<'u>> {
+    ) -> MockResult<EvalResult<'u>> {
         let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
             None => match self.shared_state.fallback_mode {
                 FallbackMode::Error => {
@@ -95,14 +95,14 @@ impl<'u, 's> DynCtx<'u, 's> {
                         name: self.mock_fn.name,
                     })
                 }
-                FallbackMode::Unmock => return Ok(EvalResult2::Unmock),
+                FallbackMode::Unmock => return Ok(EvalResult::Unmock),
             },
             Some(fn_mocker) => fn_mocker,
         };
 
         match self.match_call_pattern(fn_mocker, match_inputs)? {
-            Some((pat_index, pattern)) => match pattern.next_responder2() {
-                Some(responder) => Ok(EvalResult2::Responder(EvalResponder2 {
+            Some((pat_index, pattern)) => match pattern.next_responder() {
+                Some(responder) => Ok(EvalResult::Responder(EvalResponder {
                     fn_mocker,
                     pat_index,
                     responder,
@@ -116,7 +116,7 @@ impl<'u, 's> DynCtx<'u, 's> {
                 FallbackMode::Error => Err(MockError::NoMatchingCallPatterns {
                     fn_call: self.fn_call(),
                 }),
-                FallbackMode::Unmock => Ok(EvalResult2::Unmock),
+                FallbackMode::Unmock => Ok(EvalResult::Unmock),
             },
         }
     }

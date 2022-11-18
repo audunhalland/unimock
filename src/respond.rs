@@ -1,7 +1,5 @@
 use crate::as_owned::AsOwned;
-use crate::call_pattern::{
-    BorrowResponder2, OwnedResponder2, StoredValueSlot, StoredValueSlotOnce,
-};
+use crate::call_pattern::{BorrowResponder, OwnedResponder, StoredValueSlot, StoredValueSlotOnce};
 use crate::output::{Borrowed, Mixed, Output, Owned, StaticRef};
 use crate::{MockFn, Responder};
 
@@ -28,7 +26,7 @@ where
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
         Responder(
-            OwnedResponder2::<F> {
+            OwnedResponder::<F> {
                 stored_value: Box::new(StoredValueSlotOnce::new(output)),
             }
             .into_dyn_responder(),
@@ -43,7 +41,7 @@ where
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
         Responder(
-            OwnedResponder2::<F> {
+            OwnedResponder::<F> {
                 stored_value: Box::new(StoredValueSlot(output)),
             }
             .into_dyn_responder(),
@@ -57,7 +55,7 @@ where
     T: ?Sized + 'static,
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
-        Responder(BorrowResponder2::<F> { borrowable: output }.into_dyn_responder())
+        Responder(BorrowResponder::<F> { borrowable: output }.into_dyn_responder())
     }
 }
 
@@ -67,7 +65,7 @@ where
     T: ?Sized + 'static,
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
-        Responder(BorrowResponder2::<F> { borrowable: output }.into_dyn_responder())
+        Responder(BorrowResponder::<F> { borrowable: output }.into_dyn_responder())
     }
 }
 
@@ -77,7 +75,7 @@ where
     T: ?Sized + Send + Sync + 'static,
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
-        Responder(BorrowResponder2::<F> { borrowable: output }.into_dyn_responder())
+        Responder(BorrowResponder::<F> { borrowable: output }.into_dyn_responder())
     }
 }
 
@@ -87,7 +85,7 @@ where
     T: ?Sized + Send + Sync + 'static,
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
-        Responder(BorrowResponder2::<F> { borrowable: output }.into_dyn_responder())
+        Responder(BorrowResponder::<F> { borrowable: output }.into_dyn_responder())
     }
 }
 
@@ -99,7 +97,7 @@ where
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
         Responder(
-            OwnedResponder2::<F> {
+            OwnedResponder::<F> {
                 stored_value: Box::new(StoredValueSlotOnce::new(output)),
             }
             .into_dyn_responder(),
@@ -115,7 +113,7 @@ where
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
         Responder(
-            OwnedResponder2::<F> {
+            OwnedResponder::<F> {
                 stored_value: Box::new(StoredValueSlot(output)),
             }
             .into_dyn_responder(),

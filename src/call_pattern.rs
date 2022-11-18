@@ -23,7 +23,7 @@ fn downcast_box<'b, T: 'static>(any_box: &'b AnyBox, name: &'static str) -> Mock
 
 pub(crate) struct CallPattern {
     pub input_matcher: DynInputMatcher,
-    pub responders2: Vec<DynCallOrderResponder2>,
+    pub responders: Vec<DynCallOrderResponder>,
     pub ordered_call_index_range: std::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
 }
@@ -44,8 +44,8 @@ impl CallPattern {
         }
     }
 
-    pub fn next_responder2(&self) -> Option<&DynResponder2> {
-        find_responder_by_call_index2(&self.responders2, self.call_counter.fetch_add())
+    pub fn next_responder(&self) -> Option<&DynResponder> {
+        find_responder_by_call_index(&self.responders, self.call_counter.fetch_add())
     }
 }
 
@@ -83,72 +83,72 @@ pub(crate) struct MatchingFn<F: MockFn>(
 
 impl<F: MockFn> MatchingFn<F> {}
 
-pub(crate) struct DynCallOrderResponder2 {
+pub(crate) struct DynCallOrderResponder {
     pub response_index: usize,
-    pub responder: DynResponder2,
+    pub responder: DynResponder,
 }
 
-pub(crate) enum DynResponder2 {
-    Owned(DynOwnedResponder2),
-    Borrow(DynBorrowResponder2),
-    Closure(DynClosureResponder2),
+pub(crate) enum DynResponder {
+    Owned(DynOwnedResponder),
+    Borrow(DynBorrowResponder),
+    Closure(DynClosureResponder),
     Panic(String),
     Unmock,
 }
 
-pub(crate) struct DynOwnedResponder2(AnyBox);
-pub(crate) struct DynBorrowResponder2(AnyBox);
-pub(crate) struct DynClosureResponder2(AnyBox);
+pub(crate) struct DynOwnedResponder(AnyBox);
+pub(crate) struct DynBorrowResponder(AnyBox);
+pub(crate) struct DynClosureResponder(AnyBox);
 
-impl DynOwnedResponder2 {
-    pub fn downcast<F: MockFn>(&self) -> MockResult<&OwnedResponder2<F>> {
+impl DynOwnedResponder {
+    pub fn downcast<F: MockFn>(&self) -> MockResult<&OwnedResponder<F>> {
         downcast_box(&self.0, F::NAME)
     }
 }
 
-impl DynBorrowResponder2 {
-    pub fn downcast<F: MockFn>(&self) -> MockResult<&BorrowResponder2<F>> {
+impl DynBorrowResponder {
+    pub fn downcast<F: MockFn>(&self) -> MockResult<&BorrowResponder<F>> {
         downcast_box(&self.0, F::NAME)
     }
 }
 
-impl DynClosureResponder2 {
-    pub fn downcast<F: MockFn>(&self) -> MockResult<&ClosureResponder2<F>> {
+impl DynClosureResponder {
+    pub fn downcast<F: MockFn>(&self) -> MockResult<&ClosureResponder<F>> {
         downcast_box(&self.0, F::NAME)
     }
 }
 
-pub(crate) struct OwnedResponder2<F: MockFn> {
+pub(crate) struct OwnedResponder<F: MockFn> {
     pub stored_value: Box<dyn CloneOrTakeOrBorrow<<F::Output as Output>::Type>>,
 }
 
-pub(crate) struct BorrowResponder2<F: MockFn> {
+pub(crate) struct BorrowResponder<F: MockFn> {
     pub borrowable: <F::Output as Output>::Type,
 }
 
-pub(crate) struct ClosureResponder2<F: MockFn> {
+pub(crate) struct ClosureResponder<F: MockFn> {
     #[allow(clippy::type_complexity)]
     pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Output as Output>::Type) + Send + Sync>,
 }
 
-impl<F: MockFn> OwnedResponder2<F> {
-    pub fn into_dyn_responder(self) -> DynResponder2 {
-        DynResponder2::Owned(DynOwnedResponder2(Box::new(self)))
+impl<F: MockFn> OwnedResponder<F> {
+    pub fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::Owned(DynOwnedResponder(Box::new(self)))
     }
 }
 
-impl<F: MockFn> BorrowResponder2<F>
+impl<F: MockFn> BorrowResponder<F>
 where
     <F::Output as Output>::Type: Send + Sync,
 {
-    pub fn into_dyn_responder(self) -> DynResponder2 {
-        DynResponder2::Borrow(DynBorrowResponder2(Box::new(self)))
+    pub fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::Borrow(DynBorrowResponder(Box::new(self)))
     }
 }
 
-impl<F: MockFn> ClosureResponder2<F> {
-    pub fn into_dyn_responder(self) -> DynResponder2 {
-        DynResponder2::Closure(DynClosureResponder2(Box::new(self)))
+impl<F: MockFn> ClosureResponder<F> {
+    pub fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::Closure(DynClosureResponder(Box::new(self)))
     }
 }
 
@@ -210,10 +210,10 @@ impl<T: Send + Sync + 'static> CloneOrTakeOrBorrow<T> for StoredValueSlotOnce<T>
     }
 }
 
-fn find_responder_by_call_index2(
-    responders: &[DynCallOrderResponder2],
+fn find_responder_by_call_index(
+    responders: &[DynCallOrderResponder],
     call_index: usize,
-) -> Option<&DynResponder2> {
+) -> Option<&DynResponder> {
     if responders.is_empty() {
         return None;
     }
@@ -229,26 +229,24 @@ fn find_responder_by_call_index2(
 
 #[cfg(test)]
 mod tests {
-    use crate::output::{Mixed, OutputSig};
-
     use super::*;
 
     #[test]
     fn should_select_responder_with_lower_call_index() {
         let responders = vec![
-            DynCallOrderResponder2 {
+            DynCallOrderResponder {
                 response_index: 0,
-                responder: DynResponder2::Panic("0".to_string()),
+                responder: DynResponder::Panic("0".to_string()),
             },
-            DynCallOrderResponder2 {
+            DynCallOrderResponder {
                 response_index: 5,
-                responder: DynResponder2::Panic("5".to_string()),
+                responder: DynResponder::Panic("5".to_string()),
             },
         ];
 
-        fn find_msg(responders: &[DynCallOrderResponder2], call_index: usize) -> Option<&str> {
-            find_responder_by_call_index2(responders, call_index).map(|responder| match responder {
-                DynResponder2::Panic(msg) => msg.as_str(),
+        fn find_msg(responders: &[DynCallOrderResponder], call_index: usize) -> Option<&str> {
+            find_responder_by_call_index(responders, call_index).map(|responder| match responder {
+                DynResponder::Panic(msg) => msg.as_str(),
                 _ => panic!(),
             })
         }
@@ -258,47 +256,5 @@ mod tests {
         assert_eq!(find_msg(&responders, 4), Some("0"));
         assert_eq!(find_msg(&responders, 5), Some("5"));
         assert_eq!(find_msg(&responders, 7), Some("5"));
-    }
-
-    #[test]
-    fn can_convert_complex_back_to_borrowed() {
-        struct Test;
-
-        impl MockFn for Test {
-            type Inputs<'i> = ();
-            type Output = Mixed<Option<&'static str>>;
-            type OutputSig<'u> = Mixed<Option<&'u str>>;
-            const NAME: &'static str = "Test";
-
-            fn debug_inputs(_: &Self::Inputs<'_>) -> String {
-                String::new()
-            }
-        }
-
-        let q = Test.each_call(&|_| ()).returns(Some("fancy".to_string()));
-        let call_pattern_builder = q.builder.inner();
-        let resp = &call_pattern_builder.responders2[0];
-        let dyn_complex_resp = match &resp.responder {
-            DynResponder2::Owned(c) => c,
-            _ => panic!(),
-        };
-
-        let complex_resp = match dyn_complex_resp.downcast::<Test>() {
-            Ok(r) => r,
-            Err(_) => panic!(),
-        };
-        let borrowed_stored: &Option<String> = complex_resp.stored_value.borrow_stored();
-        let reborrowed: Option<&str> = load_sig::<Test>(borrowed_stored);
-
-        assert_eq!(Some("fancy"), reborrowed);
-    }
-
-    fn load_sig<'u, F: MockFn>(
-        stored: &'u <F::Output as Output>::Type,
-    ) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
-        match <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_borrow_output(stored) {
-            Ok(sig) => sig,
-            Err(_) => panic!(),
-        }
     }
 }

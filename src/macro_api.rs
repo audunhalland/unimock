@@ -7,37 +7,14 @@ use crate::{call_pattern::MatchingFn, *};
 /// Used to tell trait implementations whether to do perform their own evaluation of a call.
 ///
 /// The output is generic, because both owned and referenced output are supported.
-pub enum Evaluation<'i, O, F: MockFn> {
-    /// Function evaluated to its output.
-    Evaluated(O),
-    /// Function not yet evaluated.
-    Skipped(F::Inputs<'i>),
-}
-
-impl<'i, O, F: MockFn> Evaluation<'i, O, F> {
-    /// Unwrap the `Evaluated` variant, or panic.
-    /// The unimock instance must be passed in order to register that an eventual panic happened.
-    pub fn unwrap(self, unimock: &Unimock) -> O {
-        match self {
-            Self::Evaluated(output) => output,
-            Self::Skipped(_) => panic!(
-                "{}",
-                unimock
-                    .shared_state
-                    .prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
-            ),
-        }
-    }
-}
-
-pub enum Evaluation2<'u, 'i, F: MockFn> {
+pub enum Evaluation<'u, 'i, F: MockFn> {
     /// Function evaluated to its output.
     Evaluated(<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig),
     /// Function not yet evaluated.
     Skipped(F::Inputs<'i>),
 }
 
-impl<'u, 'i, F: MockFn> Evaluation2<'u, 'i, F> {
+impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
     /// Unwrap the `Evaluated` variant, or panic.
     /// The unimock instance must be passed in order to register that an eventual panic happened.
     pub fn unwrap(self, unimock: &Unimock) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
@@ -97,11 +74,11 @@ where
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
 #[track_caller]
-pub fn eval2<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation2<'u, 'i, F>
+pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation<'u, 'i, F>
 where
     F: MockFn + 'static,
 {
-    unimock.handle_error(eval::eval2(
+    unimock.handle_error(eval::eval(
         DynMockFn::new::<F>(),
         &unimock.shared_state,
         inputs,

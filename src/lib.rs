@@ -372,7 +372,7 @@ use std::sync::Arc;
 
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
-use call_pattern::DynResponder2;
+use call_pattern::DynResponder;
 use macro_api::Matching;
 
 ///
@@ -885,4 +885,4 @@ impl DynMockFn {
 
 // Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods
 #[doc(hidden)]
-pub struct Responder(DynResponder2);
+pub struct Responder(DynResponder);

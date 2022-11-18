@@ -91,7 +91,7 @@ impl MockAssembler {
 
         Ok(CallPattern {
             input_matcher: builder.input_matcher,
-            responders2: builder.responders2,
+            responders: builder.responders,
             ordered_call_index_range,
             call_counter: builder.count_expectation.into_counter(),
         })

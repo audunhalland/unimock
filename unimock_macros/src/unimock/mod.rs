@@ -251,11 +251,6 @@ fn def_method_impl(
     let method_sig = &method.method.sig;
     let mock_fn_path = method.mock_fn_path(attr);
 
-    let eval_fn = syn::Ident::new(
-        method.output_structure.ownership.eval_fn(),
-        proc_macro2::Span::call_site(),
-    );
-
     let inputs_destructuring = method.inputs_destructuring();
     let generic_args = util::Generics::args(trait_info);
 
@@ -286,14 +281,14 @@ fn def_method_impl(
 
         quote! {
             use #prefix::macro_api::*;
-            match eval2::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
-                Evaluation2::Evaluated(output) => output,
-                Evaluation2::Skipped((#inputs_destructuring)) => #unmock_expr
+            match eval::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
+                Evaluation::Evaluated(output) => output,
+                Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #prefix::macro_api::eval2::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)).unwrap(&self)
+            #prefix::macro_api::eval::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)).unwrap(&self)
         }
     };
 
