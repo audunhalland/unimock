@@ -15,7 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The generated `MockFn` structs are now put in a module called `TraitMock` where `Trait` is the name of the trait.
   The name of the generated structs are the same as the names of the methods.
 - Renamed the `unmocked=[..]` attribute option to `unmock_with=[..]`.
+- Improvements to function output modelling.
+- Mock builder API simplification. There is no longer any `returns_ref` or `returns_static`, just `returns`.
 ### Added
+- Better support for mocking "mixed outputs" (mix of owned and referenced values) like `-> Option<&T>`.
 - New mock entry point `some_call` which does not require return value to implement `Clone`. `next_call` now also uses this API.
 - `api=[..]` attribute option for opting out of generating an encapsulating module.
 - Better mismatch debugging with improved `matching!` API under the hood.
