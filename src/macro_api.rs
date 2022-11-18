@@ -95,6 +95,7 @@ where
     }
 }
 
+/// Evaluate a [MockFn] given some inputs, to produce its output.
 #[track_caller]
 pub fn eval2<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation2<'u, 'i, F>
 where
@@ -105,63 +106,6 @@ where
         &unimock.shared_state,
         inputs,
     ))
-}
-
-/// Evaluate a [MockFn] given some inputs, to produce its output.
-#[track_caller]
-pub fn eval<'i, F>(
-    unimock: &Unimock,
-    inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, F::OutputOld, F>
-where
-    F: MockFn + 'static,
-    F::OutputOld: Sized,
-{
-    unimock.handle_error(eval::EvalCtx::new::<F>(&unimock.shared_state).eval_sized(inputs))
-}
-
-/// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from `self`.
-#[track_caller]
-pub fn eval_borrowed<'u, 'i, F>(
-    unimock: &'u Unimock,
-    inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, &'u F::OutputOld, F>
-where
-    F: MockFn + 'static,
-{
-    unimock.handle_error(
-        eval::EvalCtx::new::<F>(&unimock.shared_state).eval_unsized_self_borrowed(inputs),
-    )
-}
-
-/// Evaluate a [MockFn] given some inputs, to produce its output, where output is borrowed from a parameter that is not self.
-#[track_caller]
-pub fn eval_borrowed_param<'u, 'i, F>(
-    unimock: &'u Unimock,
-    inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, &'i F::OutputOld, F>
-where
-    F: MockFn + 'static,
-{
-    unimock.handle_error(
-        eval::EvalCtx::new::<F>(&unimock.shared_state)
-            .eval_unsized_static_ref(inputs, error::Lender::Param),
-    )
-}
-
-/// Evaluate a [MockFn] given some inputs, to produce its output, where output is a static reference to `F::Output`.
-#[track_caller]
-pub fn eval_static_ref<'i, F>(
-    unimock: &Unimock,
-    inputs: F::Inputs<'i>,
-) -> macro_api::Evaluation<'i, &'static F::OutputOld, F>
-where
-    F: MockFn + 'static,
-{
-    unimock.handle_error(
-        eval::EvalCtx::new::<F>(&unimock.shared_state)
-            .eval_unsized_static_ref(inputs, error::Lender::Static),
-    )
 }
 
 /// Trait for computing the proper [std::fmt::Debug] representation of a value.

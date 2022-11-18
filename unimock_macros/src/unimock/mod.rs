@@ -187,7 +187,6 @@ fn def_mock_fn(
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Output = #prefix::output::#output_mediator<#output_static>;
             type OutputSig<'u> = #prefix::output::#output_mediator<#output_sig>;
-            type OutputOld = #output_static;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -214,7 +213,6 @@ fn def_mock_fn(
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = (#(#inputs_tuple),*),
                         Output = #prefix::output::#output_mediator<#output_static>,
-                        OutputOld = #output_static
                     >
                         #where_clause
                     {

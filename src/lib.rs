@@ -751,9 +751,6 @@ pub trait MockFn: Sized + 'static {
     /// Type describing the output of the function the way it's seen in the function signature.
     type OutputSig<'u>: output::OutputSig<'u, Self::Output>;
 
-    /// The output of the function.
-    type OutputOld: ?Sized;
-
     /// The name to use for runtime errors.
     const NAME: &'static str;
 
@@ -886,4 +883,6 @@ impl DynMockFn {
     }
 }
 
+// Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods
+#[doc(hidden)]
 pub struct Responder(DynResponder2);

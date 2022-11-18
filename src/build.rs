@@ -12,7 +12,6 @@ use std::panic;
 pub(crate) struct DynCallPatternBuilder {
     pub pattern_match_mode: PatternMatchMode,
     pub input_matcher: DynInputMatcher,
-    pub responders: Vec<DynCallOrderResponder>,
     pub responders2: Vec<DynCallOrderResponder2>,
     pub count_expectation: counter::CallCountExpectation,
     pub current_response_index: usize,
@@ -23,7 +22,6 @@ impl DynCallPatternBuilder {
         Self {
             pattern_match_mode,
             input_matcher,
-            responders: vec![],
             responders2: vec![],
             count_expectation: Default::default(),
             current_response_index: 0,
@@ -58,14 +56,6 @@ impl<'p> BuilderWrapper<'p> {
             Self::Owned(builder) => builder,
             Self::Stolen => panic!("builder stolen"),
         }
-    }
-
-    fn push_responder(&mut self, responder: DynResponder) {
-        let dyn_builder = self.inner_mut();
-        dyn_builder.responders.push(DynCallOrderResponder {
-            response_index: dyn_builder.current_response_index,
-            responder,
-        });
     }
 
     fn push_responder2(&mut self, responder: DynResponder2) {
@@ -158,31 +148,6 @@ pub struct DefineResponse<'p, F: MockFn, O: Ordering> {
     ordering: O,
 }
 
-impl<'p, F, O> DefineResponse<'p, F, O>
-where
-    F: MockFn + 'static,
-    O: Ordering,
-{
-    /// Specify the output of the call pattern by providing a value.
-    /// The output type cannot contain non-static references.
-    /// It must also be [Send] and [Sync] because unimock needs to store it.
-    ///
-    /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
-    ///     can be returned only once, because this method does not require a [Clone] bound.
-    /// To be able to return this value multiple times, quantify it explicitly.
-    pub fn returns1<V: Into<F::OutputOld>>(self, value: V) -> QuantifyReturnValue<'p, F, O>
-    where
-        F::OutputOld: Send + Sync + Sized + 'static,
-    {
-        QuantifyReturnValue {
-            builder: self.builder,
-            value: Some(value.into()),
-            mock_fn: self.mock_fn,
-            ordering: self.ordering,
-        }
-    }
-}
-
 impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O>
 where
     <F::Output as Output>::Type: Send + Sync,
@@ -194,7 +159,10 @@ where
     /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
     /// To be able to return this value multiple times, quantify it explicitly.
-    pub fn returns(self, value: impl IntoOutput<F::Output>) -> QuantifyReturnValue2<'p, F, O> {
+    pub fn returns(self, value: impl IntoOutput<F::Output>) -> QuantifyReturnValue2<'p, F, O>
+    where
+        F::Output: RespondOnce<F>,
+    {
         QuantifyReturnValue2 {
             builder: self.builder,
             value: Some(value.into_output()),
@@ -216,23 +184,6 @@ where
     F: MockFn + 'static,
     O: Ordering,
 {
-    /// Specify the output of the call pattern by providing a value.
-    /// The output type cannot contain non-static references.
-    /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns1<V: Into<F::OutputOld>>(mut self, value: V) -> Quantify<'p, F, O>
-    where
-        F::OutputOld: Clone + Send + Sync + Sized + 'static,
-    {
-        let value = value.into();
-        self.builder.push_responder(
-            ValueResponder::<F> {
-                stored_value: Box::new(StoredValueSlot(value)),
-            }
-            .into_dyn_responder(),
-        );
-        self.quantify()
-    }
-
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
@@ -271,20 +222,6 @@ macro_rules! define_response_common_impl {
             }
 
             /// Specify the output of the call pattern by calling `Default::default()`.
-            pub fn returns_default1(mut self) -> Quantify<'p, F, O>
-            where
-                F::OutputOld: Default,
-            {
-                self.builder.push_responder(
-                    ClosureResponder::<F> {
-                        func: Box::new(|_| Default::default()),
-                    }
-                    .into_dyn_responder(),
-                );
-                self.quantify()
-            }
-
-            /// Specify the output of the call pattern by calling `Default::default()`.
             pub fn returns_default(mut self) -> Quantify<'p, F, O>
             where
                 <F::Output as Output>::Type: Default,
@@ -292,53 +229,6 @@ macro_rules! define_response_common_impl {
                 self.builder.push_responder2(
                     ClosureResponder2::<F> {
                         func: Box::new(|_| Default::default()),
-                    }
-                    .into_dyn_responder(),
-                );
-                self.quantify()
-            }
-
-            /// Specify the output of the call to be a borrow of the provided value.
-            /// This works well when the lifetime of the returned reference is the same as `self`.
-            /// Using this for `'static` references will produce a runtime error. For static references, use [DefineResponse::returns_static].
-            pub fn returns_ref1<T>(mut self, value: T) -> Quantify<'p, F, O>
-            where
-                T: std::borrow::Borrow<F::OutputOld> + Sized + Send + Sync + 'static,
-            {
-                self.builder.push_responder(
-                    BorrowableResponder::<F> {
-                        borrowable: Box::new(value),
-                    }
-                    .into_dyn_responder(),
-                );
-                self.quantify()
-            }
-
-            /// Specify the output of the call to be a reference to static value.
-            /// This must be used when the returned reference in the mocked trait is `'static`.
-            pub fn returns_static1(mut self, value: &'static F::OutputOld) -> Quantify<'p, F, O>
-            where
-                F::OutputOld: Send + Sync + 'static,
-            {
-                self.builder.push_responder(
-                    StaticRefClosureResponder::<F> {
-                        func: Box::new(move |_| value),
-                    }
-                    .into_dyn_responder(),
-                );
-                self.quantify()
-            }
-
-            /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
-            pub fn answers1<A, R>(mut self, func: A) -> Quantify<'p, F, O>
-            where
-                A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
-                R: Into<F::OutputOld>,
-                F::OutputOld: Sized,
-            {
-                self.builder.push_responder(
-                    ClosureResponder::<F> {
-                        func: Box::new(move |inputs| func(inputs).into()),
                     }
                     .into_dyn_responder(),
                 );
@@ -392,8 +282,6 @@ macro_rules! define_response_common_impl {
             /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
             pub fn panics(mut self, message: impl Into<String>) -> Quantify<'p, F, O> {
                 let message = message.into();
-                self.builder
-                    .push_responder(DynResponder::Panic(message.clone()));
                 self.builder.push_responder2(DynResponder2::Panic(message));
                 self.quantify()
             }
@@ -403,7 +291,6 @@ macro_rules! define_response_common_impl {
             /// For this to work, the mocked trait must be configured with an `unmock_with=[..]` parameter.
             /// If unimock doesn't find a way to unmock the function, this will panic when the function is called.
             pub fn unmocked(mut self) -> Quantify<'p, F, O> {
-                self.builder.push_responder(DynResponder::Unmock);
                 self.builder.push_responder2(DynResponder2::Unmock);
                 self.quantify()
             }
@@ -423,98 +310,10 @@ define_response_common_impl!(DefineResponse);
 define_response_common_impl!(DefineMultipleResponses);
 
 /// Builder for defining how a call pattern with an explicit return value gets verified with regards to quantification/counting.
-pub struct QuantifyReturnValue<'p, F, O>
-where
-    F: MockFn,
-    F::OutputOld: Sized + Send + Sync,
-{
-    builder: BuilderWrapper<'p>,
-    value: Option<F::OutputOld>,
-    mock_fn: PhantomData<F>,
-    ordering: O,
-}
-
-impl<'p, F, O> QuantifyReturnValue<'p, F, O>
-where
-    F: MockFn,
-    F::OutputOld: Sized + Send + Sync,
-    O: Copy,
-{
-    /// Expect this call pattern to be called exactly once.
-    ///
-    /// This is the only quantifier that works together with return values that don't implement [Clone].
-    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.builder.push_responder(
-            ValueResponder::<F> {
-                stored_value: Box::new(StoredValueSlotOnce::new(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
-        );
-        self.builder.quantify(1, counter::Exactness::Exact);
-        QuantifiedResponse {
-            builder: self.builder.steal(),
-            mock_fn: PhantomData,
-            ordering: self.ordering,
-            _repetition: Exact,
-        }
-    }
-
-    /// Expect this call pattern to be called exactly the specified number of times.
-    pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
-    where
-        F::OutputOld: Clone,
-    {
-        self.builder.push_responder(
-            ValueResponder::<F> {
-                stored_value: Box::new(StoredValueSlot(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
-        );
-        self.builder.quantify(times, counter::Exactness::Exact);
-        QuantifiedResponse {
-            builder: self.builder.steal(),
-            mock_fn: PhantomData,
-            ordering: self.ordering,
-            _repetition: Exact,
-        }
-    }
-
-    /// Expect this call pattern to be called at least the specified number of times.
-    pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
-    where
-        F::OutputOld: Clone,
-    {
-        self.builder.push_responder(
-            ValueResponder::<F> {
-                stored_value: Box::new(StoredValueSlot(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
-        );
-        self.builder.quantify(times, counter::Exactness::AtLeast);
-        QuantifiedResponse {
-            builder: self.builder.steal(),
-            mock_fn: PhantomData,
-            ordering: self.ordering,
-            _repetition: AtLeast,
-        }
-    }
-}
-
-impl<'p, F, O> ClauseSealed for QuantifyReturnValue<'p, F, O>
-where
-    F: MockFn,
-    F::OutputOld: Sized + Send + Sync,
-    O: Copy + Ordering,
-{
-    fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
-        self.once().deconstruct(sink)
-    }
-}
-
-/// Builder for defining how a call pattern with an explicit return value gets verified with regards to quantification/counting.
 pub struct QuantifyReturnValue2<'p, F, O>
 where
     F: MockFn,
+    F::Output: RespondOnce<F>,
 {
     pub(crate) builder: BuilderWrapper<'p>,
     value: Option<<F::Output as Output>::Type>,
@@ -525,15 +324,13 @@ where
 impl<'p, F, O> QuantifyReturnValue2<'p, F, O>
 where
     F: MockFn,
+    F::Output: RespondOnce<F>,
     O: Copy,
 {
     /// Expect this call pattern to be called exactly once.
     ///
     /// This is the only quantifier that works together with return values that don't implement [Clone].
-    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact>
-    where
-        F::Output: RespondOnce<F>,
-    {
+    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
         self.builder.push_responder2(
             <F::Output as RespondOnce<F>>::responder(self.value.take().unwrap()).0,
         );
@@ -595,19 +392,15 @@ where
 ///
 /// In that case, it is only able to return once, because no [Clone] bound has been
 /// part of any construction step.
-impl<'p, F, O> Drop for QuantifyReturnValue<'p, F, O>
+impl<'p, F, O> Drop for QuantifyReturnValue2<'p, F, O>
 where
     F: MockFn,
-    F::OutputOld: Sized + Send + Sync,
+    F::Output: RespondOnce<F>,
 {
     fn drop(&mut self) {
         if let Some(value) = self.value.take() {
-            self.builder.push_responder(
-                ValueResponder::<F> {
-                    stored_value: Box::new(StoredValueSlotOnce::new(value)),
-                }
-                .into_dyn_responder(),
-            );
+            self.builder
+                .push_responder2(<F::Output as RespondOnce<F>>::responder(value).0);
         }
     }
 }
