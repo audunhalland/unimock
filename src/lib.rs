@@ -352,6 +352,8 @@ pub mod macro_api;
 pub mod output;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
+/// Traits for creating responders to mock calls
+mod respond;
 #[doc(hidden)]
 pub mod value_chain;
 
@@ -370,6 +372,7 @@ use std::sync::Arc;
 
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
+use call_pattern::DynResponder2;
 use macro_api::Matching;
 
 ///
@@ -882,3 +885,5 @@ impl DynMockFn {
         }
     }
 }
+
+pub struct Responder(DynResponder2);

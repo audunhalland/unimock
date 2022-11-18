@@ -79,10 +79,8 @@ impl MockFn for MockMixed {
 fn test_owned() {
     MockOwned.some_call(&|_| ()).returns("foo");
     MockOwned.some_call(&|_| ()).returns("too".to_string());
-    MockBorrowed.some_call(&|_| ()).returns_borrow("foo");
-    MockBorrowed
-        .some_call(&|_| ())
-        .returns_borrow("foo".to_string());
+    MockBorrowed.some_call(&|_| ()).returns("foo");
+    MockBorrowed.some_call(&|_| ()).returns("foo".to_string());
     MockBorrowedParam.some_call(&|_| ()).returns("foo");
     MockStatic.some_call(&|_| ()).returns("foo");
     MockMixed

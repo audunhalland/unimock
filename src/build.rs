@@ -3,6 +3,7 @@ use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
 use crate::output::{FromBorrow, IntoOutput, Output};
 use crate::property::*;
+use crate::respond::{Respond, RespondOnce};
 use crate::*;
 
 use std::marker::PhantomData;
@@ -237,15 +238,11 @@ where
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
     pub fn returns<V: IntoOutput<F::Output>>(mut self, value: V) -> Quantify<'p, F, O>
     where
-        <F::Output as Output>::Type: Clone + Send + Sync + Sized + 'static,
+        F::Output: Respond<F>,
     {
         let output = value.into_output();
-        self.builder.push_responder2(
-            OwnedResponder2::<F> {
-                stored_value: Box::new(StoredValueSlot(output)),
-            }
-            .into_dyn_responder(),
-        );
+        self.builder
+            .push_responder2(<F::Output as Respond<F>>::responder(output).0);
         self.quantify()
     }
 }
@@ -304,23 +301,6 @@ macro_rules! define_response_common_impl {
             /// Specify the output of the call to be a borrow of the provided value.
             /// This works well when the lifetime of the returned reference is the same as `self`.
             /// Using this for `'static` references will produce a runtime error. For static references, use [DefineResponse::returns_static].
-            pub fn returns_borrow<T: ?Sized + Send + Sync>(
-                mut self,
-                value: impl std::borrow::Borrow<T> + Send + Sync + 'static,
-            ) -> Quantify<'p, F, O>
-            where
-                F::Output: FromBorrow<T>,
-                <F::Output as Output>::Type: Send + Sync,
-            {
-                let borrowable = <F::Output as FromBorrow<T>>::from_borrow(value);
-                self.builder
-                    .push_responder2(BorrowResponder2::<F> { borrowable }.into_dyn_responder());
-                self.quantify()
-            }
-
-            /// Specify the output of the call to be a borrow of the provided value.
-            /// This works well when the lifetime of the returned reference is the same as `self`.
-            /// Using this for `'static` references will produce a runtime error. For static references, use [DefineResponse::returns_static].
             pub fn returns_ref1<T>(mut self, value: T) -> Quantify<'p, F, O>
             where
                 T: std::borrow::Borrow<F::OutputOld> + Sized + Send + Sync + 'static,
@@ -370,7 +350,6 @@ macro_rules! define_response_common_impl {
             where
                 A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
                 R: IntoOutput<F::Output>,
-                F::OutputOld: Sized,
             {
                 self.builder.push_responder2(
                     ClosureResponder2::<F> {
@@ -544,18 +523,17 @@ where
 impl<'p, F, O> QuantifyReturnValue2<'p, F, O>
 where
     F: MockFn,
-    <F::Output as Output>::Type: Send + Sync,
     O: Copy,
 {
     /// Expect this call pattern to be called exactly once.
     ///
     /// This is the only quantifier that works together with return values that don't implement [Clone].
-    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
+    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact>
+    where
+        F::Output: RespondOnce<F>,
+    {
         self.builder.push_responder2(
-            OwnedResponder2::<F> {
-                stored_value: Box::new(StoredValueSlotOnce::new(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
+            <F::Output as RespondOnce<F>>::responder(self.value.take().unwrap()).0,
         );
         self.builder.quantify(1, counter::Exactness::Exact);
         QuantifiedResponse {
@@ -569,14 +547,10 @@ where
     /// Expect this call pattern to be called exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
     where
-        <F::Output as Output>::Type: Clone,
+        F::Output: Respond<F>,
     {
-        self.builder.push_responder2(
-            OwnedResponder2::<F> {
-                stored_value: Box::new(StoredValueSlot(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
-        );
+        self.builder
+            .push_responder2(<F::Output as Respond<F>>::responder(self.value.take().unwrap()).0);
         self.builder.quantify(times, counter::Exactness::Exact);
         QuantifiedResponse {
             builder: self.builder.steal(),
@@ -589,14 +563,10 @@ where
     /// Expect this call pattern to be called at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
-        <F::Output as Output>::Type: Clone,
+        F::Output: Respond<F>,
     {
-        self.builder.push_responder2(
-            OwnedResponder2::<F> {
-                stored_value: Box::new(StoredValueSlot(self.value.take().unwrap())),
-            }
-            .into_dyn_responder(),
-        );
+        self.builder
+            .push_responder2(<F::Output as Respond<F>>::responder(self.value.take().unwrap()).0);
         self.builder.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
             builder: self.builder.steal(),
@@ -610,7 +580,7 @@ where
 impl<'p, F, O> ClauseSealed for QuantifyReturnValue2<'p, F, O>
 where
     F: MockFn,
-    <F::Output as Output>::Type: Sized + Send + Sync,
+    F::Output: RespondOnce<F>,
     O: Copy + Ordering,
 {
     fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {

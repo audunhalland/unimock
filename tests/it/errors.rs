@@ -27,12 +27,10 @@ fn should_panic_for_unused_stub() {
 )]
 fn should_complain_about_mismatched_modes() {
     Unimock::new((
-        SingleArgMock::method1
-            .each_call(matching!(_))
-            .returns_borrow("a"),
+        SingleArgMock::method1.each_call(matching!(_)).returns("a"),
         SingleArgMock::method1
             .next_call(matching!(_))
-            .returns_borrow("b")
+            .returns("b")
             .once(),
     ));
 }
@@ -69,10 +67,8 @@ fn should_panic_if_no_call_patterns_in_stub_are_matched() {
 )]
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     Unimock::new(SingleArgMock::method1.stub(|each| {
-        each.call(matching!("a"))
-            .returns_borrow(String::new())
-            .once();
-        each.call(matching!(_)).returns_borrow(String::new());
+        each.call(matching!("a")).returns(String::new()).once();
+        each.call(matching!(_)).returns(String::new());
     }))
     .method1("b");
 }

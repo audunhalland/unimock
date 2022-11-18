@@ -149,8 +149,7 @@ mod referenced {
             "answer",
             takes_referenced(
                 &Unimock::new(ReferencedMock::foo.stub(|each| {
-                    each.call(matching!("a"))
-                        .returns_borrow("answer".to_string());
+                    each.call(matching!("a")).returns("answer".to_string());
                 })),
                 "a",
             )
@@ -164,7 +163,7 @@ mod referenced {
             takes_referenced(
                 &Unimock::new(ReferencedMock::foo.stub(|each| {
                     each.call(matching!("Æ")).panics("Should not be called");
-                    each.call(matching!("a")).returns_borrow(String::new());
+                    each.call(matching!("a")).returns(String::new());
                 })),
                 "a",
             )
@@ -177,7 +176,7 @@ mod referenced {
             "foobar",
             takes_referenced(
                 &Unimock::new(ReferencedMock::foo.stub(|each| {
-                    each.call(matching!("a")).returns_borrow("foobar");
+                    each.call(matching!("a")).returns("foobar");
                 })),
                 "a",
             )
@@ -264,15 +263,11 @@ fn test_multiple() {
         "success",
         takes_single_multi(&Unimock::new((
             SingleArgMock::method1.stub(|each| {
-                each.call(matching!("b"))
-                    .returns_borrow("B".to_string())
-                    .once();
+                each.call(matching!("b")).returns("B".to_string()).once();
             }),
             MultiArgMock::method2.stub(|each| {
                 each.call(matching!("a", _)).panics("should not call this");
-                each.call(matching!("B", "B"))
-                    .returns_borrow("success".to_string())
-                    .once();
+                each.call(matching!("B", "B")).returns("success").once();
             })
         )))
     );
@@ -351,7 +346,7 @@ fn should_be_able_to_borrow_a_returns_value() {
         Unimock::new(
             BorrowsRetMock::borrows_ret
                 .each_call(matching!())
-                .returns_borrow(Ret(42))
+                .returns(Ret(42))
         )
         .borrows_ret()
     );
@@ -385,7 +380,7 @@ fn various_borrowing() {
             &Unimock::new(
                 BorrowingMock::borrow
                     .next_call(matching!(_))
-                    .returns_borrow("foo".to_string())
+                    .returns("foo".to_string())
                     .once()
             ),
             ""
@@ -435,7 +430,7 @@ mod custom_api_module {
         Unimock::new(
             FakeSingle::func
                 .next_call(matching!(_))
-                .returns_borrow(MyType)
+                .returns(MyType)
                 .once(),
         );
     }
