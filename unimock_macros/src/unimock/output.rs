@@ -28,7 +28,7 @@ impl OutputOwnership {
             Self::SelfReference => "Borrowed",
             Self::ParamReference => "StaticRef",
             Self::StaticReference => "StaticRef",
-            Self::Mixed => "Mixed",
+            Self::Mixed => "Complex",
         }
     }
 }

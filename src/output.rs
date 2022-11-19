@@ -333,10 +333,16 @@ mod complex_option {
         }
     }
 
-    impl<'u, T: Send + Sync + 'static> OutputSig<'u, Self> for This<T> {
+    impl<'u, T> OutputSig<'u, This<T>> for Complex<Option<&'u T>>
+    where
+        T: ?Sized + 'u,
+    {
         type Sig = Option<&'u T>;
 
-        fn from_output(option: <Self as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
+        fn from_output(
+            option: <This<T> as Output>::Type,
+            value_chain: &'u ValueChain,
+        ) -> Self::Sig {
             match option {
                 Some(value) => Some(value_chain.add(value).as_ref().borrow()),
                 None => None,
@@ -344,7 +350,7 @@ mod complex_option {
         }
 
         fn try_borrow_output(
-            option: &'u <Self as Output>::Type,
+            option: &'u <This<T> as Output>::Type,
         ) -> Result<Self::Sig, SignatureError> {
             Ok(match option {
                 Some(value) => Some(value.as_ref().borrow()),
@@ -410,10 +416,16 @@ mod complex_result_borrowed_t {
         }
     }
 
-    impl<'u, T: Send + Sync + 'static, E: 'static> OutputSig<'u, Self> for This<T, E> {
+    impl<'u, T, E: 'static> OutputSig<'u, This<T, E>> for Complex<Result<&'u T, E>>
+    where
+        T: ?Sized + 'u,
+    {
         type Sig = Result<&'u T, E>;
 
-        fn from_output(result: <Self as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
+        fn from_output(
+            result: <This<T, E> as Output>::Type,
+            value_chain: &'u ValueChain,
+        ) -> Self::Sig {
             match result {
                 Ok(value) => Ok(value_chain.add(value).as_ref().borrow()),
                 Err(e) => Err(e),
@@ -421,7 +433,7 @@ mod complex_result_borrowed_t {
         }
 
         fn try_borrow_output(
-            result: &'u <Self as Output>::Type,
+            result: &'u <This<T, E> as Output>::Type,
         ) -> Result<Self::Sig, SignatureError> {
             match result {
                 Ok(value) => Ok(Ok(value.as_ref().borrow())),
