@@ -742,10 +742,10 @@ pub trait MockFn: Sized + 'static {
     type Inputs<'i>;
 
     /// Type describing the output of the function in a way that unimock can store (i.e. without lifetime parameters).
-    type Output: output::Output;
+    type Response: output::Respond;
 
     /// Type describing the output of the function the way it's seen in the function signature.
-    type OutputSig<'u>: output::OutputSig<'u, Self::Output>;
+    type Output<'u>: output::Output<'u, Self::Response>;
 
     /// The name to use for runtime errors.
     const NAME: &'static str;

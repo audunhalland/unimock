@@ -1,5 +1,5 @@
 use crate::debug;
-use crate::output::OutputSig;
+use crate::output::Output;
 use crate::{call_pattern::MatchingFn, *};
 
 /// The evaluation of a [MockFn].
@@ -9,7 +9,7 @@ use crate::{call_pattern::MatchingFn, *};
 /// The output is generic, because both owned and referenced output are supported.
 pub enum Evaluation<'u, 'i, F: MockFn> {
     /// Function evaluated to its output.
-    Evaluated(<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig),
+    Evaluated(<F::Output<'u> as Output<'u, F::Response>>::Type),
     /// Function not yet evaluated.
     Skipped(F::Inputs<'i>),
 }
@@ -17,7 +17,7 @@ pub enum Evaluation<'u, 'i, F: MockFn> {
 impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
     /// Unwrap the `Evaluated` variant, or panic.
     /// The unimock instance must be passed in order to register that an eventual panic happened.
-    pub fn unwrap(self, unimock: &Unimock) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
+    pub fn unwrap(self, unimock: &Unimock) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
         match self {
             Self::Evaluated(output) => output,
             Self::Skipped(_) => panic!(
@@ -78,11 +78,7 @@ pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluatio
 where
     F: MockFn + 'static,
 {
-    unimock.handle_error(eval::eval(
-        DynMockFn::new::<F>(),
-        &unimock.shared_state,
-        inputs,
-    ))
+    unimock.handle_error(eval::eval(&unimock.shared_state, inputs))
 }
 
 /// Trait for computing the proper [std::fmt::Debug] representation of a value.

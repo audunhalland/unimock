@@ -1,7 +1,7 @@
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
 use crate::error::{MockError, MockResult};
-use crate::output::Output;
+use crate::output::Respond;
 use crate::*;
 
 use std::any::Any;
@@ -90,7 +90,7 @@ pub(crate) struct DynCallOrderResponder {
 }
 
 pub(crate) enum DynResponder {
-    Cell(DynOwnedResponder),
+    Cell(DynCellResponder),
     Borrow(DynBorrowResponder),
     Function(DynFunctionResponder),
     Panic(String),
@@ -98,35 +98,35 @@ pub(crate) enum DynResponder {
 }
 
 impl DynResponder {
-    pub fn new_cell<F: MockFn>(output: <F::Output as Output>::Type) -> Self
+    pub fn new_cell<F: MockFn>(response: <F::Response as Respond>::Type) -> Self
     where
-        <F::Output as Output>::Type: Send + Sync + 'static,
+        <F::Response as Respond>::Type: Send + Sync + 'static,
     {
-        let output = Mutex::new(Some(output));
+        let response = Mutex::new(Some(response));
         CellResponder::<F> {
             cell: Box::new(FactoryCell::new(move || {
-                let mut lock = output.lock().unwrap();
+                let mut lock = response.lock().unwrap();
                 lock.take()
             })),
         }
         .into_dyn_responder()
     }
 
-    pub fn new_clone_cell<F: MockFn>(output: <F::Output as Output>::Type) -> Self
+    pub fn new_clone_cell<F: MockFn>(response: <F::Response as Respond>::Type) -> Self
     where
-        <F::Output as Output>::Type: Clone + Send + Sync + 'static,
+        <F::Response as Respond>::Type: Clone + Send + Sync + 'static,
     {
         CellResponder::<F> {
-            cell: Box::new(CloneCell(output)),
+            cell: Box::new(CloneCell(response)),
         }
         .into_dyn_responder()
     }
 
     pub fn new_clone_factory_cell<F: MockFn>(
-        clone_fn: impl Fn() -> Option<<F::Output as Output>::Type> + Send + Sync + 'static,
+        clone_fn: impl Fn() -> Option<<F::Response as Respond>::Type> + Send + Sync + 'static,
     ) -> Self
     where
-        <F::Output as Output>::Type: Send + Sync + 'static,
+        <F::Response as Respond>::Type: Send + Sync + 'static,
     {
         CellResponder::<F> {
             cell: Box::new(FactoryCell::new(clone_fn)),
@@ -134,19 +134,22 @@ impl DynResponder {
         .into_dyn_responder()
     }
 
-    pub fn new_borrow<F: MockFn>(output: <F::Output as Output>::Type) -> Self
+    pub fn new_borrow<F: MockFn>(response: <F::Response as Respond>::Type) -> Self
     where
-        <F::Output as Output>::Type: Send + Sync,
+        <F::Response as Respond>::Type: Send + Sync,
     {
-        BorrowResponder::<F> { borrowable: output }.into_dyn_responder()
+        BorrowResponder::<F> {
+            borrowable: response,
+        }
+        .into_dyn_responder()
     }
 }
 
-pub(crate) struct DynOwnedResponder(AnyBox);
+pub(crate) struct DynCellResponder(AnyBox);
 pub(crate) struct DynBorrowResponder(AnyBox);
 pub(crate) struct DynFunctionResponder(AnyBox);
 
-impl DynOwnedResponder {
+impl DynCellResponder {
     pub fn downcast<F: MockFn>(&self) -> MockResult<&CellResponder<F>> {
         downcast_box(&self.0, F::NAME)
     }
@@ -165,27 +168,27 @@ impl DynFunctionResponder {
 }
 
 pub(crate) struct CellResponder<F: MockFn> {
-    pub cell: Box<dyn Cell<<F::Output as Output>::Type>>,
+    pub cell: Box<dyn Cell<<F::Response as Respond>::Type>>,
 }
 
 pub(crate) struct BorrowResponder<F: MockFn> {
-    pub borrowable: <F::Output as Output>::Type,
+    pub borrowable: <F::Response as Respond>::Type,
 }
 
 pub(crate) struct FunctionResponder<F: MockFn> {
     #[allow(clippy::type_complexity)]
-    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Output as Output>::Type) + Send + Sync>,
+    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Response as Respond>::Type) + Send + Sync>,
 }
 
 impl<F: MockFn> CellResponder<F> {
     pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::Cell(DynOwnedResponder(Box::new(self)))
+        DynResponder::Cell(DynCellResponder(Box::new(self)))
     }
 }
 
 impl<F: MockFn> BorrowResponder<F>
 where
-    <F::Output as Output>::Type: Send + Sync,
+    <F::Response as Respond>::Type: Send + Sync,
 {
     pub fn into_dyn_responder(self) -> DynResponder {
         DynResponder::Borrow(DynBorrowResponder(Box::new(self)))

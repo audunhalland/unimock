@@ -4,7 +4,7 @@ use crate::error;
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::Evaluation;
-use crate::output::{Output, OutputSig, SignatureError};
+use crate::output::{Output, Respond, SignatureError};
 use crate::state::SharedState;
 use crate::value_chain::ValueChain;
 use crate::DynMockFn;
@@ -28,12 +28,11 @@ impl<'u> EvalResponder<'u> {
 }
 
 pub(crate) fn eval<'u, 'i, F: MockFn>(
-    mock_fn: DynMockFn,
     shared_state: &'u SharedState,
     inputs: F::Inputs<'i>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
-        mock_fn,
+        mock_fn: DynMockFn::new::<F>(),
         shared_state,
         input_debugger: &|| F::debug_inputs(&inputs),
     };
@@ -41,9 +40,10 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
     match dyn_ctx.eval_dyn(&|pattern| pattern.match_inputs::<F>(&inputs))? {
         EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
             DynResponder::Cell(inner) => match inner.downcast::<F>()?.cell.try_take() {
-                Some(value) => {
-                    let sig = into_sig::<F>(*value, &dyn_ctx.shared_state.value_chain);
-                    Ok(Evaluation::Evaluated(sig))
+                Some(response) => {
+                    let output =
+                        response_to_output::<F>(*response, &dyn_ctx.shared_state.value_chain);
+                    Ok(Evaluation::Evaluated(output))
                 }
                 None => Err(MockError::CannotReturnValueMoreThanOnce {
                     fn_call: dyn_ctx.fn_call(),
@@ -52,15 +52,15 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
             },
             DynResponder::Borrow(inner) => {
                 let downcasted = inner.downcast::<F>()?;
-                match try_borrow_sig::<F>(&downcasted.borrowable) {
+                match try_borrow_output_from_response::<F>(&downcasted.borrowable) {
                     Ok(output) => Ok(Evaluation::Evaluated(output)),
                     Err(_) => todo!(),
                 }
             }
             DynResponder::Function(inner) => {
-                let output = (inner.downcast::<F>()?.func)(inputs);
-                let sig = into_sig::<F>(output, &shared_state.value_chain);
-                Ok(Evaluation::Evaluated(sig))
+                let response = (inner.downcast::<F>()?.func)(inputs);
+                let output = response_to_output::<F>(response, &shared_state.value_chain);
+                Ok(Evaluation::Evaluated(output))
             }
             DynResponder::Panic(msg) => Err(MockError::ExplicitPanic {
                 fn_call: dyn_ctx.fn_call(),
@@ -174,15 +174,15 @@ impl<'u, 's> DynCtx<'u, 's> {
     }
 }
 
-fn into_sig<'u, F: MockFn>(
-    value: <F::Output as Output>::Type,
+fn response_to_output<'u, F: MockFn>(
+    response: <F::Response as Respond>::Type,
     value_chain: &'u ValueChain,
-) -> <F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::from_output(value, value_chain)
+) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
+    <F::Output<'u> as Output<'u, F::Response>>::from_response(response, value_chain)
 }
 
-fn try_borrow_sig<'u, F: MockFn>(
-    value: &'u <F::Output as Output>::Type,
-) -> Result<<F::OutputSig<'u> as OutputSig<'u, F::Output>>::Sig, SignatureError> {
-    <F::OutputSig<'u> as OutputSig<'u, F::Output>>::try_borrow_output(value)
+fn try_borrow_output_from_response<'u, F: MockFn>(
+    response: &'u <F::Response as Respond>::Type,
+) -> Result<<F::Output<'u> as Output<'u, F::Response>>::Type, SignatureError> {
+    <F::Output<'u> as Output<'u, F::Response>>::try_borrow_response(response)
 }

@@ -3,8 +3,8 @@ use syn::visit_mut::VisitMut;
 pub struct OutputStructure<'t> {
     pub wrapping: OutputWrapping<'t>,
     pub ownership: OutputOwnership,
-    pub unsized_ty_static: Option<syn::Type>,
-    pub unsized_ty_sig: Option<syn::Type>,
+    pub response_ty: Option<syn::Type>,
+    pub output_ty: Option<syn::Type>,
 }
 
 pub enum OutputWrapping<'t> {
@@ -22,7 +22,7 @@ pub enum OutputOwnership {
 }
 
 impl OutputOwnership {
-    pub fn output_mediator(&self) -> &'static str {
+    pub fn response_typename(&self) -> &'static str {
         match self {
             Self::Owned => "Owned",
             Self::SelfReference => "Borrowed",
@@ -40,20 +40,20 @@ pub fn determine_output_structure<'t>(
 ) -> OutputStructure<'t> {
     match ty {
         syn::Type::Reference(type_reference) => {
-            let mut unsized_ty_static = *type_reference.elem.clone();
-            let mut unsized_ty_sig = unsized_ty_static.clone();
+            let mut response_ty = *type_reference.elem.clone();
+            let mut output_ty = response_ty.clone();
 
-            let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut unsized_ty_static);
+            let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut response_ty);
             let ownership = determine_reference_ownership(sig, type_reference);
 
-            rename_lifetimes_static(&mut unsized_ty_static, &borrow_info);
-            rename_lifetimes_sig(&mut unsized_ty_sig, &borrow_info, ownership);
+            rename_response_lifetimes(&mut response_ty, &borrow_info);
+            rename_output_lifetimes(&mut output_ty, &borrow_info, ownership);
 
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 ownership: determine_reference_ownership(sig, type_reference),
-                unsized_ty_static: Some(unsized_ty_static),
-                unsized_ty_sig: Some(unsized_ty_sig),
+                response_ty: Some(response_ty),
+                output_ty: Some(output_ty),
             }
         }
         syn::Type::Path(path)
@@ -73,20 +73,20 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
     sig: &'t syn::Signature,
     ty: &'t syn::Type,
 ) -> OutputStructure<'t> {
-    let mut unsized_ty_static = ty.clone();
-    let mut unsized_ty_sig = ty.clone();
+    let mut response_ty = ty.clone();
+    let mut output_ty = ty.clone();
 
-    let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut unsized_ty_static);
+    let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut response_ty);
     let ownership = determine_mixed_ownership(&borrow_info);
 
-    rename_lifetimes_static(&mut unsized_ty_static, &borrow_info);
-    rename_lifetimes_sig(&mut unsized_ty_sig, &borrow_info, ownership);
+    rename_response_lifetimes(&mut response_ty, &borrow_info);
+    rename_output_lifetimes(&mut output_ty, &borrow_info, ownership);
 
     OutputStructure {
         wrapping: OutputWrapping::None,
         ownership,
-        unsized_ty_static: Some(unsized_ty_static),
-        unsized_ty_sig: Some(unsized_ty_sig),
+        response_ty: Some(response_ty),
+        output_ty: Some(output_ty),
     }
 }
 
@@ -292,7 +292,7 @@ impl<'s> syn::visit_mut::VisitMut for ReturnTypeAnalyzer<'s> {
     }
 }
 
-fn rename_lifetimes_static(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
+fn rename_response_lifetimes(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
     if !borrow_info.has_nonstatic_lifetime {
         return;
     }
@@ -300,14 +300,18 @@ fn rename_lifetimes_static(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
     rename_lifetimes(ty, "'static", &|_| true);
 }
 
-fn rename_lifetimes_sig(ty: &mut syn::Type, borrow_info: &BorrowInfo, ownership: OutputOwnership) {
+fn rename_output_lifetimes(
+    ty: &mut syn::Type,
+    borrow_info: &BorrowInfo,
+    ownership: OutputOwnership,
+) {
     if !borrow_info.has_nonstatic_lifetime {
         return;
     }
 
     match ownership {
         OutputOwnership::Owned => {
-            rename_lifetimes_static(ty, borrow_info);
+            rename_response_lifetimes(ty, borrow_info);
         }
         _ => rename_lifetimes(ty, "'u", &|lifetime| match lifetime {
             Some(lifetime) => lifetime.ident != "static",

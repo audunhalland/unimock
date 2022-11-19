@@ -1,7 +1,7 @@
 use crate::call_pattern::*;
 use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{IntoOutputClone, IntoOutputOnce, Output, StaticRef};
+use crate::output::{IntoResponseClone, IntoResponseOnce, Respond, StaticRef};
 use crate::property::*;
 use crate::*;
 
@@ -149,7 +149,7 @@ pub struct DefineResponse<'p, F: MockFn, O: Ordering> {
 
 impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O>
 where
-    <F::Output as Output>::Type: Send + Sync,
+    <F::Response as Respond>::Type: Send + Sync,
 {
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
@@ -160,11 +160,11 @@ where
     /// To be able to return this value multiple times, quantify it explicitly.
     pub fn returns<T>(self, value: T) -> QuantifyReturnValue<'p, F, T, O>
     where
-        T: IntoOutputOnce<F::Output>,
+        T: IntoResponseOnce<F::Response>,
     {
         QuantifyReturnValue {
             builder: self.builder,
-            into_output: Some(value),
+            into_response: Some(value),
             mock_fn: self.mock_fn,
             ordering: self.ordering,
         }
@@ -186,7 +186,7 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns<V: IntoOutputClone<F::Output>>(mut self, value: V) -> Quantify<'p, F, O> {
+    pub fn returns<V: IntoResponseClone<F::Response>>(mut self, value: V) -> Quantify<'p, F, O> {
         self.builder
             .push_responder(value.into_clone_responder::<F>().0);
         self.quantify()
@@ -216,10 +216,10 @@ macro_rules! define_response_common_impl {
                 }
             }
 
-            /// Specify the output of the call pattern by calling `Default::default()`.
+            /// Specify the response of the call pattern by calling `Default::default()`.
             pub fn returns_default(mut self) -> Quantify<'p, F, O>
             where
-                <F::Output as Output>::Type: Default,
+                <F::Response as Respond>::Type: Default,
             {
                 self.builder.push_responder(
                     FunctionResponder::<F> {
@@ -230,22 +230,22 @@ macro_rules! define_response_common_impl {
                 self.quantify()
             }
 
-            /// Specify the output of the call pattern by invoking the given closure that can then compute it based on input parameters.
-            pub fn answers<A, R>(mut self, func: A) -> Quantify<'p, F, O>
+            /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
+            pub fn answers<C, R>(mut self, func: C) -> Quantify<'p, F, O>
             where
-                A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
-                R: IntoOutputOnce<F::Output>,
+                C: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
+                R: IntoResponseOnce<F::Response>,
             {
                 self.builder.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(move |inputs| func(inputs).into_output()),
+                        func: Box::new(move |inputs| func(inputs).into_response()),
                     }
                     .into_dyn_responder(),
                 );
                 self.quantify()
             }
 
-            /// Specify the output of the call pattern to be a static reference to leaked memory.
+            /// Specify the response of the call pattern to be a static reference to leaked memory.
             ///
             /// The value may be based on the value of input parameters.
             ///
@@ -253,10 +253,10 @@ macro_rules! define_response_common_impl {
             ///
             /// This method should only be used when computing a reference based
             /// on input parameters is necessary, which should not be a common use case.
-            pub fn answers_leaked_ref<A, R, T>(mut self, func: A) -> Quantify<'p, F, O>
+            pub fn answers_leaked_ref<C, R, T>(mut self, func: C) -> Quantify<'p, F, O>
             where
-                F: MockFn<Output = StaticRef<T>>,
-                A: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
+                F: MockFn<Response = StaticRef<T>>,
+                C: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
                 R: std::borrow::Borrow<T> + 'static,
                 T: 'static,
             {
@@ -305,21 +305,21 @@ define_response_common_impl!(DefineResponse);
 define_response_common_impl!(DefineMultipleResponses);
 
 /// Builder for defining how a call pattern with an explicit return value gets verified with regards to quantification/counting.
-pub struct QuantifyReturnValue<'p, F, I, O>
+pub struct QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    I: IntoOutputOnce<F::Output>,
+    T: IntoResponseOnce<F::Response>,
 {
     pub(crate) builder: BuilderWrapper<'p>,
-    into_output: Option<I>,
+    into_response: Option<T>,
     mock_fn: PhantomData<F>,
     ordering: O,
 }
 
-impl<'p, F, I, O> QuantifyReturnValue<'p, F, I, O>
+impl<'p, F, T, O> QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    I: IntoOutputOnce<F::Output>,
+    T: IntoResponseOnce<F::Response>,
     O: Copy,
 {
     /// Expect this call pattern to be called exactly once.
@@ -327,7 +327,7 @@ where
     /// This is the only quantifier that works together with return values that don't implement [Clone].
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
         self.builder.push_responder(
-            self.into_output
+            self.into_response
                 .take()
                 .unwrap()
                 .into_once_responder::<F>()
@@ -345,10 +345,10 @@ where
     /// Expect this call pattern to be called exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
     where
-        I: IntoOutputClone<F::Output>,
+        T: IntoResponseClone<F::Response>,
     {
         self.builder.push_responder(
-            self.into_output
+            self.into_response
                 .take()
                 .unwrap()
                 .into_clone_responder::<F>()
@@ -366,10 +366,10 @@ where
     /// Expect this call pattern to be called at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
-        I: IntoOutputClone<F::Output>,
+        T: IntoResponseClone<F::Response>,
     {
         self.builder.push_responder(
-            self.into_output
+            self.into_response
                 .take()
                 .unwrap()
                 .into_clone_responder::<F>()
@@ -385,10 +385,10 @@ where
     }
 }
 
-impl<'p, F, I, O> ClauseSealed for QuantifyReturnValue<'p, F, I, O>
+impl<'p, F, T, O> ClauseSealed for QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    I: IntoOutputOnce<F::Output>,
+    T: IntoResponseOnce<F::Response>,
     O: Copy + Ordering,
 {
     fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
@@ -401,15 +401,15 @@ where
 ///
 /// In that case, it is only able to return once, because no [Clone] bound has been
 /// part of any construction step.
-impl<'p, F, I, O> Drop for QuantifyReturnValue<'p, F, I, O>
+impl<'p, F, T, O> Drop for QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    I: IntoOutputOnce<F::Output>,
+    T: IntoResponseOnce<F::Response>,
 {
     fn drop(&mut self) {
-        if let Some(into_output) = self.into_output.take() {
+        if let Some(into_response) = self.into_response.take() {
             self.builder
-                .push_responder(into_output.into_once_responder::<F>().0);
+                .push_responder(into_response.into_once_responder::<F>().0);
         }
     }
 }

@@ -1,41 +1,44 @@
 use crate::{call_pattern::DynResponder, value_chain::ValueChain, MockFn, Responder};
 use std::borrow::Borrow;
 
-/// Trait that describes how an output value is temporarily stored by Unimock.
-pub trait Output {
-    /// The type of the output temporarily stored inside Unimock.
+/// Trait for responding to function calls.
+pub trait Respond {
+    /// The type of the response, as stored temporarily inside Unimock.
     type Type: 'static;
 }
 
-/// Trait for values that can be used as responses at least once.
+/// Trait for values that can be converted into responses.
 ///
 /// This can be implemented by types that do not implement `Clone`.
-pub trait IntoOutputOnce<O: Output> {
+pub trait IntoResponseOnce<R: Respond> {
     // Convert this type into the output type.
     #[doc(hidden)]
-    fn into_output(self) -> <O as Output>::Type;
+    fn into_response(self) -> <R as Respond>::Type;
 
     // Convert this type directly into a responder that can respond (at least) once.
     #[doc(hidden)]
-    fn into_once_responder<F: MockFn<Output = O>>(self) -> Responder;
+    fn into_once_responder<F: MockFn<Response = R>>(self) -> Responder;
 }
 
 /// Trait for `Clone` values which can be converted into a reusable multi-value responder.
-pub trait IntoOutputClone<O: Output>: IntoOutputOnce<O> {
+pub trait IntoResponseClone<R: Respond>: IntoResponseOnce<R> {
     #[doc(hidden)]
-    fn into_clone_responder<F: MockFn<Output = O>>(self) -> Responder;
+    fn into_clone_responder<F: MockFn<Response = R>>(self) -> Responder;
 }
 
-/// Trait that describes the output signature of a mocked function.
-pub trait OutputSig<'u, O: Output> {
+/// Trait that describes the output of a mocked function, and how responses are converted into that type.
+///
+/// The trait uses the 'u lifetime, which is the lifetime of unimock itself.
+/// This way it's possible to borrow values stored inside the instance.
+pub trait Output<'u, R: Respond> {
     /// The type of the output compatible with the function signature.
-    type Sig;
+    type Type;
 
     #[doc(hidden)]
-    fn from_output(value: O::Type, value_chain: &'u ValueChain) -> Self::Sig;
+    fn from_response(value: R::Type, value_chain: &'u ValueChain) -> Self::Type;
 
     #[doc(hidden)]
-    fn try_borrow_output(value: &'u O::Type) -> Result<Self::Sig, SignatureError>;
+    fn try_borrow_response(value: &'u R::Type) -> Result<Self::Type, SignatureError>;
 }
 
 #[doc(hidden)]
@@ -47,14 +50,14 @@ pub enum SignatureError {
 #[doc(hidden)]
 pub struct Owned<T>(std::marker::PhantomData<T>);
 
-// This type describes a function output that is a reference borrowed from `Self`.
+// This type describes a function response that is a reference borrowed from `Self`.
 #[doc(hidden)]
 pub struct Borrowed<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 
 #[doc(hidden)]
 pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
 
-// This type describes a function output that is a mix of owned and borrowed data.
+// This type describes a function response that is a mix of owned and borrowed data.
 //
 // The typical example is `Option<&T>`.
 #[doc(hidden)]
@@ -65,42 +68,44 @@ type BoxBorrow<T> = Box<dyn Borrow<T> + Send + Sync>;
 mod owned {
     use super::*;
 
-    impl<T: 'static> Output for Owned<T> {
+    impl<T: 'static> Respond for Owned<T> {
         type Type = T;
     }
 
-    impl<I, T: Send + Sync + 'static> IntoOutputOnce<Owned<T>> for I
+    impl<I, T: Send + Sync + 'static> IntoResponseOnce<Owned<T>> for I
     where
         I: Into<T>,
     {
-        fn into_output(self) -> <Owned<T> as Output>::Type {
+        fn into_response(self) -> <Owned<T> as Respond>::Type {
             self.into()
         }
 
-        fn into_once_responder<F: MockFn<Output = Owned<T>>>(self) -> Responder {
-            let output = <I as IntoOutputOnce<Owned<T>>>::into_output(self);
+        fn into_once_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
+            let output = <I as IntoResponseOnce<Owned<T>>>::into_response(self);
             Responder(DynResponder::new_cell::<F>(output))
         }
     }
 
-    impl<I, T: Clone + Send + Sync + 'static> IntoOutputClone<Owned<T>> for I
+    impl<I, T: Clone + Send + Sync + 'static> IntoResponseClone<Owned<T>> for I
     where
         I: Into<T>,
     {
-        fn into_clone_responder<F: MockFn<Output = Owned<T>>>(self) -> Responder {
-            let output = <I as IntoOutputOnce<Owned<T>>>::into_output(self);
+        fn into_clone_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
+            let output = <I as IntoResponseOnce<Owned<T>>>::into_response(self);
             Responder(DynResponder::new_clone_cell::<F>(output))
         }
     }
 
-    impl<'u, T: 'static> OutputSig<'u, Self> for Owned<T> {
-        type Sig = T;
+    impl<'u, T: 'static> Output<'u, Self> for Owned<T> {
+        type Type = T;
 
-        fn from_output(value: <Self as Output>::Type, _: &'u ValueChain) -> Self::Sig {
+        fn from_response(value: <Self as Respond>::Type, _: &'u ValueChain) -> Self::Type {
             value
         }
 
-        fn try_borrow_output(_: &'u <Self as Output>::Type) -> Result<Self::Sig, SignatureError> {
+        fn try_borrow_response(
+            _: &'u <Self as Respond>::Type,
+        ) -> Result<Self::Type, SignatureError> {
             Err(SignatureError::NotOwned)
         }
     }
@@ -109,50 +114,50 @@ mod owned {
 mod borrowed {
     use super::*;
 
-    impl<T: ?Sized + 'static> Output for Borrowed<T> {
+    impl<T: ?Sized + 'static> Respond for Borrowed<T> {
         type Type = Box<dyn Borrow<T> + Send + Sync>;
     }
 
-    impl<I, T> IntoOutputOnce<Borrowed<T>> for I
+    impl<T0, T> IntoResponseOnce<Borrowed<T>> for T0
     where
-        I: Borrow<T> + Send + Sync + 'static,
+        T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_output(self) -> <Borrowed<T> as Output>::Type {
+        fn into_response(self) -> <Borrowed<T> as Respond>::Type {
             Box::new(self)
         }
 
-        fn into_once_responder<F: MockFn<Output = Borrowed<T>>>(self) -> Responder {
-            let output = <I as IntoOutputOnce<Borrowed<T>>>::into_output(self);
+        fn into_once_responder<F: MockFn<Response = Borrowed<T>>>(self) -> Responder {
+            let output = <T0 as IntoResponseOnce<Borrowed<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(output))
         }
     }
 
-    impl<I, T> IntoOutputClone<Borrowed<T>> for I
+    impl<T0, T> IntoResponseClone<Borrowed<T>> for T0
     where
-        I: Borrow<T> + Send + Sync + 'static,
+        T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_clone_responder<F: MockFn<Output = Borrowed<T>>>(self) -> Responder {
-            <I as IntoOutputOnce<Borrowed<T>>>::into_once_responder::<F>(self)
+        fn into_clone_responder<F: MockFn<Response = Borrowed<T>>>(self) -> Responder {
+            <T0 as IntoResponseOnce<Borrowed<T>>>::into_once_responder::<F>(self)
         }
     }
 
-    impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for Borrowed<T> {
-        type Sig = &'u T;
+    impl<'u, T: ?Sized + 'static> Output<'u, Self> for Borrowed<T> {
+        type Type = &'u T;
 
-        fn from_output(
-            value: <Borrowed<T> as Output>::Type,
+        fn from_response(
+            value: <Borrowed<T> as Respond>::Type,
             value_chain: &'u ValueChain,
-        ) -> Self::Sig {
+        ) -> Self::Type {
             let value_ref = value_chain.add(value);
 
             value_ref.as_ref().borrow()
         }
 
-        fn try_borrow_output(
-            value: &'u <Borrowed<T> as Output>::Type,
-        ) -> Result<Self::Sig, SignatureError> {
+        fn try_borrow_response(
+            value: &'u <Borrowed<T> as Respond>::Type,
+        ) -> Result<Self::Type, SignatureError> {
             Ok(value.as_ref().borrow())
         }
     }
@@ -161,37 +166,37 @@ mod borrowed {
 mod static_ref {
     use super::*;
 
-    impl<T: ?Sized + 'static> Output for StaticRef<T> {
+    impl<T: ?Sized + 'static> Respond for StaticRef<T> {
         type Type = &'static T;
     }
 
-    impl<T: ?Sized + Send + Sync + 'static> IntoOutputOnce<StaticRef<T>> for &'static T {
-        fn into_output(self) -> <StaticRef<T> as Output>::Type {
+    impl<T: ?Sized + Send + Sync + 'static> IntoResponseOnce<StaticRef<T>> for &'static T {
+        fn into_response(self) -> <StaticRef<T> as Respond>::Type {
             self
         }
 
-        fn into_once_responder<F: MockFn<Output = StaticRef<T>>>(self) -> Responder {
-            let output = <Self as IntoOutputOnce<StaticRef<T>>>::into_output(self);
+        fn into_once_responder<F: MockFn<Response = StaticRef<T>>>(self) -> Responder {
+            let output = <Self as IntoResponseOnce<StaticRef<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(output))
         }
     }
 
-    impl<T: ?Sized + Send + Sync + 'static> IntoOutputClone<StaticRef<T>> for &'static T {
-        fn into_clone_responder<F: MockFn<Output = StaticRef<T>>>(self) -> Responder {
-            <Self as IntoOutputOnce<StaticRef<T>>>::into_once_responder::<F>(self)
+    impl<T: ?Sized + Send + Sync + 'static> IntoResponseClone<StaticRef<T>> for &'static T {
+        fn into_clone_responder<F: MockFn<Response = StaticRef<T>>>(self) -> Responder {
+            <Self as IntoResponseOnce<StaticRef<T>>>::into_once_responder::<F>(self)
         }
     }
 
-    impl<'u, T: ?Sized + 'static> OutputSig<'u, Self> for StaticRef<T> {
-        type Sig = &'static T;
+    impl<'u, T: ?Sized + 'static> Output<'u, Self> for StaticRef<T> {
+        type Type = &'static T;
 
-        fn from_output(value: <Self as Output>::Type, _: &ValueChain) -> Self::Sig {
+        fn from_response(value: <Self as Respond>::Type, _: &ValueChain) -> Self::Type {
             value
         }
 
-        fn try_borrow_output(
-            value: &'u <Self as Output>::Type,
-        ) -> Result<Self::Sig, SignatureError> {
+        fn try_borrow_response(
+            value: &'u <Self as Respond>::Type,
+        ) -> Result<Self::Type, SignatureError> {
             Ok(*value)
         }
     }
@@ -202,60 +207,62 @@ mod mixed_option {
 
     type Mix<T> = Mixed<Option<&'static T>>;
 
-    impl<T: ?Sized + 'static> Output for Mix<T> {
+    impl<T: ?Sized + 'static> Respond for Mix<T> {
         type Type = Option<BoxBorrow<T>>;
     }
 
-    impl<T0, T> IntoOutputOnce<Mix<T>> for Option<T0>
+    impl<T0, T> IntoResponseOnce<Mix<T>> for Option<T0>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_output(self) -> <Mix<T> as Output>::Type {
+        fn into_response(self) -> <Mix<T> as Respond>::Type {
             match self {
                 Some(value) => Some(Box::new(value)),
                 None => None,
             }
         }
 
-        fn into_once_responder<F: MockFn<Output = Mix<T>>>(self) -> Responder {
-            let output = <Self as IntoOutputOnce<Mix<T>>>::into_output(self);
+        fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
+            let output = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
             Responder(DynResponder::new_cell::<F>(output))
         }
     }
 
-    impl<T0, T> IntoOutputClone<Mix<T>> for Option<T0>
+    impl<T0, T> IntoResponseClone<Mix<T>> for Option<T0>
     where
         T0: Borrow<T> + Clone + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_clone_responder<F: MockFn<Output = Mix<T>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
             Responder(DynResponder::new_clone_factory_cell::<F>(move || {
-                Some(<Self as IntoOutputOnce<Mix<T>>>::into_output(self.clone()))
+                Some(<Self as IntoResponseOnce<Mix<T>>>::into_response(
+                    self.clone(),
+                ))
             }))
         }
     }
 
-    impl<'u, T> OutputSig<'u, Mix<T>> for Mixed<Option<&'u T>>
+    impl<'u, T> Output<'u, Mix<T>> for Mixed<Option<&'u T>>
     where
         T: ?Sized + 'u,
     {
-        type Sig = Option<&'u T>;
+        type Type = Option<&'u T>;
 
-        fn from_output(option: <Mix<T> as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
+        fn from_response(
+            option: <Mix<T> as Respond>::Type,
+            value_chain: &'u ValueChain,
+        ) -> Self::Type {
             match option {
                 Some(value) => Some(value_chain.add(value).as_ref().borrow()),
                 None => None,
             }
         }
 
-        fn try_borrow_output(
-            option: &'u <Mix<T> as Output>::Type,
-        ) -> Result<Self::Sig, SignatureError> {
-            Ok(match option {
-                Some(value) => Some(value.as_ref().borrow()),
-                None => None,
-            })
+        fn try_borrow_response(
+            _: &'u <Mix<T> as Respond>::Type,
+        ) -> Result<Self::Type, SignatureError> {
+            Err(SignatureError::NotOwned)
         }
     }
 }
@@ -265,67 +272,64 @@ mod mixed_result_borrowed_t {
 
     type Mix<T, E> = Mixed<Result<&'static T, E>>;
 
-    impl<T: ?Sized + 'static, E: 'static> Output for Mix<T, E> {
+    impl<T: ?Sized + 'static, E: 'static> Respond for Mix<T, E> {
         type Type = Result<BoxBorrow<T>, E>;
     }
 
-    impl<T0, T, E> IntoOutputOnce<Mix<T, E>> for Result<T0, E>
+    impl<T0, T, E> IntoResponseOnce<Mix<T, E>> for Result<T0, E>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
         E: Send + Sync + 'static,
     {
-        fn into_output(self) -> <Mix<T, E> as Output>::Type {
+        fn into_response(self) -> <Mix<T, E> as Respond>::Type {
             match self {
                 Ok(value) => Ok(Box::new(value)),
                 Err(e) => Err(e),
             }
         }
 
-        fn into_once_responder<F: MockFn<Output = Mix<T, E>>>(self) -> Responder {
-            let output = <Self as IntoOutputOnce<Mix<T, E>>>::into_output(self);
+        fn into_once_responder<F: MockFn<Response = Mix<T, E>>>(self) -> Responder {
+            let output = <Self as IntoResponseOnce<Mix<T, E>>>::into_response(self);
             Responder(DynResponder::new_cell::<F>(output))
         }
     }
 
-    impl<T0, T, E> IntoOutputClone<Mix<T, E>> for Result<T0, E>
+    impl<T0, T, E> IntoResponseClone<Mix<T, E>> for Result<T0, E>
     where
         T0: Borrow<T> + Clone + Send + Sync + 'static,
         T: ?Sized + 'static,
         E: Clone + Send + Sync + 'static,
     {
-        fn into_clone_responder<F: MockFn<Output = Mix<T, E>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = Mix<T, E>>>(self) -> Responder {
             Responder(DynResponder::new_clone_factory_cell::<F>(move || {
-                Some(<Self as IntoOutputOnce<Mix<T, E>>>::into_output(
+                Some(<Self as IntoResponseOnce<Mix<T, E>>>::into_response(
                     self.clone(),
                 ))
             }))
         }
     }
 
-    impl<'u, T, E: 'static> OutputSig<'u, Mix<T, E>> for Mixed<Result<&'u T, E>>
+    impl<'u, T, E: 'static> Output<'u, Mix<T, E>> for Mixed<Result<&'u T, E>>
     where
         T: ?Sized + 'u,
     {
-        type Sig = Result<&'u T, E>;
+        type Type = Result<&'u T, E>;
 
-        fn from_output(
-            result: <Mix<T, E> as Output>::Type,
+        fn from_response(
+            result: <Mix<T, E> as Respond>::Type,
             value_chain: &'u ValueChain,
-        ) -> Self::Sig {
+        ) -> Self::Type {
             match result {
                 Ok(value) => Ok(value_chain.add(value).as_ref().borrow()),
                 Err(e) => Err(e),
             }
         }
 
-        fn try_borrow_output(
-            result: &'u <Mix<T, E> as Output>::Type,
-        ) -> Result<Self::Sig, SignatureError> {
-            match result {
-                Ok(value) => Ok(Ok(value.as_ref().borrow())),
-                Err(_) => Err(SignatureError::NotOwned),
-            }
+        fn try_borrow_response(
+            _: &'u <Mix<T, E> as Respond>::Type,
+        ) -> Result<Self::Type, SignatureError> {
+            Err(SignatureError::NotOwned)
         }
     }
 }

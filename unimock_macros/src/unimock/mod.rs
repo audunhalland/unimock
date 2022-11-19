@@ -159,16 +159,16 @@ fn def_mock_fn(
         method.mockfn_doc_attrs(trait_info.ident())
     };
 
-    let output_static = match &method.output_structure.unsized_ty_static {
+    let response_ty = match &method.output_structure.response_ty {
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
-    let output_sig = match &method.output_structure.unsized_ty_sig {
+    let output_ty = match &method.output_structure.output_ty {
         Some(ty) => quote! { #ty },
         None => quote! { () },
     };
-    let output_mediator = syn::Ident::new(
-        method.output_structure.ownership.output_mediator(),
+    let response_typename = syn::Ident::new(
+        method.output_structure.ownership.response_typename(),
         proc_macro2::Span::call_site(),
     );
 
@@ -185,8 +185,8 @@ fn def_mock_fn(
     let impl_blocks = quote! {
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
-            type Output = #prefix::output::#output_mediator<#output_static>;
-            type OutputSig<'u> = #prefix::output::#output_mediator<#output_sig>;
+            type Response = #prefix::output::#response_typename<#response_ty>;
+            type Output<'u> = #prefix::output::#response_typename<#output_ty>;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -212,7 +212,7 @@ fn def_mock_fn(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = (#(#inputs_tuple),*),
-                        Output = #prefix::output::#output_mediator<#output_static>,
+                        Response = #prefix::output::#response_typename<#response_ty>,
                     >
                         #where_clause
                     {
