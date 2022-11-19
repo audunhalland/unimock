@@ -1,6 +1,8 @@
 use crate::as_owned::AsOwned;
-use crate::call_pattern::{BorrowResponder, OwnedResponder, StoredValueSlot, StoredValueSlotOnce};
-use crate::output::{Borrowed, Mixed, Output, Owned, StaticRef};
+use crate::call_pattern::{
+    BorrowResponder, DynResponder, OwnedResponder, StoredValueSlot, StoredValueSlotOnce,
+};
+use crate::output::{Borrowed, Complex, Mixed, Output, Owned, StaticRef};
 use crate::{MockFn, Responder};
 
 /// Outputs that can respond at least once implement this trait.
@@ -17,20 +19,13 @@ pub trait Respond<F: MockFn>: RespondOnce<F> {
     fn responder(output: <F::Output as Output>::Type) -> Responder;
 }
 
-trait MakeMultiResponder<F: MockFn> {}
-
 impl<F, T> RespondOnce<F> for Owned<T>
 where
     F: MockFn<Output = Self>,
     T: Send + Sync + 'static,
 {
     fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
-        Responder(
-            OwnedResponder::<F> {
-                stored_value: Box::new(StoredValueSlotOnce::new(output)),
-            }
-            .into_dyn_responder(),
-        )
+        Responder(DynResponder::new_owned::<F>(output))
     }
 }
 
@@ -115,6 +110,40 @@ where
         Responder(
             OwnedResponder::<F> {
                 stored_value: Box::new(StoredValueSlot(output)),
+            }
+            .into_dyn_responder(),
+        )
+    }
+}
+
+impl<F, T> RespondOnce<F> for Complex<T>
+where
+    Self: Output,
+    <Self as Output>::Type: Send + Sync,
+    F: MockFn<Output = Self>,
+    T: 'static,
+{
+    fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
+        Responder(
+            OwnedResponder::<F> {
+                stored_value: Box::new(StoredValueSlotOnce::new(output)),
+            }
+            .into_dyn_responder(),
+        )
+    }
+}
+
+impl<F, T> Respond<F> for Complex<T>
+where
+    Self: Output,
+    <Self as Output>::Type: Clone + Send + Sync,
+    F: MockFn<Output = Self>,
+    T: 'static,
+{
+    fn responder(output: <<F as MockFn>::Output as Output>::Type) -> Responder {
+        Responder(
+            OwnedResponder::<F> {
+                stored_value: Box::new(StoredValueSlotOnce::new(output)),
             }
             .into_dyn_responder(),
         )

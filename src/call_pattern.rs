@@ -96,6 +96,47 @@ pub(crate) enum DynResponder {
     Unmock,
 }
 
+impl DynResponder {
+    pub fn new_owned<F: MockFn>(output: <F::Output as Output>::Type) -> Self
+    where
+        <F::Output as Output>::Type: Send + Sync + 'static,
+    {
+        OwnedResponder::<F> {
+            stored_value: Box::new(StoredValueSlotOnce::new(output)),
+        }
+        .into_dyn_responder()
+    }
+
+    pub fn new_owned_clonable<F: MockFn>(output: <F::Output as Output>::Type) -> Self
+    where
+        <F::Output as Output>::Type: Clone + Send + Sync + 'static,
+    {
+        OwnedResponder::<F> {
+            stored_value: Box::new(StoredValueSlot(output)),
+        }
+        .into_dyn_responder()
+    }
+
+    pub fn new_clone_factory<F: MockFn>(
+        clone_factory: impl Fn() -> Option<<F::Output as Output>::Type> + Send + Sync + 'static,
+    ) -> Self
+    where
+        <F::Output as Output>::Type: Send + Sync + 'static,
+    {
+        OwnedResponder::<F> {
+            stored_value: Box::new(CloneFactory::new(clone_factory)),
+        }
+        .into_dyn_responder()
+    }
+
+    pub fn new_borrow<F: MockFn>(output: <F::Output as Output>::Type) -> Self
+    where
+        <F::Output as Output>::Type: Send + Sync,
+    {
+        BorrowResponder::<F> { borrowable: output }.into_dyn_responder()
+    }
+}
+
 pub(crate) struct DynOwnedResponder(AnyBox);
 pub(crate) struct DynBorrowResponder(AnyBox);
 pub(crate) struct DynClosureResponder(AnyBox);
@@ -198,6 +239,44 @@ impl<T: Send + Sync + 'static> CloneOrTakeOrBorrow<T> for StoredValueSlotOnce<T>
         {
             let mut lock = self.initial_value.lock().unwrap();
             if let Some(value) = lock.take() {
+                if self.borrowed_value.fill(value).is_err() {
+                    panic!("Tried to set borrowed value twice");
+                }
+            }
+        }
+
+        self.borrowed_value
+            .borrow()
+            .expect("Tried to borrow a value that has already been taken")
+    }
+}
+
+pub(crate) struct CloneFactory<T> {
+    clone_factory: Box<dyn Fn() -> Option<T> + Send + Sync + 'static>,
+    borrowed_value: lazycell::AtomicLazyCell<T>,
+}
+
+impl<T> CloneFactory<T> {
+    pub fn new(clone_factory: impl Fn() -> Option<T> + Send + Sync + 'static) -> Self {
+        Self {
+            clone_factory: Box::new(clone_factory),
+            borrowed_value: lazycell::AtomicLazyCell::new(),
+        }
+    }
+}
+
+impl<T: Send + Sync + 'static> CloneOrTakeOrBorrow<T> for CloneFactory<T> {
+    fn box_take_or_clone(&self) -> Option<Box<T>> {
+        (*self.clone_factory)().map(|value| Box::new(value))
+    }
+
+    fn borrow_stored(&self) -> &T {
+        if let Some(value) = self.borrowed_value.borrow() {
+            return value;
+        }
+
+        {
+            if let Some(value) = (*self.clone_factory)() {
                 if self.borrowed_value.fill(value).is_err() {
                     panic!("Tried to set borrowed value twice");
                 }
