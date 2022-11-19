@@ -230,7 +230,7 @@ mod mixed_option {
         T: ?Sized + 'static,
     {
         fn into_clone_responder<F: MockFn<Output = Mix<T>>>(self) -> Responder {
-            Responder(DynResponder::new_clone_factory::<F>(move || {
+            Responder(DynResponder::new_clone_factory_cell::<F>(move || {
                 Some(<Self as IntoOutputOnce<Mix<T>>>::into_output(self.clone()))
             }))
         }
@@ -295,7 +295,7 @@ mod mixed_result_borrowed_t {
         E: Clone + Send + Sync + 'static,
     {
         fn into_clone_responder<F: MockFn<Output = Mix<T, E>>>(self) -> Responder {
-            Responder(DynResponder::new_clone_factory::<F>(move || {
+            Responder(DynResponder::new_clone_factory_cell::<F>(move || {
                 Some(<Self as IntoOutputOnce<Mix<T, E>>>::into_output(
                     self.clone(),
                 ))

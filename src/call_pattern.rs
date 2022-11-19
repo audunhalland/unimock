@@ -1,10 +1,11 @@
-use crate::cell::{Cell, CloneCell, FactoryCell, LazyBorrowCell};
+use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
 use crate::error::{MockError, MockResult};
 use crate::output::Output;
 use crate::*;
 
 use std::any::Any;
+use std::sync::Mutex;
 
 #[derive(Clone, Copy)]
 pub(crate) struct PatIndex(pub usize);
@@ -101,8 +102,12 @@ impl DynResponder {
     where
         <F::Output as Output>::Type: Send + Sync + 'static,
     {
+        let output = Mutex::new(Some(output));
         CellResponder::<F> {
-            cell: Box::new(LazyBorrowCell::new(output)),
+            cell: Box::new(FactoryCell::new(move || {
+                let mut lock = output.lock().unwrap();
+                lock.take()
+            })),
         }
         .into_dyn_responder()
     }
@@ -117,14 +122,14 @@ impl DynResponder {
         .into_dyn_responder()
     }
 
-    pub fn new_clone_factory<F: MockFn>(
-        clone_factory: impl Fn() -> Option<<F::Output as Output>::Type> + Send + Sync + 'static,
+    pub fn new_clone_factory_cell<F: MockFn>(
+        clone_fn: impl Fn() -> Option<<F::Output as Output>::Type> + Send + Sync + 'static,
     ) -> Self
     where
         <F::Output as Output>::Type: Send + Sync + 'static,
     {
         CellResponder::<F> {
-            cell: Box::new(FactoryCell::new(clone_factory)),
+            cell: Box::new(FactoryCell::new(clone_fn)),
         }
         .into_dyn_responder()
     }
