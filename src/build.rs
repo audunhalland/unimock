@@ -222,7 +222,7 @@ macro_rules! define_response_common_impl {
                 <F::Output as Output>::Type: Default,
             {
                 self.builder.push_responder(
-                    ClosureResponder::<F> {
+                    FunctionResponder::<F> {
                         func: Box::new(|_| Default::default()),
                     }
                     .into_dyn_responder(),
@@ -237,7 +237,7 @@ macro_rules! define_response_common_impl {
                 R: IntoOutputOnce<F::Output>,
             {
                 self.builder.push_responder(
-                    ClosureResponder::<F> {
+                    FunctionResponder::<F> {
                         func: Box::new(move |inputs| func(inputs).into_output()),
                     }
                     .into_dyn_responder(),
@@ -261,7 +261,7 @@ macro_rules! define_response_common_impl {
                 T: 'static,
             {
                 self.builder.push_responder(
-                    ClosureResponder::<F> {
+                    FunctionResponder::<F> {
                         func: Box::new(move |inputs| {
                             let value = func(inputs);
                             let leaked_ref = Box::leak(Box::new(value));

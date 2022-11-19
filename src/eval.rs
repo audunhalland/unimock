@@ -40,18 +40,16 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
 
     match dyn_ctx.eval_dyn(&|pattern| pattern.match_inputs::<F>(&inputs))? {
         EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
-            DynResponder::Owned(inner) => {
-                match inner.downcast::<F>()?.stored_value.box_take_or_clone() {
-                    Some(value) => {
-                        let sig = into_sig::<F>(*value, &dyn_ctx.shared_state.value_chain);
-                        Ok(Evaluation::Evaluated(sig))
-                    }
-                    None => Err(MockError::CannotReturnValueMoreThanOnce {
-                        fn_call: dyn_ctx.fn_call(),
-                        pattern: eval_rsp.debug_pattern(),
-                    }),
+            DynResponder::Cell(inner) => match inner.downcast::<F>()?.cell.try_take() {
+                Some(value) => {
+                    let sig = into_sig::<F>(*value, &dyn_ctx.shared_state.value_chain);
+                    Ok(Evaluation::Evaluated(sig))
                 }
-            }
+                None => Err(MockError::CannotReturnValueMoreThanOnce {
+                    fn_call: dyn_ctx.fn_call(),
+                    pattern: eval_rsp.debug_pattern(),
+                }),
+            },
             DynResponder::Borrow(inner) => {
                 let downcasted = inner.downcast::<F>()?;
                 match try_borrow_sig::<F>(&downcasted.borrowable) {
@@ -59,7 +57,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     Err(_) => todo!(),
                 }
             }
-            DynResponder::Closure(inner) => {
+            DynResponder::Function(inner) => {
                 let output = (inner.downcast::<F>()?.func)(inputs);
                 let sig = into_sig::<F>(output, &shared_state.value_chain);
                 Ok(Evaluation::Evaluated(sig))

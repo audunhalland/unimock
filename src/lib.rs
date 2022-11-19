@@ -355,6 +355,7 @@ pub mod value_chain;
 
 mod assemble;
 mod call_pattern;
+mod cell;
 mod clause;
 mod counter;
 mod debug;

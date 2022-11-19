@@ -79,7 +79,7 @@ mod owned {
 
         fn into_once_responder<F: MockFn<Output = Owned<T>>>(self) -> Responder {
             let output = <I as IntoOutputOnce<Owned<T>>>::into_output(self);
-            Responder(DynResponder::new_owned::<F>(output))
+            Responder(DynResponder::new_cell::<F>(output))
         }
     }
 
@@ -89,7 +89,7 @@ mod owned {
     {
         fn into_clone_responder<F: MockFn<Output = Owned<T>>>(self) -> Responder {
             let output = <I as IntoOutputOnce<Owned<T>>>::into_output(self);
-            Responder(DynResponder::new_owned_clonable::<F>(output))
+            Responder(DynResponder::new_clone_cell::<F>(output))
         }
     }
 
@@ -220,7 +220,7 @@ mod mixed_option {
 
         fn into_once_responder<F: MockFn<Output = Mix<T>>>(self) -> Responder {
             let output = <Self as IntoOutputOnce<Mix<T>>>::into_output(self);
-            Responder(DynResponder::new_owned::<F>(output))
+            Responder(DynResponder::new_cell::<F>(output))
         }
     }
 
@@ -284,7 +284,7 @@ mod mixed_result_borrowed_t {
 
         fn into_once_responder<F: MockFn<Output = Mix<T, E>>>(self) -> Responder {
             let output = <Self as IntoOutputOnce<Mix<T, E>>>::into_output(self);
-            Responder(DynResponder::new_owned::<F>(output))
+            Responder(DynResponder::new_cell::<F>(output))
         }
     }
 
