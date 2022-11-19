@@ -184,36 +184,6 @@ mod referenced {
     }
 }
 
-mod mixed_output {
-    use super::*;
-
-    #[unimock(api=MockInOption)]
-    trait InOption {
-        fn foo(&self, a: &str) -> Option<&str>;
-    }
-
-    #[unimock]
-    trait InResult {
-        fn foo(&self, a: &str) -> Result<&[u8], ()>;
-    }
-
-    // Note: This should only be mockable with static lifetimes
-    #[unimock]
-    trait InResultWithComplexLifetimes {
-        fn foo<'s, 'i>(&'s self, a: &'i str) -> Result<&'s str, &'i str>;
-    }
-
-    #[test]
-    fn in_option() {
-        let u = Unimock::new(
-            MockInOption::foo
-                .each_call(matching!(_))
-                .returns(Some("foobar".to_string())),
-        );
-        assert_eq!(Some("foobar"), <Unimock as InOption>::foo(&u, ""));
-    }
-}
-
 mod no_clone_return {
     use unimock::*;
 
@@ -427,7 +397,7 @@ mod custom_api_module {
 
     #[test]
     #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:435 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:405 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
         Unimock::new(
@@ -654,7 +624,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:630 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:600 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
