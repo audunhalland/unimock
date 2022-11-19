@@ -342,8 +342,6 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-/// Trait used in complex output borrowing scenarios
-pub mod as_owned;
 /// Types used for building and defining mock behaviour.
 pub mod build;
 /// APIs used by macros, not intended to be used directly.
@@ -352,8 +350,6 @@ pub mod macro_api;
 pub mod output;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
-/// Traits for creating responders to mock calls
-mod respond;
 #[doc(hidden)]
 pub mod value_chain;
 
@@ -372,7 +368,6 @@ use std::sync::Arc;
 
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
-use call_pattern::DynResponder;
 use macro_api::Matching;
 
 ///
@@ -885,4 +880,4 @@ impl DynMockFn {
 
 // Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods
 #[doc(hidden)]
-pub struct Responder(DynResponder);
+pub struct Responder(call_pattern::DynResponder);

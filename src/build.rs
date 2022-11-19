@@ -1,9 +1,8 @@
 use crate::call_pattern::*;
 use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{IntoOutput, IntoOutputClone2, IntoOutputOnce, Output, StaticRef};
+use crate::output::{IntoOutputClone, IntoOutputOnce, Output, StaticRef};
 use crate::property::*;
-use crate::respond::{Respond, RespondOnce};
 use crate::*;
 
 use std::marker::PhantomData;
@@ -187,8 +186,9 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns<V: IntoOutputClone2<F::Output>>(mut self, value: V) -> Quantify<'p, F, O> {
-        self.builder.push_responder(value.into_responder::<F>().0);
+    pub fn returns<V: IntoOutputClone<F::Output>>(mut self, value: V) -> Quantify<'p, F, O> {
+        self.builder
+            .push_responder(value.into_clone_responder::<F>().0);
         self.quantify()
     }
 }
@@ -238,7 +238,7 @@ macro_rules! define_response_common_impl {
             {
                 self.builder.push_responder(
                     ClosureResponder::<F> {
-                        func: Box::new(move |inputs| func(inputs).into_output2()),
+                        func: Box::new(move |inputs| func(inputs).into_output()),
                     }
                     .into_dyn_responder(),
                 );
@@ -309,7 +309,6 @@ pub struct QuantifyReturnValue<'p, F, I, O>
 where
     F: MockFn,
     I: IntoOutputOnce<F::Output>,
-    // F::Output: RespondOnce<F>,
 {
     pub(crate) builder: BuilderWrapper<'p>,
     into_output: Option<I>,
@@ -346,10 +345,15 @@ where
     /// Expect this call pattern to be called exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
     where
-        I: IntoOutputClone2<F::Output>,
+        I: IntoOutputClone<F::Output>,
     {
-        self.builder
-            .push_responder(self.into_output.take().unwrap().into_responder::<F>().0);
+        self.builder.push_responder(
+            self.into_output
+                .take()
+                .unwrap()
+                .into_clone_responder::<F>()
+                .0,
+        );
         self.builder.quantify(times, counter::Exactness::Exact);
         QuantifiedResponse {
             builder: self.builder.steal(),
@@ -362,10 +366,15 @@ where
     /// Expect this call pattern to be called at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
-        I: IntoOutputClone2<F::Output>,
+        I: IntoOutputClone<F::Output>,
     {
-        self.builder
-            .push_responder(self.into_output.take().unwrap().into_responder::<F>().0);
+        self.builder.push_responder(
+            self.into_output
+                .take()
+                .unwrap()
+                .into_clone_responder::<F>()
+                .0,
+        );
         self.builder.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
             builder: self.builder.steal(),
