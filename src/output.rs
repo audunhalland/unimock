@@ -54,14 +54,11 @@ pub struct Borrowed<T: ?Sized + 'static>(std::marker::PhantomData<T>);
 #[doc(hidden)]
 pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
 
-#[doc(hidden)]
 // This type describes a function output that is a mix of owned and borrowed data.
 //
 // The typical example is `Option<&T>`.
-pub struct Mixed<T>(std::marker::PhantomData<T>);
-
 #[doc(hidden)]
-pub struct Complex<T>(std::marker::PhantomData<T>);
+pub struct Mixed<T>(std::marker::PhantomData<T>);
 
 type BoxBorrow<T> = Box<dyn Borrow<T> + Send + Sync>;
 
@@ -200,56 +197,52 @@ mod static_ref {
     }
 }
 
-mod complex_option {
+mod mixed_option {
     use super::*;
 
-    type This<T> = Complex<Option<&'static T>>;
+    type Mix<T> = Mixed<Option<&'static T>>;
 
-    impl<T: ?Sized + 'static> Output for This<T> {
+    impl<T: ?Sized + 'static> Output for Mix<T> {
         type Type = Option<BoxBorrow<T>>;
     }
 
-    impl<IT, T> IntoOutputOnce<This<T>> for Option<IT>
+    impl<T0, T> IntoOutputOnce<Mix<T>> for Option<T0>
     where
-        IT: Borrow<T> + Send + Sync + 'static,
+        T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_output(self) -> <This<T> as Output>::Type {
+        fn into_output(self) -> <Mix<T> as Output>::Type {
             match self {
                 Some(value) => Some(Box::new(value)),
                 None => None,
             }
         }
 
-        fn into_once_responder<F: MockFn<Output = This<T>>>(self) -> Responder {
-            let output = <Self as IntoOutputOnce<This<T>>>::into_output(self);
+        fn into_once_responder<F: MockFn<Output = Mix<T>>>(self) -> Responder {
+            let output = <Self as IntoOutputOnce<Mix<T>>>::into_output(self);
             Responder(DynResponder::new_owned::<F>(output))
         }
     }
 
-    impl<IT, T> IntoOutputClone<This<T>> for Option<IT>
+    impl<T0, T> IntoOutputClone<Mix<T>> for Option<T0>
     where
-        IT: Borrow<T> + Clone + Send + Sync + 'static,
+        T0: Borrow<T> + Clone + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_clone_responder<F: MockFn<Output = This<T>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Output = Mix<T>>>(self) -> Responder {
             Responder(DynResponder::new_clone_factory::<F>(move || {
-                let output = <Self as IntoOutputOnce<This<T>>>::into_output(self.clone());
-                Some(output)
+                Some(<Self as IntoOutputOnce<Mix<T>>>::into_output(self.clone()))
             }))
         }
     }
 
-    impl<'u, T> OutputSig<'u, This<T>> for Complex<Option<&'u T>>
+    impl<'u, T> OutputSig<'u, Mix<T>> for Mixed<Option<&'u T>>
     where
         T: ?Sized + 'u,
     {
         type Sig = Option<&'u T>;
 
-        fn from_output(
-            option: <This<T> as Output>::Type,
-            value_chain: &'u ValueChain,
-        ) -> Self::Sig {
+        fn from_output(option: <Mix<T> as Output>::Type, value_chain: &'u ValueChain) -> Self::Sig {
             match option {
                 Some(value) => Some(value_chain.add(value).as_ref().borrow()),
                 None => None,
@@ -257,7 +250,7 @@ mod complex_option {
         }
 
         fn try_borrow_output(
-            option: &'u <This<T> as Output>::Type,
+            option: &'u <Mix<T> as Output>::Type,
         ) -> Result<Self::Sig, SignatureError> {
             Ok(match option {
                 Some(value) => Some(value.as_ref().borrow()),
@@ -267,56 +260,57 @@ mod complex_option {
     }
 }
 
-mod complex_result_borrowed_t {
+mod mixed_result_borrowed_t {
     use super::*;
 
-    type This<T, E> = Complex<Result<&'static T, E>>;
+    type Mix<T, E> = Mixed<Result<&'static T, E>>;
 
-    impl<T: ?Sized + 'static, E: 'static> Output for This<T, E> {
+    impl<T: ?Sized + 'static, E: 'static> Output for Mix<T, E> {
         type Type = Result<BoxBorrow<T>, E>;
     }
 
-    impl<IT, T, E> IntoOutputOnce<This<T, E>> for Result<IT, E>
+    impl<T0, T, E> IntoOutputOnce<Mix<T, E>> for Result<T0, E>
     where
-        IT: Borrow<T> + Send + Sync + 'static,
+        T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
         E: Send + Sync + 'static,
     {
-        fn into_output(self) -> <This<T, E> as Output>::Type {
+        fn into_output(self) -> <Mix<T, E> as Output>::Type {
             match self {
                 Ok(value) => Ok(Box::new(value)),
                 Err(e) => Err(e),
             }
         }
 
-        fn into_once_responder<F: MockFn<Output = This<T, E>>>(self) -> Responder {
-            let output = <Self as IntoOutputOnce<This<T, E>>>::into_output(self);
+        fn into_once_responder<F: MockFn<Output = Mix<T, E>>>(self) -> Responder {
+            let output = <Self as IntoOutputOnce<Mix<T, E>>>::into_output(self);
             Responder(DynResponder::new_owned::<F>(output))
         }
     }
 
-    impl<IT, T, E> IntoOutputClone<This<T, E>> for Result<IT, E>
+    impl<T0, T, E> IntoOutputClone<Mix<T, E>> for Result<T0, E>
     where
-        IT: Borrow<T> + Clone + Send + Sync + 'static,
+        T0: Borrow<T> + Clone + Send + Sync + 'static,
         T: ?Sized + 'static,
         E: Clone + Send + Sync + 'static,
     {
-        fn into_clone_responder<F: MockFn<Output = This<T, E>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Output = Mix<T, E>>>(self) -> Responder {
             Responder(DynResponder::new_clone_factory::<F>(move || {
-                let output = <Self as IntoOutputOnce<This<T, E>>>::into_output(self.clone());
-                Some(output)
+                Some(<Self as IntoOutputOnce<Mix<T, E>>>::into_output(
+                    self.clone(),
+                ))
             }))
         }
     }
 
-    impl<'u, T, E: 'static> OutputSig<'u, This<T, E>> for Complex<Result<&'u T, E>>
+    impl<'u, T, E: 'static> OutputSig<'u, Mix<T, E>> for Mixed<Result<&'u T, E>>
     where
         T: ?Sized + 'u,
     {
         type Sig = Result<&'u T, E>;
 
         fn from_output(
-            result: <This<T, E> as Output>::Type,
+            result: <Mix<T, E> as Output>::Type,
             value_chain: &'u ValueChain,
         ) -> Self::Sig {
             match result {
@@ -326,7 +320,7 @@ mod complex_result_borrowed_t {
         }
 
         fn try_borrow_output(
-            result: &'u <This<T, E> as Output>::Type,
+            result: &'u <Mix<T, E> as Output>::Type,
         ) -> Result<Self::Sig, SignatureError> {
             match result {
                 Ok(value) => Ok(Ok(value.as_ref().borrow())),
