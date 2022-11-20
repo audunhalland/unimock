@@ -60,7 +60,7 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
         })
         .collect::<Vec<_>>();
 
-    let guard = if guards.len() > 0 {
+    let guard = if !guards.is_empty() {
         Some(quote! { if #(#guards)&&* })
     } else {
         None
