@@ -280,10 +280,9 @@ fn def_method_impl(
         };
 
         quote! {
-            use #prefix::macro_api::*;
-            match eval::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
-                Evaluation::Evaluated(output) => output,
-                Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
+            match #prefix::macro_api::eval::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
+                #prefix::macro_api::Evaluation::Evaluated(output) => output,
+                #prefix::macro_api::Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {

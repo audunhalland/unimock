@@ -754,3 +754,13 @@ mod slice_matching {
         .vec_of_string(vec!["1".to_string(), "2".to_string()]);
     }
 }
+
+#[test]
+fn eval_name_clash() {
+    #[unimock(api = Mock, unmock_with=[unmock])]
+    trait Trait {
+        fn tralala(&self, eval: i32);
+    }
+
+    fn unmock(_: &impl std::any::Any, _: i32) {}
+}
