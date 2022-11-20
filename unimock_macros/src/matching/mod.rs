@@ -1,6 +1,8 @@
 use crate::doc::SynDoc;
 
-use quote::quote;
+use proc_macro2::TokenStream;
+use quote::{quote, quote_spanned};
+use syn::spanned::Spanned;
 
 mod parse;
 
@@ -37,20 +39,29 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
 
     let args = analyze_args(&input.arg_patterns);
     let pattern_debug_lit_str = generate_pat_debug(&input);
+    let mut guards = vec![];
+
+    if let Some((_, expr)) = input.guard {
+        guards.push(quote! { #expr });
+    }
+
     let tuple_pats = input
         .arg_patterns
         .into_iter()
         .map(|ArgPattern { tuple, .. }| match tuple.elems.len() {
-            1 => {
-                let unwrapped = tuple.elems.into_iter().next().unwrap();
-                quote! { #unwrapped }
-            }
+            1 => generate_arg_pattern_match(tuple.elems.into_iter().next().unwrap(), &mut guards),
             _ => {
-                quote! { #tuple }
+                let arg_pats = tuple
+                    .elems
+                    .into_iter()
+                    .map(|arg_pat| generate_arg_pattern_match(arg_pat, &mut guards));
+                quote! { (#(#arg_pats),*) }
             }
-        });
-    let guard = if let Some((if_token, expr)) = input.guard {
-        Some(quote! { #if_token #expr })
+        })
+        .collect::<Vec<_>>();
+
+    let guard = if guards.len() > 0 {
+        Some(quote! { if #(#guards)&&* })
     } else {
         None
     };
@@ -77,6 +88,57 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
                 },
             );
             _m.pat_debug(#pattern_debug_lit_str, file!(), line!());
+        }
+    }
+}
+
+fn generate_arg_pattern_match(
+    arg_pat: syn::Pat,
+    macro_guards: &mut Vec<TokenStream>,
+) -> proc_macro2::TokenStream {
+    match arg_pat {
+        syn::Pat::Macro(pat_macro) => match CompareMacro::detect(&pat_macro.mac.path) {
+            Some(compare_macro) => {
+                let span = pat_macro.mac.path.span();
+                let tokens = pat_macro.mac.tokens;
+                let ident = syn::Ident::new(
+                    &format!("e{}", macro_guards.len()),
+                    pat_macro.mac.path.span(),
+                );
+
+                match compare_macro {
+                    CompareMacro::Eq => {
+                        macro_guards.push(quote_spanned! { span=> #ident == #tokens })
+                    }
+                    CompareMacro::Ne => {
+                        macro_guards.push(quote_spanned! { span=> #ident != #tokens })
+                    }
+                }
+                quote! { #ident }
+            }
+            None => {
+                quote! { #pat_macro }
+            }
+        },
+        other => {
+            quote! { #other }
+        }
+    }
+}
+
+enum CompareMacro {
+    Eq,
+    Ne,
+}
+
+impl CompareMacro {
+    fn detect(path: &syn::Path) -> Option<Self> {
+        if path.is_ident("eq") {
+            Some(Self::Eq)
+        } else if path.is_ident("ne") {
+            Some(Self::Ne)
+        } else {
+            None
         }
     }
 }

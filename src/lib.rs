@@ -553,6 +553,40 @@ pub use unimock_macros::unimock;
 /// ```
 ///
 /// Internally it works by calling [macro_api::as_str_ref] on inputs matched by a string literal.
+///
+/// # Matching using `Eq`
+///
+/// Since patterns in Rust are somewhat limited, the matching macro also supports matching using [Eq](std::cmp::Eq).
+///
+/// A single argument changes to `Eq` matching by enclosing that argument within `eq!(_)` or `ne!(_)`:
+///
+/// ```rust
+/// # use unimock::*;
+/// #[derive(Eq, PartialEq)]
+/// pub struct Data(Vec<i32>);
+///
+/// #[unimock(api=Mock)]
+/// trait Trait {
+///     fn func(&self, arg: Data) -> &str;
+/// }
+///
+/// let u = Unimock::new((
+///     Mock::func
+///         .each_call(matching!(eq!(&Data(vec![]))))
+///         .returns("empty"),
+///     Mock::func
+///         .each_call(matching!(ne!(&Data(vec![0]))))
+///         .returns("non-zero"),
+///     Mock::func
+///         .each_call(matching!(_))
+///         .returns("other")
+/// ));
+///
+/// assert_eq!("empty", <Unimock as Trait>::func(&u, Data(vec![])));
+/// assert_eq!("non-zero", <Unimock as Trait>::func(&u, Data(vec![42])));
+/// assert_eq!("other", <Unimock as Trait>::func(&u, Data(vec![0])));
+/// ```
+///
 pub use unimock_macros::matching;
 
 #[derive(Clone, Copy)]
