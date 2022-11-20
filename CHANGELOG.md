@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the `unmocked=[..]` attribute option to `unmock_with=[..]`.
 - Improvements to function output modelling.
 - Mock builder API simplification. There is no longer any `returns_ref` or `returns_static`, just `returns`.
+- Unimock is now implemented with Generic Associated Types, and requires Rust minimum 1.65.
 ### Added
 - New mock entry point `some_call` which does not require return value to implement `Clone`. `next_call` now also uses this API.
 - `api=[..]` attribute option for opting out of generating an encapsulating module.
