@@ -250,10 +250,10 @@ mod mixed_option {
         type Type = Option<&'u T>;
 
         fn from_response(
-            option: <Mix<T> as Respond>::Type,
+            response: <Mix<T> as Respond>::Type,
             value_chain: &'u ValueChain,
         ) -> Self::Type {
-            match option {
+            match response {
                 Some(value) => Some(value_chain.add(value).as_ref().borrow()),
                 None => None,
             }
@@ -317,10 +317,10 @@ mod mixed_result_borrowed_t {
         type Type = Result<&'u T, E>;
 
         fn from_response(
-            result: <Mix<T, E> as Respond>::Type,
+            response: <Mix<T, E> as Respond>::Type,
             value_chain: &'u ValueChain,
         ) -> Self::Type {
-            match result {
+            match response {
                 Ok(value) => Ok(value_chain.add(value).as_ref().borrow()),
                 Err(e) => Err(e),
             }

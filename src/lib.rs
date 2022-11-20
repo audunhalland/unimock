@@ -741,10 +741,16 @@ pub trait MockFn: Sized + 'static {
     /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
     type Inputs<'i>;
 
-    /// Type describing the output of the function in a way that unimock can store (i.e. without lifetime parameters).
+    /// A type that describes how the mocked function responds.
+    ///
+    /// The Respond trait describes a type used internally to store a response value.
+    ///
+    /// The response value is Unimock's internal representation of the function's return value between two points it time:
+    /// 1. The user specifies it upfront as part of a Clause.
+    /// 2. The conversion of this value into the mocked function's final output value.
     type Response: output::Respond;
 
-    /// Type describing the output of the function the way it's seen in the function signature.
+    /// A type that describes the mocked function's actual output type.
     type Output<'u>: output::Output<'u, Self::Response>;
 
     /// The name to use for runtime errors.
