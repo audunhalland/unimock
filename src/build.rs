@@ -164,7 +164,7 @@ where
     {
         QuantifyReturnValue {
             builder: self.builder,
-            into_response: Some(value),
+            return_value: Some(value),
             mock_fn: self.mock_fn,
             ordering: self.ordering,
         }
@@ -311,7 +311,7 @@ where
     T: IntoResponseOnce<F::Response>,
 {
     pub(crate) builder: BuilderWrapper<'p>,
-    into_response: Option<T>,
+    return_value: Option<T>,
     mock_fn: PhantomData<F>,
     ordering: O,
 }
@@ -327,7 +327,7 @@ where
     /// This is the only quantifier that works together with return values that don't implement [Clone].
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
         self.builder.push_responder(
-            self.into_response
+            self.return_value
                 .take()
                 .unwrap()
                 .into_once_responder::<F>()
@@ -348,7 +348,7 @@ where
         T: IntoResponseClone<F::Response>,
     {
         self.builder.push_responder(
-            self.into_response
+            self.return_value
                 .take()
                 .unwrap()
                 .into_clone_responder::<F>()
@@ -369,7 +369,7 @@ where
         T: IntoResponseClone<F::Response>,
     {
         self.builder.push_responder(
-            self.into_response
+            self.return_value
                 .take()
                 .unwrap()
                 .into_clone_responder::<F>()
@@ -407,9 +407,9 @@ where
     T: IntoResponseOnce<F::Response>,
 {
     fn drop(&mut self) {
-        if let Some(into_response) = self.into_response.take() {
+        if let Some(return_value) = self.return_value.take() {
             self.builder
-                .push_responder(into_response.into_once_responder::<F>().0);
+                .push_responder(return_value.into_once_responder::<F>().0);
         }
     }
 }
