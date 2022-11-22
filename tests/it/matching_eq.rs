@@ -34,3 +34,19 @@ fn test_eq() {
     assert_eq!(42, <Unimock as Test>::f(&u, 1, Data(vec![42])));
     assert_eq!(1337, <Unimock as Test>::f(&u, 0, Data(vec![1337])));
 }
+
+#[test]
+fn eq_or() {
+    let u = Unimock::new((
+        TestMock::f
+            .each_call(matching!(
+                (_, eq!(&Data(vec![42]))) | (_, eq!(&Data(vec![1337])))
+            ))
+            .returns(42),
+        TestMock::f.each_call(matching!(_, _)).returns(0),
+    ));
+
+    assert_eq!(42, <Unimock as Test>::f(&u, 0, Data(vec![42])));
+    assert_eq!(42, <Unimock as Test>::f(&u, 0, Data(vec![1337])));
+    assert_eq!(0, <Unimock as Test>::f(&u, 0, Data(vec![123])));
+}

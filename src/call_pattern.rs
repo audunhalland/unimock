@@ -1,6 +1,7 @@
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
 use crate::error::{MockError, MockResult};
+use crate::macro_api::MatchDebug;
 use crate::output::Respond;
 use crate::*;
 
@@ -31,10 +32,19 @@ pub(crate) struct CallPattern {
 
 impl CallPattern {
     pub fn match_inputs<F: MockFn>(&self, inputs: &F::Inputs<'_>) -> MockResult<bool> {
-        let func: &MatchingFn<F> =
-            downcast_box(self.input_matcher.get_dyn_matching_fn(F::NAME)?, F::NAME)?;
+        match &self.input_matcher.dyn_matching_fn {
+            DynMatchingFn::Matching(f) => {
+                let func: &MatchingFn<F> = downcast_box(&f, F::NAME)?;
+                Ok((func.0)(inputs))
+            }
+            DynMatchingFn::MatchingDebug(f) => {
+                let func: &MatchingFnDebug<F> = downcast_box(&f, F::NAME)?;
+                let mut match_debug = MatchDebug::new();
 
-        Ok((func.0)(inputs))
+                Ok((func.0)(inputs, &mut match_debug))
+            }
+            DynMatchingFn::None => Err(MockError::NoMatcherFunction { name: F::NAME }),
+        }
     }
 
     pub fn debug_location(&self, pat_index: PatIndex) -> debug::CallPatternLocation {
@@ -51,7 +61,7 @@ impl CallPattern {
 }
 
 pub(crate) struct DynInputMatcher {
-    pub(crate) func: Option<AnyBox>,
+    dyn_matching_fn: DynMatchingFn,
     pub(crate) pat_debug: Option<debug::InputMatcherDebug>,
 }
 
@@ -61,20 +71,20 @@ impl DynInputMatcher {
         matching_fn(&mut builder);
 
         Self {
-            func: match builder.matching_fn {
-                Some(matching_fn) => Some(Box::new(matching_fn)),
-                None => None,
+            dyn_matching_fn: match (builder.matching_fn, builder.matching_fn_debug) {
+                (_, Some(f)) => DynMatchingFn::MatchingDebug(Box::new(f)),
+                (Some(f), None) => DynMatchingFn::Matching(Box::new(f)),
+                _ => DynMatchingFn::None,
             },
             pat_debug: builder.pat_debug,
         }
     }
+}
 
-    fn get_dyn_matching_fn(&self, name: &'static str) -> MockResult<&AnyBox> {
-        match &self.func {
-            Some(any_box) => Ok(any_box),
-            None => Err(MockError::NoMatcherFunction { name }),
-        }
-    }
+enum DynMatchingFn {
+    MatchingDebug(AnyBox),
+    Matching(AnyBox),
+    None,
 }
 
 pub(crate) struct MatchingFn<F: MockFn>(
@@ -83,6 +93,11 @@ pub(crate) struct MatchingFn<F: MockFn>(
 );
 
 impl<F: MockFn> MatchingFn<F> {}
+
+pub(crate) struct MatchingFnDebug<F: MockFn>(
+    #[allow(clippy::type_complexity)]
+    pub  Box<dyn (for<'i> Fn(&F::Inputs<'i>, &mut MatchDebug) -> bool) + Send + Sync>,
+);
 
 pub(crate) struct DynCallOrderResponder {
     pub response_index: usize,

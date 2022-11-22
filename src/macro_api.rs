@@ -1,6 +1,6 @@
 use crate::debug;
 use crate::output::Output;
-use crate::{call_pattern::MatchingFn, *};
+use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
 
 /// The evaluation of a [MockFn].
 ///
@@ -34,6 +34,7 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
 pub struct Matching<F: MockFn> {
     pub(crate) mock_fn: std::marker::PhantomData<F>,
     pub(crate) matching_fn: Option<MatchingFn<F>>,
+    pub(crate) matching_fn_debug: Option<MatchingFnDebug<F>>,
     pub(crate) pat_debug: Option<debug::InputMatcherDebug>,
 }
 
@@ -45,8 +46,20 @@ where
         Self {
             mock_fn: std::marker::PhantomData,
             matching_fn: None,
+            matching_fn_debug: None,
             pat_debug: None,
         }
+    }
+
+    /// Set the matching function, with debug capabilities.
+    ///
+    /// The function should accept a reference to inputs as argument, and return a boolean answer representing match or no match.
+    #[inline]
+    pub fn func_debug<M>(&mut self, matching_fn: M)
+    where
+        M: (for<'i> Fn(&F::Inputs<'i>, &mut MatchDebug) -> bool) + Send + Sync + 'static,
+    {
+        self.matching_fn_debug = Some(MatchingFnDebug(Box::new(matching_fn)));
     }
 
     /// Set the matching function.
@@ -69,6 +82,18 @@ where
             file,
             line,
         });
+    }
+}
+
+pub struct MatchDebug {}
+
+impl MatchDebug {
+    pub(crate) fn new() -> Self {
+        Self {}
+    }
+
+    pub fn debug(&self) -> bool {
+        false
     }
 }
 
