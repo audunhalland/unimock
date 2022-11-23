@@ -660,6 +660,9 @@ mod tests {
         assert_eq!("(1..2)", doc_pat(parse_quote! { (1..2) }));
         assert_eq!("(1..=2)", doc_pat(parse_quote! { (1..=2) }));
         assert_eq!("(a @ (1, 2))", doc_pat(parse_quote! { (a @ (1, 2)) }));
-        assert_eq!("(?pat?)", doc_pat(parse_quote! { (some_macro!()) }));
+        assert_eq!(
+            "(some_macro!(..))",
+            doc_pat(parse_quote! { (some_macro!()) })
+        );
     }
 }
