@@ -1,9 +1,10 @@
 use crate::call_pattern::{CallPattern, DynResponder, PatIndex};
 use crate::debug;
-use crate::error::{self, Mismatches};
+use crate::error::{self};
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, MatchDebugger};
+use crate::mismatch::Mismatches;
 use crate::output::{Output, Respond, SignatureError};
 use crate::state::SharedState;
 use crate::value_chain::ValueChain;

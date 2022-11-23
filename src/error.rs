@@ -1,31 +1,6 @@
-use std::vec;
-
-use crate::{
-    call_pattern::{ArgIndex, PatIndex},
-    debug,
-    macro_api::MatchDebugger,
-};
+use crate::{debug, mismatch::Mismatches};
 
 pub(crate) type MockResult<T> = Result<T, MockError>;
-
-#[derive(Clone)]
-pub(crate) struct Mismatches {
-    arg_failures: Vec<(PatIndex, ArgIndex, String)>,
-}
-
-impl Mismatches {
-    pub fn new() -> Self {
-        Self {
-            arg_failures: vec![],
-        }
-    }
-
-    pub fn push_debug(&mut self, pat_index: PatIndex, match_debugger: MatchDebugger) {
-        for (arg_index, message) in match_debugger.arg_failures {
-            self.arg_failures.push((pat_index, arg_index, message));
-        }
-    }
-}
 
 #[derive(Clone)]
 pub(crate) enum MockError {
@@ -91,7 +66,7 @@ impl std::fmt::Display for MockError {
                 fn_call,
                 mismatches,
             } => {
-                write!(f, "{fn_call}: No matching call patterns.")
+                write!(f, "{fn_call}: No matching call patterns. {mismatches}")
             }
             Self::NoOutputAvailableForCallPattern { fn_call, pattern } => {
                 write!(
@@ -122,7 +97,7 @@ impl std::fmt::Display for MockError {
                 pattern,
                 mismatches,
             } => {
-                write!(f, "{fn_call}: Method invoked in the correct order ({actual_call_order}), but inputs didn't match {pattern}.")
+                write!(f, "{fn_call}: Method invoked in the correct order ({actual_call_order}), but inputs didn't match {pattern}. {mismatches}")
             }
             Self::CannotReturnValueMoreThanOnce { fn_call, pattern } => {
                 write!(f, "{fn_call}: Cannot return value more than once from {pattern}, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response.")

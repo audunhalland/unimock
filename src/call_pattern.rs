@@ -12,7 +12,7 @@ use std::sync::Mutex;
 pub(crate) struct PatIndex(pub usize);
 
 #[derive(Clone, Copy)]
-pub(crate) struct ArgIndex(pub usize);
+pub(crate) struct InputIndex(pub usize);
 
 impl std::fmt::Display for PatIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

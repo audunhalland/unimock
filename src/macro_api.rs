@@ -1,5 +1,6 @@
-use crate::call_pattern::{ArgIndex, PatIndex};
+use crate::call_pattern::InputIndex;
 use crate::debug;
+use crate::mismatch::Mismatch;
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
 
@@ -88,21 +89,21 @@ where
 
 pub struct MatchDebugger {
     enabled: bool,
-    pub(crate) arg_failures: Vec<(ArgIndex, String)>,
+    pub(crate) mismatches: Vec<(InputIndex, Mismatch)>,
 }
 
 impl MatchDebugger {
     pub(crate) fn new_enabled() -> Self {
         Self {
             enabled: true,
-            arg_failures: vec![],
+            mismatches: vec![],
         }
     }
 
     pub(crate) fn new_disabled() -> Self {
         Self {
             enabled: false,
-            arg_failures: vec![],
+            mismatches: vec![],
         }
     }
 
@@ -112,21 +113,21 @@ impl MatchDebugger {
     }
 
     /// Register failure to match a pattern
-    pub fn pat_fail(&mut self, arg_index: usize, pat: &'static str) {
-        self.arg_failures
-            .push((ArgIndex(arg_index), pat.to_string()));
+    pub fn pat_fail(&mut self, input_index: usize, pat: &'static str) {
+        self.mismatches
+            .push((InputIndex(input_index), Mismatch::Pat));
     }
 
     /// Register failure for an eq check
-    pub fn eq_fail(&mut self, arg_index: usize, a: String, b: String) {
-        self.arg_failures
-            .push((ArgIndex(arg_index), format!("{a} did not equal {b}")));
+    pub fn eq_fail(&mut self, input_index: usize, a: String, b: String) {
+        self.mismatches
+            .push((InputIndex(input_index), Mismatch::Eq(a, b)));
     }
 
     /// Register failure for an ne check
-    pub fn ne_fail(&mut self, arg_index: usize, a: String, b: String) {
-        self.arg_failures
-            .push((ArgIndex(arg_index), format!("{a} did equal {b}")));
+    pub fn ne_fail(&mut self, input_index: usize, a: String, b: String) {
+        self.mismatches
+            .push((InputIndex(input_index), Mismatch::Ne(a, b)));
     }
 }
 

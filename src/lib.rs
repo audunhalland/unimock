@@ -362,6 +362,7 @@ mod debug;
 mod error;
 mod eval;
 mod fn_mocker;
+mod mismatch;
 mod state;
 
 use std::any::TypeId;

@@ -473,6 +473,8 @@ mod generics {
 }
 
 mod pat {
+    use syn::PatMacro;
+
     use super::*;
 
     impl SynDoc for syn::Pat {
@@ -525,6 +527,9 @@ mod pat {
                 Self::Struct(pat_struct) => {
                     // Skipping documentation of fields:
                     doc!(out, [pat_struct.path, " {}"]);
+                }
+                Self::Macro(PatMacro { mac, .. }) => {
+                    doc!(out, [mac.path, "!(..)"]);
                 }
                 // TODO: More patterns?
                 _ => {
