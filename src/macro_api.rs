@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::debug;
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
@@ -92,9 +94,13 @@ impl MatchDebug {
         Self {}
     }
 
-    pub fn debug(&self) -> bool {
+    pub fn enabled(&self) -> bool {
         false
     }
+
+    pub fn pat_fail(&mut self, arg_index: usize, pat: &'static str) {}
+    pub fn eq_fail(&mut self, arg_index: usize, a: String, b: String) {}
+    pub fn ne_fail(&mut self, arg_index: usize, a: String, b: String) {}
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.

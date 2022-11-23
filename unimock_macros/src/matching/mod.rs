@@ -233,25 +233,47 @@ impl ArgMatcher {
         }
     }
 
-    fn render_diagnostics_stmt(&self, arg: &Arg) -> Option<proc_macro2::TokenStream> {
+    fn render_diagnostics_stmt(&self, index: usize, arg: &Arg) -> Option<proc_macro2::TokenStream> {
         let arg_expr = arg.render_expr();
 
         match self {
             ArgMatcher::Pattern(pat) => match &pat {
                 syn::Pat::Wild(_) => None,
-                _ => Some(quote! {
-                    match #arg_expr {
-                        #pat => {}
-                        _ => {}
-                    }
-                }),
+                pat => {
+                    let mut doc_string = String::new();
+                    pat.doc(&mut doc_string);
+
+                    let doc_lit =
+                        syn::LitStr::new(doc_string.as_str(), proc_macro2::Span::call_site());
+
+                    Some(quote! {
+                        match #arg_expr {
+                            #pat => {}
+                            _ => {
+                                dbg.pat_fail(#index, #doc_lit);
+                            }
+                        }
+                    })
+                }
             },
             ArgMatcher::Compare(compare_matcher) => {
                 let span = compare_matcher.span;
                 let operator = compare_matcher.compare_macro.operator(span);
                 let local_ident = &compare_matcher.local_ident;
+
+                let dbg_method = syn::Ident::new(
+                    match &compare_matcher.compare_macro {
+                        CompareMacro::Eq => "eq_fail",
+                        CompareMacro::Ne => "ne_fail",
+                    },
+                    span,
+                );
+
                 Some(quote! {
-                    if !(#arg_expr #operator #local_ident) {}
+                    if !(#arg_expr #operator #local_ident) {
+                        use ::unimock::macro_api::{ProperDebug, NoDebug};
+                        dbg.#dbg_method(#index, #arg_expr.unimock_try_debug(), #local_ident.unimock_try_debug());
+                    }
                 })
             }
         }
@@ -275,7 +297,7 @@ fn generate_diagnostics_arm(arms: &[ArgPatternArm], args: &[Arg]) -> proc_macro2
                     .iter()
                     .enumerate()
                     .filter_map(|(index, arg_matcher)| {
-                        arg_matcher.render_diagnostics_stmt(&args[index])
+                        arg_matcher.render_diagnostics_stmt(index, &args[index])
                     });
 
             quote! {
@@ -289,7 +311,7 @@ fn generate_diagnostics_arm(arms: &[ArgPatternArm], args: &[Arg]) -> proc_macro2
     };
 
     quote! {
-        _ if dbg.debug() => #body,
+        _ if dbg.enabled() => #body,
     }
 }
 
