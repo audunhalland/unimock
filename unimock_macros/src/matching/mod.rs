@@ -88,8 +88,8 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
 
     quote! {
         &|_m| {
-            _m.func_debug(
-                |#arg_pat, dbg| {
+            _m.debug_func(
+                |#arg_pat, reporter| {
                     #(#local_defs)*
                     match #arg_expr {
                         #(#success_arms)*
@@ -250,7 +250,7 @@ impl ArgMatcher {
                         match #arg_expr {
                             #pat => {}
                             _ => {
-                                dbg.pat_fail(#index, #doc_lit);
+                                reporter.pat_fail(#index, #doc_lit);
                             }
                         }
                     })
@@ -261,7 +261,7 @@ impl ArgMatcher {
                 let operator = compare_matcher.compare_macro.operator(span);
                 let local_ident = &compare_matcher.local_ident;
 
-                let dbg_method = syn::Ident::new(
+                let reporter_method = syn::Ident::new(
                     match &compare_matcher.compare_macro {
                         CompareMacro::Eq => "eq_fail",
                         CompareMacro::Ne => "ne_fail",
@@ -272,7 +272,7 @@ impl ArgMatcher {
                 Some(quote! {
                     if !(#arg_expr #operator #local_ident) {
                         use ::unimock::macro_api::{ProperDebug, NoDebug};
-                        dbg.#dbg_method(#index, #arg_expr.unimock_try_debug(), #local_ident.unimock_try_debug());
+                        reporter.#reporter_method(#index, #arg_expr.unimock_try_debug(), #local_ident.unimock_try_debug());
                     }
                 })
             }
@@ -311,7 +311,7 @@ fn generate_diagnostics_arm(arms: &[ArgPatternArm], args: &[Arg]) -> proc_macro2
     };
 
     quote! {
-        _ if dbg.enabled() => #body,
+        _ if reporter.enabled() => #body,
     }
 }
 

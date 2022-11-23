@@ -2,7 +2,7 @@ use std::{collections::HashSet, fmt::Display};
 
 use crate::{
     call_pattern::{InputIndex, PatIndex},
-    macro_api::MatchDebugger,
+    macro_api::MismatchReporter,
 };
 
 #[derive(Clone)]
@@ -15,7 +15,7 @@ impl Mismatches {
         Self { mismatches: vec![] }
     }
 
-    pub fn push_debug(&mut self, pat_index: PatIndex, match_debugger: MatchDebugger) {
+    pub fn collect_from_reporter(&mut self, pat_index: PatIndex, match_debugger: MismatchReporter) {
         for (input_index, mismatch) in match_debugger.mismatches {
             self.mismatches.push((pat_index, input_index, mismatch));
         }

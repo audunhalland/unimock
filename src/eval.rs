@@ -3,7 +3,7 @@ use crate::debug;
 use crate::error::{self};
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::macro_api::{Evaluation, MatchDebugger};
+use crate::macro_api::{Evaluation, MismatchReporter};
 use crate::mismatch::Mismatches;
 use crate::output::{Output, Respond, SignatureError};
 use crate::state::SharedState;
@@ -87,7 +87,7 @@ impl<'u, 's> DynCtx<'u, 's> {
     #[inline(never)]
     fn eval_dyn(
         &self,
-        match_inputs: &dyn Fn(&CallPattern, Option<&mut MatchDebugger>) -> MockResult<bool>,
+        match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> MockResult<bool>,
     ) -> MockResult<EvalResult<'u>> {
         let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
             None => match self.shared_state.fallback_mode {
@@ -117,12 +117,12 @@ impl<'u, 's> DynCtx<'u, 's> {
                 FallbackMode::Error => {
                     let mut mismatches = Mismatches::new();
                     for (pat_index, call_pattern) in fn_mocker.call_patterns.iter().enumerate() {
-                        let mut match_debugger = MatchDebugger::new_enabled();
-                        match match_inputs(call_pattern, Some(&mut match_debugger)) {
+                        let mut mismatch_reporter = MismatchReporter::new_enabled();
+                        match match_inputs(call_pattern, Some(&mut mismatch_reporter)) {
                             Ok(_) => {}
                             Err(_) => {}
                         }
-                        mismatches.push_debug(PatIndex(pat_index), match_debugger);
+                        mismatches.collect_from_reporter(PatIndex(pat_index), mismatch_reporter);
                     }
 
                     Err(MockError::NoMatchingCallPatterns {
@@ -138,7 +138,7 @@ impl<'u, 's> DynCtx<'u, 's> {
     fn match_call_pattern(
         &self,
         fn_mocker: &'u FnMocker,
-        match_inputs: &dyn Fn(&CallPattern, Option<&mut MatchDebugger>) -> MockResult<bool>,
+        match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> MockResult<bool>,
     ) -> MockResult<Option<(PatIndex, &'u CallPattern)>> {
         match fn_mocker.pattern_match_mode {
             PatternMatchMode::InAnyOrder => fn_mocker
@@ -167,11 +167,11 @@ impl<'u, 's> DynCtx<'u, 's> {
                             .find_ordered_expected_call_pattern_debug(ordered_call_index),
                     })?;
 
-                let mut match_debug = MatchDebugger::new_enabled();
+                let mut mismatch_reporter = MismatchReporter::new_enabled();
 
-                if !match_inputs(pattern, Some(&mut match_debug))? {
+                if !match_inputs(pattern, Some(&mut mismatch_reporter))? {
                     let mut mismatches = Mismatches::new();
-                    mismatches.push_debug(pat_index, match_debug);
+                    mismatches.collect_from_reporter(pat_index, mismatch_reporter);
 
                     return Err(MockError::InputsNotMatchedInCallOrder {
                         fn_call: self.fn_call(),

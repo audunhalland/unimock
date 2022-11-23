@@ -56,10 +56,12 @@ where
     /// Set the matching function, with debug capabilities.
     ///
     /// The function should accept a reference to inputs as argument, and return a boolean answer representing match or no match.
+    ///
+    /// The function also receives a [MismatchReporter]
     #[inline]
-    pub fn func_debug<M>(&mut self, matching_fn: M)
+    pub fn debug_func<M>(&mut self, matching_fn: M)
     where
-        M: (for<'i> Fn(&F::Inputs<'i>, &mut MatchDebugger) -> bool) + Send + Sync + 'static,
+        M: (for<'i> Fn(&F::Inputs<'i>, &mut MismatchReporter) -> bool) + Send + Sync + 'static,
     {
         self.matching_fn_debug = Some(MatchingFnDebug(Box::new(matching_fn)));
     }
@@ -87,12 +89,17 @@ where
     }
 }
 
-pub struct MatchDebugger {
+/// A reporter used in call pattern matchers in case of mismatched inputs.
+///
+/// This is a diagnostics tool leading to higher quality error messages.
+///
+/// Used by the [matching] macro.
+pub struct MismatchReporter {
     enabled: bool,
     pub(crate) mismatches: Vec<(InputIndex, Mismatch)>,
 }
 
-impl MatchDebugger {
+impl MismatchReporter {
     pub(crate) fn new_enabled() -> Self {
         Self {
             enabled: true,
