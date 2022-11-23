@@ -20,6 +20,17 @@ struct Arg {
     kind: ArgKind,
 }
 
+impl Arg {
+    fn render_expr(&self) -> proc_macro2::TokenStream {
+        let ident = &self.ident;
+        match self.kind {
+            ArgKind::LitStr => quote! { ::unimock::macro_api::as_str_ref(#ident) },
+            ArgKind::Slice => quote! { ::unimock::macro_api::as_slice(#ident) },
+            _ => quote! { #ident },
+        }
+    }
+}
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum ArgKind {
     Unknown,
@@ -45,28 +56,33 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
         global_guards.push(quote! { #expr });
     }
 
-    let match_arms = input
+    let mut local_counter: usize = 0;
+    let arg_pattern_arms = input
         .arg_patterns
+        .into_iter()
+        .map(|arg_pattern| ArgPatternArm::from_arg_pattern(arg_pattern, &mut local_counter))
+        .collect::<Vec<_>>();
+
+    let local_defs = arg_pattern_arms
         .iter()
-        .map(|arg_pattern| ArgPatternMatchArm::from_arg_pattern(arg_pattern))
+        .flat_map(|arm| arm.render_local_defs())
         .collect::<Vec<_>>();
 
     let arg_pat = concat_args_parenthesized(&args, |arg| {
         let ident = &arg.ident;
         quote! { #ident }
     });
-    let arg_expr = concat_args_parenthesized(&args, |arg| {
-        let ident = &arg.ident;
-        match arg.kind {
-            ArgKind::LitStr => quote! { ::unimock::macro_api::as_str_ref(#ident) },
-            ArgKind::Slice => quote! { ::unimock::macro_api::as_slice(#ident) },
-            _ => quote! { #ident },
-        }
-    });
+    let arg_expr = concat_args_parenthesized(&args, |arg| arg.render_expr());
 
-    let diagnostics = generate_diagnostics_expr(&input.arg_patterns, &match_arms);
+    let diagnostics_arm = if global_guards.is_empty() {
+        Some(generate_diagnostics_arm(&arg_pattern_arms, &args))
+    } else {
+        // If a global guard is present, there is no way to generate
+        // per-argument diagnostics, because there is not way to make that compile
+        None
+    };
 
-    let success_arms = match_arms
+    let success_arms = arg_pattern_arms
         .iter()
         .map(|match_arm| match_arm.render_success_arm(&global_guards));
 
@@ -74,10 +90,10 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
         &|_m| {
             _m.func_debug(
                 |#arg_pat, dbg| {
-                    let e = #arg_expr;
-                    match e {
+                    #(#local_defs)*
+                    match #arg_expr {
                         #(#success_arms)*
-                        _ if dbg.debug() => #diagnostics,
+                        #diagnostics_arm
                         _ => false
                     }
                 }
@@ -87,71 +103,40 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
     }
 }
 
-struct ArgPatternMatchArm {
-    pattern: proc_macro2::TokenStream,
-    local_guards: Vec<proc_macro2::TokenStream>,
+// An arm (or, _candidate_) for a complete arg match (all patterns)
+struct ArgPatternArm {
+    arg_matchers: Vec<ArgMatcher>,
 }
 
-impl ArgPatternMatchArm {
-    fn from_arg_pattern(a: &ArgPattern) -> Self {
-        let mut local_guards = vec![];
-        let pattern = match a.tuple.elems.len() {
-            1 => Self::gen_pattern(a.tuple.elems.iter().next().unwrap(), &mut local_guards),
-            _ => {
-                let arg_pats = a
-                    .tuple
-                    .elems
-                    .iter()
-                    .map(|arg_pat| Self::gen_pattern(arg_pat, &mut local_guards));
-                quote! { (#(#arg_pats),*) }
-            }
-        };
+impl ArgPatternArm {
+    fn from_arg_pattern(a: ArgPattern, local_counter: &mut usize) -> Self {
+        let arg_matchers = a
+            .tuple
+            .elems
+            .into_iter()
+            .enumerate()
+            .map(|(index, elem)| ArgMatcher::new(elem, index, local_counter))
+            .collect();
 
-        Self {
-            pattern,
-            local_guards,
-        }
+        Self { arg_matchers }
     }
 
-    fn gen_pattern(
-        arg_pat: &syn::Pat,
-        macro_guards: &mut Vec<TokenStream>,
-    ) -> proc_macro2::TokenStream {
-        match arg_pat {
-            syn::Pat::Macro(pat_macro) => match CompareMacro::detect(&pat_macro.mac.path) {
-                Some(compare_macro) => {
-                    let span = pat_macro.mac.path.span();
-                    let tokens = &pat_macro.mac.tokens;
-                    let ident = syn::Ident::new(
-                        &format!("e{}", macro_guards.len()),
-                        pat_macro.mac.path.span(),
-                    );
-
-                    match compare_macro {
-                        CompareMacro::Eq => {
-                            macro_guards.push(quote_spanned! { span=> #ident == #tokens })
-                        }
-                        CompareMacro::Ne => {
-                            macro_guards.push(quote_spanned! { span=> #ident != #tokens })
-                        }
-                    }
-                    quote! { #ident }
-                }
-                None => {
-                    quote! { #pat_macro }
-                }
-            },
-            other => {
-                quote! { #other }
-            }
-        }
+    fn render_local_defs<'s>(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
+        self.arg_matchers
+            .iter()
+            .filter_map(|arg_matcher| arg_matcher.render_local_def())
     }
 
     fn render_success_arm(&self, global_guards: &[TokenStream]) -> proc_macro2::TokenStream {
         let mut concatenated_guards = Vec::from_iter(global_guards);
-        concatenated_guards.extend(&self.local_guards);
 
-        let pattern = &self.pattern;
+        let local_guards = self
+            .arg_matchers
+            .iter()
+            .filter_map(|m| m.render_guard())
+            .collect::<Vec<_>>();
+
+        concatenated_guards.extend(&local_guards);
 
         let if_guard = if !concatenated_guards.is_empty() {
             Some(quote! { if #(#concatenated_guards)&&* })
@@ -159,40 +144,152 @@ impl ArgPatternMatchArm {
             None
         };
 
+        let tuple_ish_pattern = if self.arg_matchers.len() == 1 {
+            self.arg_matchers[0].render_match_tuple_elem()
+        } else {
+            let elems = self
+                .arg_matchers
+                .iter()
+                .map(|m| m.render_match_tuple_elem());
+
+            quote! { (#(#elems),*) }
+        };
+
         quote! {
-            #pattern #if_guard => true,
+            #tuple_ish_pattern #if_guard => true,
         }
     }
 }
 
-fn generate_diagnostics_expr(
-    arg_patterns: &[ArgPattern],
-    match_arms: &[ArgPatternMatchArm],
-) -> proc_macro2::TokenStream {
-    if arg_patterns.len() == 1 {
-        generate_diagnostics_variant(&arg_patterns[0])
-    } else {
-        let arms = arg_patterns.iter().zip(match_arms).map(|(_, match_arm)| {
-            let pattern = &match_arm.pattern;
+// Matcher for a single arm
+enum ArgMatcher {
+    Pattern(syn::Pat),
+    Compare(CompareMatcher),
+}
+
+impl ArgMatcher {
+    fn new(pat: syn::Pat, index: usize, local_counter: &mut usize) -> Self {
+        match pat {
+            syn::Pat::Macro(pat_macro) => match CompareMacro::detect(&pat_macro.mac.path) {
+                Some(compare_macro) => {
+                    let span = pat_macro.mac.path.span();
+                    let tokens = pat_macro.mac.tokens;
+                    let local_ident = syn::Ident::new(&format!("l{}", local_counter), span);
+                    *local_counter += 1;
+
+                    let pat_bind_ident =
+                        syn::Ident::new(&format!("m{}", index), pat_macro.mac.path.span());
+
+                    Self::Compare(CompareMatcher {
+                        span,
+                        local_ident,
+                        pat_bind_ident,
+                        compare_macro,
+                        tokens,
+                    })
+                }
+                None => Self::Pattern(syn::Pat::Macro(pat_macro)),
+            },
+            other => Self::Pattern(other),
+        }
+    }
+
+    fn render_local_def(&self) -> Option<proc_macro2::TokenStream> {
+        match self {
+            Self::Pattern(_) => None,
+            Self::Compare(compare_matcher) => {
+                let local_ident = &compare_matcher.local_ident;
+                let tokens = &compare_matcher.tokens;
+
+                Some(quote! {
+                    let #local_ident = #tokens;
+                })
+            }
+        }
+    }
+
+    fn render_match_tuple_elem(&self) -> proc_macro2::TokenStream {
+        match self {
+            Self::Pattern(pattern) => quote! { #pattern },
+            Self::Compare(compare_matcher) => {
+                let bind_ident = &compare_matcher.pat_bind_ident;
+                quote! { #bind_ident }
+            }
+        }
+    }
+
+    fn render_guard(&self) -> Option<proc_macro2::TokenStream> {
+        match self {
+            Self::Pattern(_) => None,
+            Self::Compare(compare_matcher) => {
+                let span = compare_matcher.span;
+                let pat_bind_ident = &compare_matcher.pat_bind_ident;
+                let local_ident = &compare_matcher.local_ident;
+                let operator = compare_matcher.compare_macro.operator(span);
+                Some(quote_spanned! { span=>
+                    (#pat_bind_ident #operator #local_ident)
+                })
+            }
+        }
+    }
+
+    fn render_diagnostics_stmt(&self, arg: &Arg) -> Option<proc_macro2::TokenStream> {
+        let arg_expr = arg.render_expr();
+
+        match self {
+            ArgMatcher::Pattern(pat) => match &pat {
+                syn::Pat::Wild(_) => None,
+                _ => Some(quote! {
+                    match #arg_expr {
+                        #pat => {}
+                        _ => {}
+                    }
+                }),
+            },
+            ArgMatcher::Compare(compare_matcher) => {
+                let span = compare_matcher.span;
+                let operator = compare_matcher.compare_macro.operator(span);
+                let local_ident = &compare_matcher.local_ident;
+                Some(quote! {
+                    if !(#arg_expr #operator #local_ident) {}
+                })
+            }
+        }
+    }
+}
+
+struct CompareMatcher {
+    span: proc_macro2::Span,
+    local_ident: syn::Ident,
+    pat_bind_ident: syn::Ident,
+    compare_macro: CompareMacro,
+    tokens: proc_macro2::TokenStream,
+}
+
+fn generate_diagnostics_arm(arms: &[ArgPatternArm], args: &[Arg]) -> proc_macro2::TokenStream {
+    let body = match arms.last() {
+        None => quote! { false },
+        Some(arm) => {
+            let check_stmts =
+                arm.arg_matchers
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, arg_matcher)| {
+                        arg_matcher.render_diagnostics_stmt(&args[index])
+                    });
+
             quote! {
-                #pattern => {
+                {
+                    #(#check_stmts)*
+
                     false
                 }
             }
-        });
-
-        quote! {
-            match e {
-                #(#arms),*
-                _ => false
-            }
         }
-    }
-}
+    };
 
-fn generate_diagnostics_variant(_: &ArgPattern) -> proc_macro2::TokenStream {
     quote! {
-        false
+        _ if dbg.debug() => #body,
     }
 }
 
@@ -209,6 +306,13 @@ impl CompareMacro {
             Some(Self::Ne)
         } else {
             None
+        }
+    }
+
+    fn operator(&self, span: proc_macro2::Span) -> proc_macro2::TokenStream {
+        match self {
+            Self::Eq => quote_spanned! { span=> == },
+            Self::Ne => quote_spanned! { span=> != },
         }
     }
 }
