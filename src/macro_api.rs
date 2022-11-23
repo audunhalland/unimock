@@ -1,5 +1,4 @@
-use std::fmt::Debug;
-
+use crate::call_pattern::{ArgIndex, PatIndex};
 use crate::debug;
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
@@ -59,7 +58,7 @@ where
     #[inline]
     pub fn func_debug<M>(&mut self, matching_fn: M)
     where
-        M: (for<'i> Fn(&F::Inputs<'i>, &mut MatchDebug) -> bool) + Send + Sync + 'static,
+        M: (for<'i> Fn(&F::Inputs<'i>, &mut MatchDebugger) -> bool) + Send + Sync + 'static,
     {
         self.matching_fn_debug = Some(MatchingFnDebug(Box::new(matching_fn)));
     }
@@ -87,20 +86,48 @@ where
     }
 }
 
-pub struct MatchDebug {}
+pub struct MatchDebugger {
+    enabled: bool,
+    pub(crate) arg_failures: Vec<(ArgIndex, String)>,
+}
 
-impl MatchDebug {
-    pub(crate) fn new() -> Self {
-        Self {}
+impl MatchDebugger {
+    pub(crate) fn new_enabled() -> Self {
+        Self {
+            enabled: true,
+            arg_failures: vec![],
+        }
     }
 
+    pub(crate) fn new_disabled() -> Self {
+        Self {
+            enabled: false,
+            arg_failures: vec![],
+        }
+    }
+
+    /// Whether debugging is enabled
     pub fn enabled(&self) -> bool {
-        false
+        self.enabled
     }
 
-    pub fn pat_fail(&mut self, arg_index: usize, pat: &'static str) {}
-    pub fn eq_fail(&mut self, arg_index: usize, a: String, b: String) {}
-    pub fn ne_fail(&mut self, arg_index: usize, a: String, b: String) {}
+    /// Register failure to match a pattern
+    pub fn pat_fail(&mut self, arg_index: usize, pat: &'static str) {
+        self.arg_failures
+            .push((ArgIndex(arg_index), pat.to_string()));
+    }
+
+    /// Register failure for an eq check
+    pub fn eq_fail(&mut self, arg_index: usize, a: String, b: String) {
+        self.arg_failures
+            .push((ArgIndex(arg_index), format!("{a} did not equal {b}")));
+    }
+
+    /// Register failure for an ne check
+    pub fn ne_fail(&mut self, arg_index: usize, a: String, b: String) {
+        self.arg_failures
+            .push((ArgIndex(arg_index), format!("{a} did equal {b}")));
+    }
 }
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.

@@ -1,7 +1,7 @@
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
 use crate::error::{MockError, MockResult};
-use crate::macro_api::MatchDebug;
+use crate::macro_api::MatchDebugger;
 use crate::output::Respond;
 use crate::*;
 
@@ -10,6 +10,9 @@ use std::sync::Mutex;
 
 #[derive(Clone, Copy)]
 pub(crate) struct PatIndex(pub usize);
+
+#[derive(Clone, Copy)]
+pub(crate) struct ArgIndex(pub usize);
 
 impl std::fmt::Display for PatIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,7 +34,11 @@ pub(crate) struct CallPattern {
 }
 
 impl CallPattern {
-    pub fn match_inputs<F: MockFn>(&self, inputs: &F::Inputs<'_>) -> MockResult<bool> {
+    pub fn match_inputs<F: MockFn>(
+        &self,
+        inputs: &F::Inputs<'_>,
+        match_debug: Option<&mut MatchDebugger>,
+    ) -> MockResult<bool> {
         match &self.input_matcher.dyn_matching_fn {
             DynMatchingFn::Matching(f) => {
                 let func: &MatchingFn<F> = downcast_box(&f, F::NAME)?;
@@ -39,9 +46,14 @@ impl CallPattern {
             }
             DynMatchingFn::MatchingDebug(f) => {
                 let func: &MatchingFnDebug<F> = downcast_box(&f, F::NAME)?;
-                let mut match_debug = MatchDebug::new();
+                match match_debug {
+                    Some(match_debug) => Ok((func.0)(inputs, match_debug)),
+                    None => {
+                        let mut disabled_debug = MatchDebugger::new_disabled();
 
-                Ok((func.0)(inputs, &mut match_debug))
+                        Ok((func.0)(inputs, &mut disabled_debug))
+                    }
+                }
             }
             DynMatchingFn::None => Err(MockError::NoMatcherFunction { name: F::NAME }),
         }
@@ -96,7 +108,7 @@ impl<F: MockFn> MatchingFn<F> {}
 
 pub(crate) struct MatchingFnDebug<F: MockFn>(
     #[allow(clippy::type_complexity)]
-    pub  Box<dyn (for<'i> Fn(&F::Inputs<'i>, &mut MatchDebug) -> bool) + Send + Sync>,
+    pub  Box<dyn (for<'i> Fn(&F::Inputs<'i>, &mut MatchDebugger) -> bool) + Send + Sync>,
 );
 
 pub(crate) struct DynCallOrderResponder {

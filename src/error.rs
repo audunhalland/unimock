@@ -1,6 +1,31 @@
-use crate::debug;
+use std::vec;
+
+use crate::{
+    call_pattern::{ArgIndex, PatIndex},
+    debug,
+    macro_api::MatchDebugger,
+};
 
 pub(crate) type MockResult<T> = Result<T, MockError>;
+
+#[derive(Clone)]
+pub(crate) struct Mismatches {
+    arg_failures: Vec<(PatIndex, ArgIndex, String)>,
+}
+
+impl Mismatches {
+    pub fn new() -> Self {
+        Self {
+            arg_failures: vec![],
+        }
+    }
+
+    pub fn push_debug(&mut self, pat_index: PatIndex, match_debugger: MatchDebugger) {
+        for (arg_index, message) in match_debugger.arg_failures {
+            self.arg_failures.push((pat_index, arg_index, message));
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) enum MockError {
@@ -15,6 +40,7 @@ pub(crate) enum MockError {
     },
     NoMatchingCallPatterns {
         fn_call: debug::FnActualCall,
+        mismatches: Mismatches,
     },
     NoOutputAvailableForCallPattern {
         fn_call: debug::FnActualCall,
@@ -32,6 +58,7 @@ pub(crate) enum MockError {
         fn_call: debug::FnActualCall,
         actual_call_order: CallOrder,
         pattern: debug::CallPatternDebug,
+        mismatches: Mismatches,
     },
     CannotReturnValueMoreThanOnce {
         fn_call: debug::FnActualCall,
@@ -60,7 +87,10 @@ impl std::fmt::Display for MockError {
             Self::NoMatcherFunction { name } => {
                 write!(f, "No function supplied for matching inputs for one of the call patterns for {name}.")
             }
-            Self::NoMatchingCallPatterns { fn_call } => {
+            Self::NoMatchingCallPatterns {
+                fn_call,
+                mismatches,
+            } => {
                 write!(f, "{fn_call}: No matching call patterns.")
             }
             Self::NoOutputAvailableForCallPattern { fn_call, pattern } => {
@@ -90,6 +120,7 @@ impl std::fmt::Display for MockError {
                 fn_call,
                 actual_call_order,
                 pattern,
+                mismatches,
             } => {
                 write!(f, "{fn_call}: Method invoked in the correct order ({actual_call_order}), but inputs didn't match {pattern}.")
             }

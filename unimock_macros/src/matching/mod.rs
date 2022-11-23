@@ -16,17 +16,17 @@ struct ArgPattern {
 }
 
 struct Arg {
-    ident: syn::Ident,
+    arg_ident: syn::Ident,
     kind: ArgKind,
 }
 
 impl Arg {
     fn render_expr(&self) -> proc_macro2::TokenStream {
-        let ident = &self.ident;
+        let arg_ident = &self.arg_ident;
         match self.kind {
-            ArgKind::LitStr => quote! { ::unimock::macro_api::as_str_ref(#ident) },
-            ArgKind::Slice => quote! { ::unimock::macro_api::as_slice(#ident) },
-            _ => quote! { #ident },
+            ArgKind::LitStr => quote! { ::unimock::macro_api::as_str_ref(#arg_ident) },
+            ArgKind::Slice => quote! { ::unimock::macro_api::as_slice(#arg_ident) },
+            _ => quote! { #arg_ident },
         }
     }
 }
@@ -69,8 +69,8 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
         .collect::<Vec<_>>();
 
     let arg_pat = concat_args_parenthesized(&args, |arg| {
-        let ident = &arg.ident;
-        quote! { #ident }
+        let arg_ident = &arg.arg_ident;
+        quote! { #arg_ident }
     });
     let arg_expr = concat_args_parenthesized(&args, |arg| arg.render_expr());
 
@@ -365,7 +365,7 @@ fn analyze_args(patterns: &[ArgPattern]) -> Vec<Arg> {
 
     for i in 0..arg_count {
         args.push(Arg {
-            ident: quote::format_ident!("a{}", i),
+            arg_ident: quote::format_ident!("a{}", i),
             kind: guess_arg_kind(i, patterns),
         });
     }
