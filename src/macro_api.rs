@@ -120,15 +120,35 @@ impl MismatchReporter {
     }
 
     /// Register failure to match a pattern
-    pub fn pat_fail(&mut self, input_index: usize, pat: &'static str) {
-        self.mismatches
-            .push((InputIndex(input_index), Mismatch::Pat));
+    pub fn pat_fail(
+        &mut self,
+        input_index: usize,
+        actual: impl Into<String>,
+        expected: impl Into<String>,
+    ) {
+        self.mismatches.push((
+            InputIndex(input_index),
+            Mismatch::Pattern {
+                actual: actual.into(),
+                expected: expected.into(),
+            },
+        ));
     }
 
     /// Register failure for an eq check
-    pub fn eq_fail(&mut self, input_index: usize, a: String, b: String) {
-        self.mismatches
-            .push((InputIndex(input_index), Mismatch::Eq(a, b)));
+    pub fn eq_fail(
+        &mut self,
+        input_index: usize,
+        actual: impl Into<String>,
+        expected: impl Into<String>,
+    ) {
+        self.mismatches.push((
+            InputIndex(input_index),
+            Mismatch::Eq {
+                actual: actual.into(),
+                expected: expected.into(),
+            },
+        ));
     }
 
     /// Register failure for an ne check

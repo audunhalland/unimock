@@ -240,6 +240,7 @@ impl ArgMatcher {
             ArgMatcher::Pattern(pat) => match &pat {
                 syn::Pat::Wild(_) => None,
                 pat => {
+                    let arg_ident = &arg.arg_ident;
                     let mut doc_string = String::new();
                     pat.doc(&mut doc_string);
 
@@ -250,7 +251,8 @@ impl ArgMatcher {
                         match #arg_expr {
                             #pat => {}
                             _ => {
-                                reporter.pat_fail(#index, #doc_lit);
+                                use ::unimock::macro_api::{ProperDebug, NoDebug};
+                                reporter.pat_fail(#index, #arg_ident.unimock_try_debug(), #doc_lit);
                             }
                         }
                     })

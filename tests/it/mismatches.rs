@@ -1,6 +1,9 @@
 use unimock::*;
 
 #[test]
+#[should_panic(
+    expected = "Trait::foo([\"a\"]): Method invoked in the correct order (1), but inputs didn't match Trait::foo([]) at tests/it/mismatches.rs:13. \nPattern mismatch for input #0 (actual / expected):\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<[\u{1b}[0m\u{1b}[1;48;5;52;31m\"a\"\u{1b}[0m\u{1b}[31m]\u{1b}[0m\n\u{1b}[32m>[]\u{1b}[0m\n"
+)]
 fn should_print_pattern_mismatch_on_call_order_failure() {
     #[unimock(api=TraitMock)]
     trait Trait {
@@ -13,7 +16,7 @@ fn should_print_pattern_mismatch_on_call_order_failure() {
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo(S { value: \"b\" }): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/mismatches.rs:31. \nInput #0:\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<S { value: \"\u{1b}[0m\u{1b}[1;48;5;52;31mb\u{1b}[0m\u{1b}[31m\" }\u{1b}[0m\n\u{1b}[32m>S { value: \"\u{1b}[0m\u{1b}[1;48;5;22;32ma\u{1b}[0m\u{1b}[32m\" }\u{1b}[0m\n"
+    expected = "Trait::foo(S { value: \"b\" }): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/mismatches.rs:34. \nEquality(eq) mismatch for input #0 (actual / expected):\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<S { value: \"\u{1b}[0m\u{1b}[1;48;5;52;31mb\u{1b}[0m\u{1b}[31m\" }\u{1b}[0m\n\u{1b}[32m>S { value: \"\u{1b}[0m\u{1b}[1;48;5;22;32ma\u{1b}[0m\u{1b}[32m\" }\u{1b}[0m\n"
 )]
 fn should_print_eq_mismatch_on_call_order_failure() {
     #[derive(Debug, Eq, PartialEq)]
@@ -41,7 +44,7 @@ fn should_print_eq_mismatch_on_call_order_failure() {
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/mismatches.rs:59. \nInput #0:\nActual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
+    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/mismatches.rs:62. \nEquality(eq) mismatch for input #0 (actual / expected):\nActual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
 )]
 fn should_print_message_about_missing_debug() {
     #[derive(Eq, PartialEq)]

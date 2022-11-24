@@ -40,20 +40,18 @@ impl Display for Mismatches {
         let is_unique_pat = self.has_unique_pat_index();
 
         for (pat_index, input_index, mismatch) in &self.mismatches {
-            if is_unique_pat {
-                write!(f, "Input #{}:\n", input_index.0)?;
-            } else {
-                write!(
-                    f,
-                    "Call pattern #{}, input #{}:\n",
-                    pat_index.0, input_index.0
-                )?;
-            }
+            let mut header_msg = HeaderMsg::new(*pat_index, *input_index, is_unique_pat);
+
             match mismatch {
-                Mismatch::Pat => {
-                    write!(f, "PAT_MISMATCH")?;
+                Mismatch::Pattern { actual, expected } => {
+                    header_msg.set_kind(MismatchKind::Pattern);
+                    write!(f, "{header_msg}")?;
+                    let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
+                    write!(f, "{comparison}")?;
                 }
-                Mismatch::Eq(actual, expected) => {
+                Mismatch::Eq { actual, expected } => {
+                    header_msg.set_kind(MismatchKind::Eq);
+                    write!(f, "{header_msg}")?;
                     if actual == expected {
                         write!(f, "Actual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
                     } else {
@@ -61,7 +59,9 @@ impl Display for Mismatches {
                         write!(f, "{comparison}")?;
                     }
                 }
-                Mismatch::Ne(a, b) => {
+                Mismatch::Ne(actual, expected) => {
+                    header_msg.set_kind(MismatchKind::Ne);
+                    write!(f, "{header_msg}")?;
                     todo!()
                 }
             }
@@ -73,7 +73,68 @@ impl Display for Mismatches {
 
 #[derive(Clone)]
 pub(crate) enum Mismatch {
-    Pat,
-    Eq(String, String),
+    Pattern { actual: String, expected: String },
+    Eq { actual: String, expected: String },
     Ne(String, String),
+}
+
+struct HeaderMsg {
+    pat_index: PatIndex,
+    input_index: InputIndex,
+    is_unique_pat: bool,
+    mismatch_kind: Option<MismatchKind>,
+}
+
+impl HeaderMsg {
+    fn new(pat_index: PatIndex, input_index: InputIndex, is_unique_pat: bool) -> Self {
+        Self {
+            pat_index,
+            input_index,
+            is_unique_pat,
+            mismatch_kind: None,
+        }
+    }
+
+    fn set_kind(&mut self, kind: MismatchKind) {
+        self.mismatch_kind = Some(kind);
+    }
+}
+
+impl Display for HeaderMsg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let initial_msg = match self.mismatch_kind {
+            Some(MismatchKind::Pattern) => "Pattern mismatch for ",
+            Some(MismatchKind::Eq) => "Equality(eq) mismatch for ",
+            Some(MismatchKind::Ne) => "Inequality(ne) mismatch for ",
+            None => "unknown",
+        };
+
+        write!(f, "{initial_msg}")?;
+
+        if self.is_unique_pat {
+            write!(f, "input #{}", self.input_index.0)?;
+        } else {
+            write!(
+                f,
+                "call pattern #{}, input #{}",
+                self.pat_index.0, self.input_index.0
+            )?;
+        }
+
+        match self.mismatch_kind {
+            Some(MismatchKind::Pattern | MismatchKind::Eq) => {
+                write!(f, " (actual / expected)")?;
+            }
+            _ => {}
+        }
+
+        write!(f, ":\n")?;
+        Ok(())
+    }
+}
+
+enum MismatchKind {
+    Pattern,
+    Eq,
+    Ne,
 }
