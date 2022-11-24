@@ -16,6 +16,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Test
         run: cargo test --all
+      - name: Test no-default-features
+        run: cargo test --no-default-features
       - name: Clippy
         run: cargo clippy -- -D warnings
 

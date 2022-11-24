@@ -48,8 +48,7 @@ impl Display for Mismatches {
                     header_msg.has_comparison = true;
                     header_msg.fmt(f)?;
 
-                    let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
-                    write!(f, "{comparison}")?;
+                    Diff::new(actual, expected).fmt(f)?;
                 }
                 Mismatch::Eq { actual, expected } => {
                     header_msg.set_kind(MismatchKind::Eq);
@@ -61,8 +60,7 @@ impl Display for Mismatches {
                         header_msg.has_comparison = true;
                         header_msg.fmt(f)?;
 
-                        let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
-                        write!(f, "{comparison}")?;
+                        Diff::new(actual, expected).fmt(f)?;
                     }
                 }
                 Mismatch::Ne { actual, expected } => {
@@ -80,8 +78,7 @@ impl Display for Mismatches {
                         header_msg.fmt(f)?;
 
                         writeln!(f, "(Warning) Debug representation problem: Expected and actual asserted inequality failed, though Debug representations differ:")?;
-                        let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
-                        write!(f, "{comparison}")?;
+                        Diff::new(actual, expected).fmt(f)?;
                     }
                 }
             }
@@ -158,4 +155,33 @@ enum MismatchKind {
     Pattern,
     Eq,
     Ne,
+}
+
+struct Diff<'s> {
+    actual: &'s str,
+    expected: &'s str,
+}
+
+impl<'s> Diff<'s> {
+    fn new(actual: &'s impl AsRef<str>, expected: &'s impl AsRef<str>) -> Self {
+        Self {
+            actual: actual.as_ref(),
+            expected: expected.as_ref(),
+        }
+    }
+}
+
+impl<'s> Display for Diff<'s> {
+    #[cfg(feature = "pretty-print")]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let comparison = pretty_assertions::StrComparison::new(self.actual, self.expected);
+        write!(f, "{comparison}")
+    }
+
+    #[cfg(not(feature = "pretty-print"))]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "  actual: {}", self.actual)?;
+        write!(f, "expected: {}", self.expected)?;
+        Ok(())
+    }
 }
