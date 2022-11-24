@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixed
 - Hygiene issue when mocking a function with an argument called `eval` which can be unmocked.
+- Using `eq!` or `ne!` as part of disjuctive input tuple in `matching!` macro.
+- Diagnostics on mismatched call patterns. Now uses a debug print solution based on `pretty_assertions`.
 
 ## [0.4.0] - 2022-11-20
 ### Changed
