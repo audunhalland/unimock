@@ -41,11 +41,11 @@ impl CallPattern {
     ) -> MockResult<bool> {
         match &self.input_matcher.dyn_matching_fn {
             DynMatchingFn::Matching(f) => {
-                let func: &MatchingFn<F> = downcast_box(&f, F::NAME)?;
+                let func: &MatchingFn<F> = downcast_box(f, F::NAME)?;
                 Ok((func.0)(inputs))
             }
             DynMatchingFn::MatchingDebug(f) => {
-                let func: &MatchingFnDebug<F> = downcast_box(&f, F::NAME)?;
+                let func: &MatchingFnDebug<F> = downcast_box(f, F::NAME)?;
                 match mismatch_reporter {
                     Some(match_debug) => Ok((func.0)(inputs, match_debug)),
                     None => {

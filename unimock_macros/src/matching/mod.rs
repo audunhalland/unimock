@@ -121,7 +121,7 @@ impl ArgPatternArm {
         Self { arg_matchers }
     }
 
-    fn render_local_defs<'s>(&'s self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
+    fn render_local_defs(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
         self.arg_matchers
             .iter()
             .filter_map(|arg_matcher| arg_matcher.render_local_def())

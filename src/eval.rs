@@ -118,10 +118,7 @@ impl<'u, 's> DynCtx<'u, 's> {
                     let mut mismatches = Mismatches::new();
                     for (pat_index, call_pattern) in fn_mocker.call_patterns.iter().enumerate() {
                         let mut mismatch_reporter = MismatchReporter::new_enabled();
-                        match match_inputs(call_pattern, Some(&mut mismatch_reporter)) {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        }
+                        let _ = match_inputs(call_pattern, Some(&mut mismatch_reporter));
                         mismatches.collect_from_reporter(PatIndex(pat_index), mismatch_reporter);
                     }
 

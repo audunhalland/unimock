@@ -34,7 +34,7 @@ impl Mismatches {
 impl Display for Mismatches {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if !self.mismatches.is_empty() {
-            write!(f, "\n")?;
+            writeln!(f)?;
         }
 
         let is_unique_pat = self.has_unique_pat_index();
@@ -79,7 +79,7 @@ impl Display for Mismatches {
                         header_msg.has_comparison = true;
                         header_msg.fmt(f)?;
 
-                        write!(f, "(Warning) Debug representation problem: Expected and actual asserted inequality failed, though Debug representations differ:\n")?;
+                        writeln!(f, "(Warning) Debug representation problem: Expected and actual asserted inequality failed, though Debug representations differ:")?;
                         let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
                         write!(f, "{comparison}")?;
                     }
@@ -143,16 +143,13 @@ impl Display for MismatchMsg {
             )?;
         }
 
-        match self.mismatch_kind {
-            Some(MismatchKind::Pattern | MismatchKind::Eq) => {
-                if self.has_comparison {
-                    write!(f, " (actual / expected)")?;
-                }
+        if let Some(MismatchKind::Pattern | MismatchKind::Eq) = self.mismatch_kind {
+            if self.has_comparison {
+                write!(f, " (actual / expected)")?;
             }
-            _ => {}
         }
 
-        write!(f, ":\n")?;
+        writeln!(f, ":")?;
         Ok(())
     }
 }
