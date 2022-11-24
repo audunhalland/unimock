@@ -40,35 +40,45 @@ impl Display for Mismatches {
         let is_unique_pat = self.has_unique_pat_index();
 
         for (pat_index, input_index, mismatch) in &self.mismatches {
-            let mut header_msg = HeaderMsg::new(*pat_index, *input_index, is_unique_pat);
+            let mut header_msg = MismatchMsg::new(*pat_index, *input_index, is_unique_pat);
 
             match mismatch {
                 Mismatch::Pattern { actual, expected } => {
                     header_msg.set_kind(MismatchKind::Pattern);
-                    write!(f, "{header_msg}")?;
+                    header_msg.has_comparison = true;
+                    header_msg.fmt(f)?;
+
                     let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
                     write!(f, "{comparison}")?;
                 }
                 Mismatch::Eq { actual, expected } => {
                     header_msg.set_kind(MismatchKind::Eq);
-                    write!(f, "{header_msg}")?;
                     if actual == expected {
+                        header_msg.fmt(f)?;
+
                         write!(f, "Actual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
                     } else {
+                        header_msg.has_comparison = true;
+                        header_msg.fmt(f)?;
+
                         let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
                         write!(f, "{comparison}")?;
                     }
                 }
                 Mismatch::Ne { actual, expected } => {
                     header_msg.set_kind(MismatchKind::Ne);
-                    write!(f, "{header_msg}")?;
                     if actual == expected {
+                        header_msg.fmt(f)?;
+
                         if actual == "?" {
                             write!(f, "Likely missing Debug representation for type: Debug representation was '?'")?;
                         } else {
                             write!(f, "{actual}")?;
                         }
                     } else {
+                        header_msg.has_comparison = true;
+                        header_msg.fmt(f)?;
+
                         write!(f, "(Warning) Debug representation problem: Expected and actual asserted inequality failed, though Debug representations differ:\n")?;
                         let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
                         write!(f, "{comparison}")?;
@@ -88,20 +98,22 @@ pub(crate) enum Mismatch {
     Ne { actual: String, expected: String },
 }
 
-struct HeaderMsg {
+struct MismatchMsg {
     pat_index: PatIndex,
     input_index: InputIndex,
     is_unique_pat: bool,
     mismatch_kind: Option<MismatchKind>,
+    has_comparison: bool,
 }
 
-impl HeaderMsg {
+impl MismatchMsg {
     fn new(pat_index: PatIndex, input_index: InputIndex, is_unique_pat: bool) -> Self {
         Self {
             pat_index,
             input_index,
             is_unique_pat,
             mismatch_kind: None,
+            has_comparison: false,
         }
     }
 
@@ -110,7 +122,7 @@ impl HeaderMsg {
     }
 }
 
-impl Display for HeaderMsg {
+impl Display for MismatchMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let initial_msg = match self.mismatch_kind {
             Some(MismatchKind::Pattern) => "Pattern mismatch for ",
@@ -133,7 +145,9 @@ impl Display for HeaderMsg {
 
         match self.mismatch_kind {
             Some(MismatchKind::Pattern | MismatchKind::Eq) => {
-                write!(f, " (actual / expected)")?;
+                if self.has_comparison {
+                    write!(f, " (actual / expected)")?;
+                }
             }
             _ => {}
         }

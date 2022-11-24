@@ -44,7 +44,7 @@ fn should_print_eq_mismatch_on_call_order_failure() {
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/mismatches.rs:62. \nEquality mismatch for input #0 (actual / expected):\nActual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
+    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/mismatches.rs:62. \nEquality mismatch for input #0:\nActual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
 )]
 fn should_print_message_about_missing_debug() {
     #[derive(Eq, PartialEq)]
@@ -124,4 +124,27 @@ fn should_complain_about_missing_debug_representation_for_inequality_mismatch() 
     u.foo(S {
         value: "a".to_string(),
     });
+}
+
+#[test]
+#[should_panic(
+    expected = "Trait::foo(?): No matching call patterns. \nPattern mismatch for call pattern #0, input #0 (actual / expected):\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<\u{1b}[0m\u{1b}[1;48;5;52;31m?\u{1b}[0m\n\u{1b}[32m>\u{1b}[0m\u{1b}[1;48;5;22;32mS(\"a\")\u{1b}[0m\nEquality mismatch for call pattern #1, input #0:\nActual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
+)]
+fn should_print_all_mismatches_on_matched_function() {
+    #[derive(Eq, PartialEq)]
+    pub struct S(&'static str);
+
+    #[unimock(api=TraitMock)]
+    trait Trait {
+        fn foo(&self, s: S);
+    }
+
+    let u = Unimock::new((
+        TraitMock::foo.some_call(matching!(S("a"))).returns(()),
+        TraitMock::foo
+            .some_call(matching!(eq!(&S("b"))))
+            .returns(()),
+    ));
+
+    u.foo(S("c"));
 }
