@@ -152,9 +152,19 @@ impl MismatchReporter {
     }
 
     /// Register failure for an ne check
-    pub fn ne_fail(&mut self, input_index: usize, a: String, b: String) {
-        self.mismatches
-            .push((InputIndex(input_index), Mismatch::Ne(a, b)));
+    pub fn ne_fail(
+        &mut self,
+        input_index: usize,
+        actual: impl Into<String>,
+        expected: impl Into<String>,
+    ) {
+        self.mismatches.push((
+            InputIndex(input_index),
+            Mismatch::Ne {
+                actual: actual.into(),
+                expected: expected.into(),
+            },
+        ));
     }
 }
 

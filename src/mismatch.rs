@@ -59,10 +59,20 @@ impl Display for Mismatches {
                         write!(f, "{comparison}")?;
                     }
                 }
-                Mismatch::Ne(actual, expected) => {
+                Mismatch::Ne { actual, expected } => {
                     header_msg.set_kind(MismatchKind::Ne);
                     write!(f, "{header_msg}")?;
-                    todo!()
+                    if actual == expected {
+                        if actual == "?" {
+                            write!(f, "Likely missing Debug representation for type: Debug representation was '?'")?;
+                        } else {
+                            write!(f, "{actual}")?;
+                        }
+                    } else {
+                        write!(f, "(Warning) Debug representation problem: Expected and actual asserted inequality failed, though Debug representations differ:\n")?;
+                        let comparison = pretty_assertions::StrComparison::new(&actual, &expected);
+                        write!(f, "{comparison}")?;
+                    }
                 }
             }
         }
@@ -75,7 +85,7 @@ impl Display for Mismatches {
 pub(crate) enum Mismatch {
     Pattern { actual: String, expected: String },
     Eq { actual: String, expected: String },
-    Ne(String, String),
+    Ne { actual: String, expected: String },
 }
 
 struct HeaderMsg {
@@ -104,8 +114,8 @@ impl Display for HeaderMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let initial_msg = match self.mismatch_kind {
             Some(MismatchKind::Pattern) => "Pattern mismatch for ",
-            Some(MismatchKind::Eq) => "Equality(eq) mismatch for ",
-            Some(MismatchKind::Ne) => "Inequality(ne) mismatch for ",
+            Some(MismatchKind::Eq) => "Equality mismatch for ",
+            Some(MismatchKind::Ne) => "Inequality mismatch for ",
             None => "unknown",
         };
 
