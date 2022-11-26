@@ -270,6 +270,15 @@
 //! It shows that unimock is merely a piece in a larger picture.
 //! To wire all of this together into a full-fledged runtime solution, without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
 //!
+//! ### Gated mock implementation
+//! If the trait definition, the uses of the trait bound and the tests all live within the same crate, it's possible to _gate_ the macro invocation:
+//!
+//! ```rust
+//! # use unimock::*;
+//! #[cfg_attr(test, unimock(api = FooMock))]
+//! trait Foo {}
+//! ```
+//!
 //! ### Combining release code and mocks: Partial mocks
 //! Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 //! For that to work, unimock needs to know how to call the "real" implementation of traits.
