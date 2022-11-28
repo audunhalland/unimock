@@ -535,14 +535,13 @@ fn newtype() {
     );
 }
 
-/*
 #[test]
 fn intricate_lifetimes() {
-    struct I<'s>(std::marker::PhantomData<&'s ()>);
+    pub struct I<'s>(std::marker::PhantomData<&'s ()>);
     #[derive(Clone)]
-    struct O<'s>(&'s String);
+    pub struct O<'s>(&'s String);
 
-    #[unimock]
+    #[unimock(api = IntricateMock)]
     trait Intricate {
         fn foo<'s, 't>(&'s self, inp: &'t I<'s>) -> &'s O<'t>;
     }
@@ -551,11 +550,14 @@ fn intricate_lifetimes() {
         i.foo(&I(std::marker::PhantomData));
     }
 
-    takes_intricate(&mock([Intricate__foo::nodebug_each_call(matching!(_))
-        //.returns_leak(O("foobar".to_string().leak()))
-        .panics("fdsjkl");
+    let u = Unimock::new(
+        IntricateMock::foo
+            .next_call(matching!(_))
+            .returns(O(Box::leak(Box::new("leaked".to_string())))),
+    );
+
+    takes_intricate(&u);
 }
-*/
 
 #[test]
 fn clause_helpers() {
@@ -624,7 +626,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:600 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:602 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());

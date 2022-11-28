@@ -226,6 +226,8 @@ struct ReturnTypeAnalyzer<'s> {
 
 #[derive(Default)]
 struct BorrowInfo {
+    self_lifetime_ident: Option<String>,
+
     has_nonstatic_lifetime: bool,
     has_elided_lifetime: bool,
     has_elided_reference: bool,
@@ -234,6 +236,15 @@ struct BorrowInfo {
     has_self_reference: bool,
     has_input_lifetime: bool,
     has_undeclared_lifetime: bool,
+}
+
+impl BorrowInfo {
+    fn equals_self_lifetime(&self, lifetime: &syn::Lifetime) -> bool {
+        match &self.self_lifetime_ident {
+            Some(ident) => lifetime.ident == ident,
+            None => false,
+        }
+    }
 }
 
 impl<'s> ReturnTypeAnalyzer<'s> {
@@ -256,6 +267,11 @@ impl<'s> ReturnTypeAnalyzer<'s> {
                 _ => match find_param_lifetime(self.sig, &lifetime.ident) {
                     Some(index) => match index {
                         0 => {
+                            if self.borrow_info.self_lifetime_ident.is_none() {
+                                self.borrow_info.self_lifetime_ident =
+                                    Some(lifetime.ident.to_string());
+                            }
+
                             self.borrow_info.has_nonstatic_lifetime = true;
                             self.borrow_info.has_self_lifetime = true;
                             self.borrow_info.has_self_reference |= is_reference;
@@ -297,7 +313,7 @@ fn rename_response_lifetimes(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
         return;
     }
 
-    rename_lifetimes(ty, "'static", &|_| true);
+    rename_lifetimes(ty, &|_| Some("'static"));
 }
 
 fn rename_output_lifetimes(
@@ -313,44 +329,54 @@ fn rename_output_lifetimes(
         OutputOwnership::Owned => {
             rename_response_lifetimes(ty, borrow_info);
         }
-        _ => rename_lifetimes(ty, "'u", &|lifetime| match lifetime {
-            Some(lifetime) => lifetime.ident != "static",
-            None => true,
+        _ => rename_lifetimes(ty, &|lifetime| match lifetime {
+            Some(lifetime) => {
+                if lifetime.ident == "static" {
+                    None
+                } else if borrow_info.equals_self_lifetime(lifetime) {
+                    Some("'u")
+                } else {
+                    Some("'static")
+                }
+            }
+            None => Some("'u"),
         }),
     }
 }
 
 fn rename_lifetimes(
     ty: &mut syn::Type,
-    name: &'static str,
-    test: &dyn Fn(Option<&syn::Lifetime>) -> bool,
+    rename_fn: &dyn Fn(Option<&syn::Lifetime>) -> Option<&'static str>,
 ) {
     struct MakeStatic<'t> {
-        name: &'static str,
-        test: &'t dyn Fn(Option<&syn::Lifetime>) -> bool,
-    }
-
-    impl<'t> MakeStatic<'t> {
-        fn renamed(&self) -> syn::Lifetime {
-            syn::Lifetime::new(self.name, proc_macro2::Span::call_site())
-        }
+        rename_fn: &'t dyn Fn(Option<&syn::Lifetime>) -> Option<&'static str>,
     }
 
     impl<'t> syn::visit_mut::VisitMut for MakeStatic<'t> {
         fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
-            if (*self.test)(reference.lifetime.as_ref()) {
-                reference.lifetime = Some(self.renamed());
+            if let Some(new_name) = (*self.rename_fn)(reference.lifetime.as_ref()) {
+                reference.lifetime =
+                    Some(syn::Lifetime::new(new_name, proc_macro2::Span::call_site()));
             }
-            syn::visit_mut::visit_type_reference_mut(self, reference);
+
+            // if (*self.test)(reference.lifetime.as_ref()) {
+            //     reference.lifetime = Some(self.renamed());
+            // }
+            // syn::visit_mut::visit_type_reference_mut(self, reference);
+            syn::visit_mut::visit_type_mut(self, &mut reference.elem);
         }
 
         fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
-            if (*self.test)(Some(lifetime)) {
-                *lifetime = self.renamed();
+            if let Some(new_name) = (*self.rename_fn)(Some(lifetime)) {
+                *lifetime = syn::Lifetime::new(new_name, proc_macro2::Span::call_site());
             }
+
+            // if (*self.test)(Some(lifetime)) {
+            //     *lifetime = self.renamed();
+            // }
             syn::visit_mut::visit_lifetime_mut(self, lifetime);
         }
     }
 
-    MakeStatic { name, test }.visit_type_mut(ty);
+    MakeStatic { rename_fn }.visit_type_mut(ty);
 }
