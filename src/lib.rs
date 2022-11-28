@@ -324,7 +324,7 @@
 //! Unimock respects the memory safety and soundness provided by Rust.
 //! Sometimes this fact can lead to less than optimal ergonomics.
 //!
-//! For example, in order to use `.returns(value)`, the value must be `Clone`, `Send`, `Sync` and `'static`.
+//! For example, in order to use `.returns(value)`, the value must (generally) implement `Clone`, `Send`, `Sync` and `'static`.
 //! If it's not all of those things, the slightly longer `.answers(|_| value)` can be used instead.
 //!
 //! #### Keep the amount of generated code to a minimum
