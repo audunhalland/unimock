@@ -1,10 +1,44 @@
+use quote::quote;
 use syn::visit_mut::VisitMut;
 
 pub struct OutputStructure<'t> {
     pub wrapping: OutputWrapping<'t>,
     pub ownership: OutputOwnership,
-    pub response_ty: Option<syn::Type>,
-    pub output_ty: Option<syn::Type>,
+    response_ty: AssociatedInnerType,
+    output_ty: AssociatedInnerType,
+}
+
+impl<'t> OutputStructure<'t> {
+    pub fn response_associated_type(&self, prefix: &syn::Path) -> proc_macro2::TokenStream {
+        self.render_associated_type(prefix, &self.response_ty)
+    }
+
+    pub fn output_associated_type(&self, prefix: &syn::Path) -> proc_macro2::TokenStream {
+        self.render_associated_type(prefix, &self.output_ty)
+    }
+
+    fn render_associated_type(
+        &self,
+        prefix: &syn::Path,
+        associated_type: &AssociatedInnerType,
+    ) -> proc_macro2::TokenStream {
+        let inner = match associated_type {
+            AssociatedInnerType::SameAsResponse => {
+                return quote! { Self::Response };
+            }
+            AssociatedInnerType::Unit => {
+                quote! { () }
+            }
+            AssociatedInnerType::Typed(inner_type) => {
+                quote! { #inner_type }
+            }
+        };
+
+        let response_type_ident = self.ownership.response_type_ident();
+        quote! {
+            #prefix::output::#response_type_ident<#inner>
+        }
+    }
 }
 
 pub enum OutputWrapping<'t> {
@@ -22,6 +56,10 @@ pub enum OutputOwnership {
 }
 
 impl OutputOwnership {
+    fn response_type_ident(&self) -> syn::Ident {
+        syn::Ident::new(self.response_typename(), proc_macro2::Span::call_site())
+    }
+
     pub fn response_typename(&self) -> &'static str {
         match self {
             Self::Owned => "Owned",
@@ -36,35 +74,42 @@ impl OutputOwnership {
 pub fn determine_output_structure<'t>(
     item_trait: &'t syn::ItemTrait,
     sig: &'t syn::Signature,
-    ty: &'t syn::Type,
 ) -> OutputStructure<'t> {
-    match ty {
-        syn::Type::Reference(type_reference) => {
-            let mut response_ty = *type_reference.elem.clone();
-            let mut output_ty = response_ty.clone();
+    match &sig.output {
+        syn::ReturnType::Default => OutputStructure {
+            wrapping: OutputWrapping::None,
+            ownership: OutputOwnership::Owned,
+            response_ty: AssociatedInnerType::Unit,
+            output_ty: AssociatedInnerType::Unit,
+        },
+        syn::ReturnType::Type(_, ty) => match ty.as_ref() {
+            syn::Type::Reference(type_reference) => {
+                let mut inner_ty = *type_reference.elem.clone();
 
-            let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut response_ty);
-            let ownership = determine_reference_ownership(sig, type_reference);
+                let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
+                let ownership = determine_reference_ownership(sig, type_reference);
 
-            rename_response_lifetimes(&mut response_ty, &borrow_info);
-            rename_output_lifetimes(&mut output_ty, &borrow_info, ownership);
-
-            OutputStructure {
-                wrapping: OutputWrapping::None,
-                ownership: determine_reference_ownership(sig, type_reference),
-                response_ty: Some(response_ty),
-                output_ty: Some(output_ty),
+                OutputStructure {
+                    wrapping: OutputWrapping::None,
+                    ownership: determine_reference_ownership(sig, type_reference),
+                    response_ty: AssociatedInnerType::new_static(inner_ty, &borrow_info),
+                    output_ty: AssociatedInnerType::new_gat(
+                        *type_reference.elem.clone(),
+                        &borrow_info,
+                        ownership,
+                    ),
+                }
             }
-        }
-        syn::Type::Path(path)
-            if path.qself.is_none()
-                && is_self_segment(path.path.segments.first())
-                && (path.path.segments.len() == 2) =>
-        {
-            determine_associated_future_structure(item_trait, sig, &path.path)
-                .unwrap_or_else(|| determine_owned_or_mixed_output_structure(sig, ty))
-        }
-        _ => determine_owned_or_mixed_output_structure(sig, ty),
+            syn::Type::Path(path)
+                if path.qself.is_none()
+                    && is_self_segment(path.path.segments.first())
+                    && (path.path.segments.len() == 2) =>
+            {
+                determine_associated_future_structure(item_trait, sig, &path.path)
+                    .unwrap_or_else(|| determine_owned_or_mixed_output_structure(sig, ty))
+            }
+            _ => determine_owned_or_mixed_output_structure(sig, ty),
+        },
     }
 }
 
@@ -73,20 +118,23 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
     sig: &'t syn::Signature,
     ty: &'t syn::Type,
 ) -> OutputStructure<'t> {
-    let mut response_ty = ty.clone();
-    let mut output_ty = ty.clone();
+    let mut inner_ty = ty.clone();
 
-    let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut response_ty);
-    let ownership = determine_mixed_ownership(&borrow_info);
+    let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
 
-    rename_response_lifetimes(&mut response_ty, &borrow_info);
-    rename_output_lifetimes(&mut output_ty, &borrow_info, ownership);
+    let ownership = if borrow_info.has_input_lifetime {
+        OutputOwnership::Owned
+    } else if borrow_info.has_elided_reference || borrow_info.has_self_reference {
+        OutputOwnership::Mixed
+    } else {
+        OutputOwnership::Owned
+    };
 
     OutputStructure {
         wrapping: OutputWrapping::None,
         ownership,
-        response_ty: Some(response_ty),
-        output_ty: Some(output_ty),
+        response_ty: AssociatedInnerType::new_static(inner_ty, &borrow_info),
+        output_ty: AssociatedInnerType::new_gat(ty.clone(), &borrow_info, ownership),
     }
 }
 
@@ -184,16 +232,6 @@ fn determine_reference_ownership(
     }
 }
 
-fn determine_mixed_ownership(borrow_info: &BorrowInfo) -> OutputOwnership {
-    if borrow_info.has_input_lifetime {
-        OutputOwnership::Owned
-    } else if borrow_info.has_elided_reference || borrow_info.has_self_reference {
-        OutputOwnership::Mixed
-    } else {
-        OutputOwnership::Owned
-    }
-}
-
 fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Option<usize> {
     for (index, fn_arg) in sig.inputs.iter().enumerate() {
         match fn_arg {
@@ -217,6 +255,62 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
     }
 
     None
+}
+
+enum AssociatedInnerType {
+    Unit,
+    Typed(syn::Type),
+    SameAsResponse,
+}
+
+impl AssociatedInnerType {
+    fn new_static(mut inner_type: syn::Type, borrow_info: &BorrowInfo) -> Self {
+        if borrow_info.has_nonstatic_lifetime {
+            rename_lifetimes(&mut inner_type, &mut |_| Some("'static"));
+        }
+
+        Self::Typed(inner_type)
+    }
+
+    fn new_gat(
+        mut inner_type: syn::Type,
+        borrow_info: &BorrowInfo,
+        ownership: OutputOwnership,
+    ) -> Self {
+        if borrow_info.has_nonstatic_lifetime {
+            match ownership {
+                OutputOwnership::Owned => Self::new_static(inner_type, borrow_info),
+                _ => {
+                    let mut needs_lifetime_gat = false;
+
+                    rename_lifetimes(&mut inner_type, &mut |lifetime| match lifetime {
+                        Some(lifetime) => {
+                            if lifetime.ident == "static" {
+                                None
+                            } else if borrow_info.equals_self_lifetime(lifetime) {
+                                needs_lifetime_gat = true;
+                                Some("'u")
+                            } else {
+                                Some("'static")
+                            }
+                        }
+                        None => {
+                            needs_lifetime_gat = true;
+                            Some("'u")
+                        }
+                    });
+
+                    if needs_lifetime_gat {
+                        Self::Typed(inner_type)
+                    } else {
+                        Self::SameAsResponse
+                    }
+                }
+            }
+        } else {
+            Self::SameAsResponse
+        }
+    }
 }
 
 struct ReturnTypeAnalyzer<'s> {
@@ -308,61 +402,21 @@ impl<'s> syn::visit_mut::VisitMut for ReturnTypeAnalyzer<'s> {
     }
 }
 
-fn rename_response_lifetimes(ty: &mut syn::Type, borrow_info: &BorrowInfo) {
-    if !borrow_info.has_nonstatic_lifetime {
-        return;
-    }
-
-    rename_lifetimes(ty, &|_| Some("'static"));
-}
-
-fn rename_output_lifetimes(
-    ty: &mut syn::Type,
-    borrow_info: &BorrowInfo,
-    ownership: OutputOwnership,
-) {
-    if !borrow_info.has_nonstatic_lifetime {
-        return;
-    }
-
-    match ownership {
-        OutputOwnership::Owned => {
-            rename_response_lifetimes(ty, borrow_info);
-        }
-        _ => rename_lifetimes(ty, &|lifetime| match lifetime {
-            Some(lifetime) => {
-                if lifetime.ident == "static" {
-                    None
-                } else if borrow_info.equals_self_lifetime(lifetime) {
-                    Some("'u")
-                } else {
-                    Some("'static")
-                }
-            }
-            None => Some("'u"),
-        }),
-    }
-}
-
 fn rename_lifetimes(
     ty: &mut syn::Type,
-    rename_fn: &dyn Fn(Option<&syn::Lifetime>) -> Option<&'static str>,
+    rename_fn: &mut dyn FnMut(Option<&syn::Lifetime>) -> Option<&'static str>,
 ) {
-    struct MakeStatic<'t> {
-        rename_fn: &'t dyn Fn(Option<&syn::Lifetime>) -> Option<&'static str>,
+    struct Rename<'t> {
+        rename_fn: &'t mut dyn FnMut(Option<&syn::Lifetime>) -> Option<&'static str>,
     }
 
-    impl<'t> syn::visit_mut::VisitMut for MakeStatic<'t> {
+    impl<'t> syn::visit_mut::VisitMut for Rename<'t> {
         fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
             if let Some(new_name) = (*self.rename_fn)(reference.lifetime.as_ref()) {
                 reference.lifetime =
                     Some(syn::Lifetime::new(new_name, proc_macro2::Span::call_site()));
             }
 
-            // if (*self.test)(reference.lifetime.as_ref()) {
-            //     reference.lifetime = Some(self.renamed());
-            // }
-            // syn::visit_mut::visit_type_reference_mut(self, reference);
             syn::visit_mut::visit_type_mut(self, &mut reference.elem);
         }
 
@@ -371,12 +425,9 @@ fn rename_lifetimes(
                 *lifetime = syn::Lifetime::new(new_name, proc_macro2::Span::call_site());
             }
 
-            // if (*self.test)(Some(lifetime)) {
-            //     *lifetime = self.renamed();
-            // }
             syn::visit_mut::visit_lifetime_mut(self, lifetime);
         }
     }
 
-    MakeStatic { rename_fn }.visit_type_mut(ty);
+    Rename { rename_fn }.visit_type_mut(ty);
 }

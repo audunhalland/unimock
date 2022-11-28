@@ -124,17 +124,7 @@ pub fn extract_methods<'s>(
                 item_trait.ident.span(),
             );
 
-            let output_structure = match &method.sig.output {
-                syn::ReturnType::Default => output::OutputStructure {
-                    wrapping: output::OutputWrapping::None,
-                    ownership: output::OutputOwnership::Owned,
-                    response_ty: None,
-                    output_ty: None,
-                },
-                syn::ReturnType::Type(_, ty) => {
-                    output::determine_output_structure(item_trait, &method.sig, ty)
-                }
-            };
+            let output_structure = output::determine_output_structure(item_trait, &method.sig);
 
             Ok(Some(MockMethod {
                 method,

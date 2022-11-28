@@ -159,18 +159,8 @@ fn def_mock_fn(
         method.mockfn_doc_attrs(trait_info.ident())
     };
 
-    let response_ty = match &method.output_structure.response_ty {
-        Some(ty) => quote! { #ty },
-        None => quote! { () },
-    };
-    let output_ty = match &method.output_structure.output_ty {
-        Some(ty) => quote! { #ty },
-        None => quote! { () },
-    };
-    let response_typename = syn::Ident::new(
-        method.output_structure.ownership.response_typename(),
-        proc_macro2::Span::call_site(),
-    );
+    let response_associated_type = method.output_structure.response_associated_type(prefix);
+    let output_associated_type = method.output_structure.output_associated_type(prefix);
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
@@ -185,8 +175,8 @@ fn def_mock_fn(
     let impl_blocks = quote! {
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
-            type Response = #prefix::output::#response_typename<#response_ty>;
-            type Output<'u> = #prefix::output::#response_typename<#output_ty>;
+            type Response = #response_associated_type;
+            type Output<'u> = #output_associated_type;
             const NAME: &'static str = #mock_fn_name;
 
             #debug_inputs_fn
@@ -212,7 +202,7 @@ fn def_mock_fn(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = (#(#inputs_tuple),*),
-                        Response = #prefix::output::#response_typename<#response_ty>,
+                        Response = #response_associated_type,
                     >
                         #where_clause
                     {
