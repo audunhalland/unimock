@@ -536,9 +536,8 @@ fn newtype() {
 }
 
 #[test]
-fn intricate_lifetimes() {
+fn borrow_intricate_lifetimes() {
     pub struct I<'s>(std::marker::PhantomData<&'s ()>);
-    #[derive(Clone)]
     pub struct O<'s>(&'s String);
 
     #[unimock(api = IntricateMock)]
@@ -552,7 +551,7 @@ fn intricate_lifetimes() {
 
     let u = Unimock::new(
         IntricateMock::foo
-            .next_call(matching!(_))
+            .next_call(matching!(I(_)))
             .returns(O(Box::leak(Box::new("leaked".to_string())))),
     );
 
