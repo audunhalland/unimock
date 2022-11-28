@@ -38,9 +38,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
         input_debugger: &|| F::debug_inputs(&inputs),
     };
 
-    match dyn_ctx
-        .eval_dyn(&|pattern, match_debug| pattern.match_inputs::<F>(&inputs, match_debug))?
-    {
+    match dyn_ctx.eval_dyn(&|pattern, reporter| pattern.match_inputs::<F>(&inputs, reporter))? {
         EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
             DynResponder::Cell(inner) => match inner.downcast::<F>()?.cell.try_take() {
                 Some(response) => {

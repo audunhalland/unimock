@@ -72,26 +72,26 @@ mod owned {
         type Type = T;
     }
 
-    impl<I, T: Send + Sync + 'static> IntoResponseOnce<Owned<T>> for I
+    impl<T0, T: Send + Sync + 'static> IntoResponseOnce<Owned<T>> for T0
     where
-        I: Into<T>,
+        T0: Into<T>,
     {
         fn into_response(self) -> <Owned<T> as Respond>::Type {
             self.into()
         }
 
         fn into_once_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
-            let output = <I as IntoResponseOnce<Owned<T>>>::into_response(self);
+            let output = <T0 as IntoResponseOnce<Owned<T>>>::into_response(self);
             Responder(DynResponder::new_cell::<F>(output))
         }
     }
 
-    impl<I, T: Clone + Send + Sync + 'static> IntoResponseClone<Owned<T>> for I
+    impl<T0, T: Clone + Send + Sync + 'static> IntoResponseClone<Owned<T>> for T0
     where
-        I: Into<T>,
+        T0: Into<T>,
     {
         fn into_clone_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
-            let output = <I as IntoResponseOnce<Owned<T>>>::into_response(self);
+            let output = <T0 as IntoResponseOnce<Owned<T>>>::into_response(self);
             Responder(DynResponder::new_clone_cell::<F>(output))
         }
     }

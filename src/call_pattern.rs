@@ -47,7 +47,7 @@ impl CallPattern {
             DynMatchingFn::MatchingDebug(f) => {
                 let func: &MatchingFnDebug<F> = downcast_box(f, F::NAME)?;
                 match mismatch_reporter {
-                    Some(match_debug) => Ok((func.0)(inputs, match_debug)),
+                    Some(reporter) => Ok((func.0)(inputs, reporter)),
                     None => {
                         let mut disabled_reporter = MismatchReporter::new_disabled();
 

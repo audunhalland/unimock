@@ -15,8 +15,8 @@ impl Mismatches {
         Self { mismatches: vec![] }
     }
 
-    pub fn collect_from_reporter(&mut self, pat_index: PatIndex, match_debugger: MismatchReporter) {
-        for (input_index, mismatch) in match_debugger.mismatches {
+    pub fn collect_from_reporter(&mut self, pat_index: PatIndex, reporter: MismatchReporter) {
+        for (input_index, mismatch) in reporter.mismatches {
             self.mismatches.push((pat_index, input_index, mismatch));
         }
     }
