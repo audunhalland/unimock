@@ -284,6 +284,8 @@ Although this can be implemented with unimock directly, it works best with a hig
 ##### What kinds of traits or methods cannot be mocked?
 * Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
 * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
+* Methods receiving `&mut` arguments other than `&mut self`.
+    It _might_ work, but is currently unsupported due to stricter lifetime constraints that is harder to express via generics.
 
 #### Selecting a name for the mock `api`
 Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
@@ -305,7 +307,7 @@ This will make it easier to discover the API, as it shares a common prefix with 
 Unimock respects the memory safety and soundness provided by Rust.
 Sometimes this fact can lead to less than optimal ergonomics.
 
-For example, in order to use `.returns(value)`, the value must be `Clone`, `Send`, `Sync` and `'static`.
+For example, in order to use `.returns(value)`, the value must (generally) implement `Clone`, `Send`, `Sync` and `'static`.
 If it's not all of those things, the slightly longer `.answers(|_| value)` can be used instead.
 
 ##### Keep the amount of generated code to a minimum
