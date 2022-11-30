@@ -303,6 +303,8 @@
 //! #### What kinds of traits or methods cannot be mocked?
 //! * Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
 //! * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
+//! * Methods receiving `&mut` arguments other than `&mut self`.
+//!     It _might_ work, but is currently unsupported due to stricter lifetime constraints that is harder to express via generics.
 //!
 //! ### Selecting a name for the mock `api`
 //! Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),

@@ -84,14 +84,21 @@ mod exotic_self_types {
         fn foo(self);
     }
 
-    #[unimock]
+    #[unimock(api=MutSelfMock)]
     trait MutSelf {
-        fn foo(&mut self);
+        fn mut_self(&mut self);
     }
 
     #[unimock(api=RcSelfMock)]
     trait RcSelf {
         fn rc_self(self: Rc<Self>);
+    }
+
+    #[test]
+    fn mut_self() {
+        let mut u = Unimock::new(MutSelfMock::mut_self.each_call(matching!()).returns(()));
+
+        u.mut_self();
     }
 
     #[test]
@@ -397,7 +404,7 @@ mod custom_api_module {
 
     #[test]
     #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:405 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:412 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
         Unimock::new(
@@ -625,7 +632,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:601 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:608 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
