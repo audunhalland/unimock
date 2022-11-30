@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [0.4.4] - 2022-11-30
 ### Changed
 - The unimock macro now generates `Output<'u> = Self::Response;` in MockFn if the Response and Output types are the same type. This is a backwards compatible change.
 - Order of keywords in Cargo.toml.
