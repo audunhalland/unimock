@@ -1,13 +1,13 @@
 [package]
 name = "unimock"
-version = "0.4.3"
+version = "0.4.4"
 authors = ["Audun Halland <audun.halland@pm.me>"]
 edition = "2021"
 rust-version = "1.65"
 license = "MIT"
 description = "A versatile and developer-friendly trait mocking library"
 repository = "https://github.com/audunhalland/unimock/"
-keywords = ["test", "testing", "mock", "mocking"]
+keywords = ["mocking", "mock", "testing", "test"]
 categories = ["development-tools", "development-tools::testing"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,7 +18,7 @@ pretty-print = ["dep:pretty_assertions"]
 nightly-tests = []
 
 [dependencies]
-unimock_macros = { path = "unimock_macros", version = "0.4.3" }
+unimock_macros = { path = "unimock_macros", version = "0.4.4" }
 lazycell = "1"
 pretty_assertions = { version = "1.3", optional = true }
 
