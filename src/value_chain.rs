@@ -1,13 +1,13 @@
 use std::any::Any;
 
-use lazycell::AtomicLazyCell;
+use once_cell::sync::OnceCell;
 
 /// A collection that can store values, but never remove them until dropped.
 ///
 /// This allows retaining shared references to inserted values.
 #[derive(Default)]
 pub struct ValueChain {
-    root_node: AtomicLazyCell<Node>,
+    root_node: OnceCell<Node>,
 }
 
 impl ValueChain {
@@ -17,25 +17,39 @@ impl ValueChain {
         node.value.as_ref().downcast_ref::<T>().unwrap()
     }
 
-    fn push_node(&self, new_node: Node) -> &Node {
-        if let Err(mut new_node) = self.root_node.fill(new_node) {
-            let mut parent_node = self.root_node.borrow().unwrap();
-
-            while let Err(node) = parent_node.next.fill(new_node) {
-                parent_node = parent_node.next.borrow().unwrap();
-                new_node = node;
+    fn push_node(&self, mut new_node: Node) -> &Node {
+        let mut cell = &self.root_node;
+        loop {
+            match cell.try_insert(new_node) {
+                Ok(new_node) => {
+                    return new_node;
+                }
+                Err((parent_node, node)) => {
+                    new_node = node;
+                    cell = &parent_node.next;
+                }
             }
+        }
+    }
+}
 
-            parent_node.next.borrow().unwrap()
-        } else {
-            self.root_node.borrow().unwrap()
+impl Drop for ValueChain {
+    fn drop(&mut self) {
+        if let Some(node) = self.root_node.take() {
+            drop(node.value);
+            let mut cell = node.next;
+
+            while let Some(node) = cell.take() {
+                drop(node.value);
+                cell = node.next;
+            }
         }
     }
 }
 
 struct Node {
     value: Box<dyn Any + Send + Sync>,
-    next: Box<AtomicLazyCell<Node>>,
+    next: Box<OnceCell<Node>>,
 }
 
 impl Node {

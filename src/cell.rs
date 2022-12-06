@@ -1,3 +1,5 @@
+use once_cell::sync::OnceCell;
+
 pub(crate) trait Cell<T: ?Sized + 'static>: Send + Sync {
     fn try_take(&self) -> Option<Box<T>>;
 
@@ -18,14 +20,14 @@ impl<T: Clone + Send + Sync + 'static> Cell<T> for CloneCell<T> {
 
 pub(crate) struct FactoryCell<T> {
     factory: Box<dyn Fn() -> Option<T> + Send + Sync + 'static>,
-    borrowed_value: lazycell::AtomicLazyCell<T>,
+    borrowed_value: OnceCell<T>,
 }
 
 impl<T> FactoryCell<T> {
     pub fn new(factory: impl Fn() -> Option<T> + Send + Sync + 'static) -> Self {
         Self {
             factory: Box::new(factory),
-            borrowed_value: lazycell::AtomicLazyCell::new(),
+            borrowed_value: OnceCell::new(),
         }
     }
 }
@@ -36,20 +38,18 @@ impl<T: Send + Sync + 'static> Cell<T> for FactoryCell<T> {
     }
 
     fn borrow(&self) -> &T {
-        if let Some(value) = self.borrowed_value.borrow() {
+        if let Some(value) = self.borrowed_value.get() {
             return value;
         }
 
         {
             if let Some(value) = (*self.factory)() {
-                if self.borrowed_value.fill(value).is_err() {
+                if self.borrowed_value.set(value).is_err() {
                     panic!("Tried to set borrowed value twice");
                 }
             }
         }
 
-        self.borrowed_value
-            .borrow()
-            .expect("Tried to borrow a value that has already been taken")
+        self.borrowed_value.wait()
     }
 }
