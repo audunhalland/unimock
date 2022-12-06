@@ -50,6 +50,8 @@ impl<T: Send + Sync + 'static> Cell<T> for FactoryCell<T> {
             }
         }
 
-        self.borrowed_value.wait()
+        self.borrowed_value
+            .get()
+            .expect("Tried to borrow a value that has already been taken")
     }
 }
