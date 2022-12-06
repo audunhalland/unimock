@@ -5,7 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-- Use `once_cell` instead of `lazycell`.
+### Changed
+- Now depends on `once_cell` instead of `lazycell` internally.
+### Fixed
+- Theoretical stack overflow when dropping unimock (in case of many borrowed return values).
 
 ## [0.4.4] - 2022-11-30
 ### Changed
