@@ -108,17 +108,14 @@ fn find_sig_base_lifetimes(method_sig: &syn::Signature) -> Option<HashSet<String
 
     if let Some(where_clause) = &method_sig.generics.where_clause {
         for predicate in &where_clause.predicates {
-            match predicate {
-                syn::WherePredicate::Lifetime(lt_predicate) => {
-                    let entry = lifetime_bound_map
-                        .entry(lt_predicate.lifetime.to_string())
-                        .or_default();
+            if let syn::WherePredicate::Lifetime(lt_predicate) = predicate {
+                let entry = lifetime_bound_map
+                    .entry(lt_predicate.lifetime.to_string())
+                    .or_default();
 
-                    for bound in &lt_predicate.bounds {
-                        entry.insert(bound.to_string());
-                    }
+                for bound in &lt_predicate.bounds {
+                    entry.insert(bound.to_string());
                 }
-                _ => {}
             }
         }
     }
