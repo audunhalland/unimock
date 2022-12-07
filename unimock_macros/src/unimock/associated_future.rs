@@ -101,7 +101,7 @@ fn find_sig_base_lifetimes(method_sig: &syn::Signature) -> Option<HashSet<String
                 def.bounds
                     .iter()
                     .map(|lifetime| lifetime.to_string())
-                    .collect::<HashSet<_>>(),
+                    .collect(),
             )
         })
         .collect::<HashMap<String, HashSet<String>>>();
@@ -120,6 +120,9 @@ fn find_sig_base_lifetimes(method_sig: &syn::Signature) -> Option<HashSet<String
         }
     }
 
+    // Remove keys that outlive other lifetimes:
+    lifetime_bound_map.retain(|_, bounds| bounds.is_empty());
+
     let mut unused_lifetimes_searcher = UnusedLifetimesSearcher {
         unused_lifetimes: lifetime_bound_map.keys().cloned().collect(),
     };
@@ -132,7 +135,12 @@ fn find_sig_base_lifetimes(method_sig: &syn::Signature) -> Option<HashSet<String
     if unused_lifetimes_searcher.unused_lifetimes.is_empty() {
         None
     } else {
-        Some(unused_lifetimes_searcher.unused_lifetimes)
+        Some(
+            unused_lifetimes_searcher
+                .unused_lifetimes
+                .into_iter()
+                .collect(),
+        )
     }
 }
 
