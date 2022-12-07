@@ -1,5 +1,6 @@
 use quote::quote;
 
+mod associated_future;
 mod attr;
 mod method;
 mod output;
@@ -40,7 +41,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
     let associated_futures = trait_info
         .methods
         .iter()
-        .filter_map(|method| def_associated_future(method.as_ref()));
+        .filter_map(|method| associated_future::def_associated_future(method.as_ref()));
     let method_impls = trait_info
         .methods
         .iter()
@@ -294,25 +295,5 @@ fn def_method_impl(
         #method_sig {
             #body
         }
-    }
-}
-
-fn def_associated_future(method: Option<&method::MockMethod>) -> Option<proc_macro2::TokenStream> {
-    match method?.output_structure.wrapping {
-        output::OutputWrapping::ImplTraitFuture(trait_item_type) => {
-            let ident = &trait_item_type.ident;
-            let generics = &trait_item_type.generics;
-            let bounds = &trait_item_type.bounds;
-
-            let outlives = generics.lifetimes().map(|lifetime_def| {
-                let lifetime = &lifetime_def.lifetime;
-                quote! { + #lifetime }
-            });
-
-            Some(quote! {
-                type #ident #generics = impl #bounds #(#outlives)*;
-            })
-        }
-        _ => None,
     }
 }

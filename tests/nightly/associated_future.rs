@@ -51,12 +51,9 @@ mod with_unmock {
 mod reference_argument_works_with_explicit_lifetime {
     use super::*;
 
-    #[derive(Clone)]
-    pub struct Error;
-
     #[unimock]
     trait WithoutReturning {
-        type Fut<'s>: ::core::future::Future<Output = Result<String, Error>> + Send
+        type Fut<'s>: ::core::future::Future<Output = Result<String, ()>> + Send
         where
             Self: 's;
 
@@ -66,35 +63,53 @@ mod reference_argument_works_with_explicit_lifetime {
     struct TestReturnSelf {
         value: String,
     }
-    struct TestReturnArg;
 
-    #[unimock]
+    #[unimock(api = ReturnRefMock)]
     trait ReturnRef {
-        type Fut<'s>: ::core::future::Future<Output = Result<&'s str, Error>> + Send
+        type Fut<'a, 's>: ::core::future::Future<Output = Result<&'s str, ()>> + Send + 'a
         where
-            Self: 's;
+            's: 'a,
+            Self: 's + 'a;
 
-        fn return_ref<'s, 'i: 's>(&'s self, input: &'i str) -> Self::Fut<'s>;
+        fn return_ref<'s, 'i, 'a>(&'s self, input: &'i str) -> Self::Fut<'a, 's>
+        where
+            's: 'a,
+            'i: 'a,
+            Self: 'a;
     }
 
     impl ReturnRef for TestReturnSelf {
-        type Fut<'s>: = impl ::core::future::Future<Output = Result<&'s str, Error>> + Send
-        where
-            Self: 's;
+        type Fut<'a, 's: 'a> =
+            impl ::core::future::Future<Output = Result<&'s str, ()>> + Send + 'a + 's;
 
-        fn return_ref<'s, 'i: 's>(&'s self, _: &'i str) -> Self::Fut<'s> {
-            async move { Ok(self.value.as_str()) }
+        fn return_ref<'s, 'i, 'a>(&'s self, _: &'i str) -> Self::Fut<'a, 's>
+        where
+            's: 'a,
+            'i: 'a,
+            Self: 'a,
+        {
+            async move { Ok(self.value.as_ref()) }
         }
     }
 
-    impl ReturnRef for TestReturnArg {
-        type Fut<'s>: = impl ::core::future::Future<Output = Result<&'s str, Error>> + Send
-        where
-            Self: 's;
+    async fn wrap_return_ref<'s>(deps: &'s impl ReturnRef, input: &str) -> Result<&'s str, ()> {
+        deps.return_ref(input).await
+    }
 
-        fn return_ref<'s, 'i: 's>(&'s self, input: &'i str) -> Self::Fut<'s> {
-            async move { Ok(input) }
-        }
+    #[tokio::test]
+    async fn test_return_ref() {
+        let return_self = TestReturnSelf {
+            value: "val".into(),
+        };
+        assert_eq!(Ok("val"), wrap_return_ref(&return_self, "lol").await);
+
+        let u = Unimock::new(
+            ReturnRefMock::return_ref
+                .next_call(matching!("foo"))
+                .returns(Ok("bar")),
+        );
+
+        assert_eq!(Ok("bar"), wrap_return_ref(&u, "foo").await);
     }
 }
 

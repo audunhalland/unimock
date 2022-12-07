@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Now depends on `once_cell` instead of `lazycell` internally.
 ### Fixed
 - Theoretical stack overflow when dropping unimock (in case of many borrowed return values).
+- A bug in code generation for `impl Future` lifetime bounds.
 
 ## [0.4.4] - 2022-11-30
 ### Changed
