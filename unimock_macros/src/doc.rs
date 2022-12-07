@@ -166,7 +166,7 @@ mod basics {
 
     impl SynDoc for syn::Ident {
         fn doc(&self, out: &mut String) {
-            let string = format!("{}", self);
+            let string = format!("{self}");
             out.push_str(&string);
         }
     }

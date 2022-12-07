@@ -174,11 +174,11 @@ impl ArgMatcher {
                 Some(compare_macro) => {
                     let span = pat_macro.mac.path.span();
                     let tokens = pat_macro.mac.tokens;
-                    let local_ident = syn::Ident::new(&format!("l{}", local_counter), span);
+                    let local_ident = syn::Ident::new(&format!("l{local_counter}"), span);
                     *local_counter += 1;
 
                     let pat_bind_ident =
-                        syn::Ident::new(&format!("m{}", index), pat_macro.mac.path.span());
+                        syn::Ident::new(&format!("m{index}"), pat_macro.mac.path.span());
 
                     Self::Compare(CompareMatcher {
                         span,

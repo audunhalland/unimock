@@ -194,7 +194,7 @@ pub trait NoDebug {
 
 impl<T: std::fmt::Debug> ProperDebug for T {
     fn unimock_try_debug(&self) -> String {
-        format!("{:?}", self)
+        format!("{self:?}")
     }
 }
 
@@ -207,7 +207,7 @@ impl<T> NoDebug for &T {
 /// Take a vector of strings, comma separate and put within parentheses.
 pub fn format_inputs(inputs: &[String]) -> String {
     let joined = inputs.join(", ");
-    format!("({})", joined)
+    format!("({joined})")
 }
 
 /// Convert any type implementing `AsRef<str>` to a `&str`.

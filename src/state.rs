@@ -38,7 +38,7 @@ impl SharedState {
     }
 
     pub fn prepare_panic(&self, error: error::MockError) -> String {
-        let msg = format!("{}", error);
+        let msg = format!("{error}");
 
         let mut panic_reasons = self.panic_reasons.lock().unwrap();
         panic_reasons.push(error);

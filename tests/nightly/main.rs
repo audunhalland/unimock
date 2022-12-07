@@ -2,6 +2,7 @@
 #![allow(incomplete_features)]
 #![feature(type_alias_impl_trait)]
 #![feature(async_fn_in_trait)]
+#![feature(closure_track_caller)]
 
 #[cfg(feature = "nightly-tests")]
 mod associated_future;
