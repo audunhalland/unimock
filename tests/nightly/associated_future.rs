@@ -80,7 +80,7 @@ mod reference_argument_works_with_explicit_lifetime {
 
     impl ReturnRef for TestReturnSelf {
         type Fut<'a, 's: 'a> =
-            impl ::core::future::Future<Output = Result<&'s str, ()>> + Send + 'a + 's;
+            impl ::core::future::Future<Output = Result<&'s str, ()>> + Send + 'a;
 
         fn return_ref<'s, 'i, 'a>(&'s self, _: &'i str) -> Self::Fut<'a, 's>
         where
