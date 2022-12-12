@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::doc::SynDoc;
 
 use proc_macro2::TokenStream;
@@ -31,7 +33,7 @@ impl Arg {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 enum ArgKind {
     Unknown,
     LitStr,
@@ -379,7 +381,11 @@ fn guess_arg_kind(index: usize, patterns: &[ArgPattern]) -> ArgKind {
         if index >= pattern.elems.len() {
             return ArgKind::Unknown;
         }
-        match &pattern.elems[index] {
+        pat_kind(&pattern.elems[index])
+    }
+
+    fn pat_kind(pattern: &syn::Pat) -> ArgKind {
+        match pattern {
             syn::Pat::Lit(lit) => match lit.expr.as_ref() {
                 syn::Expr::Lit(expr_lit) => match &expr_lit.lit {
                     syn::Lit::Str(_) => ArgKind::LitStr,
@@ -388,6 +394,19 @@ fn guess_arg_kind(index: usize, patterns: &[ArgPattern]) -> ArgKind {
                 _ => ArgKind::Unknown,
             },
             syn::Pat::Slice(_) => ArgKind::Slice,
+            syn::Pat::Or(pat_or) => {
+                let kinds = pat_or
+                    .cases
+                    .iter()
+                    .map(|pat| pat_kind(pat))
+                    .collect::<BTreeSet<_>>();
+
+                if kinds.len() == 1 {
+                    kinds.into_iter().next().unwrap()
+                } else {
+                    ArgKind::Unknown
+                }
+            }
             _ => ArgKind::Unknown,
         }
     }

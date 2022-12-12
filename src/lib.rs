@@ -514,8 +514,8 @@ pub use unimock_macros::unimock;
 ///
 /// fn three_strs() {
 ///     fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::three>)) {}
-///     args(matching!("a", _, "c"));
-///     args(matching!(("a", "b", "c") | ("d", "e", "f")));
+///     args(matching!("a", _, "c" | "C"));
+///     args(matching!(("a", "b", "c") | ("d", "e", "f" | "F")));
 ///     args(matching!(("a", b, "c") if b.contains("foo")));
 /// }
 /// ```

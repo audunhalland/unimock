@@ -26,3 +26,18 @@ fn matching_str_newtype_with_debug() {
 
     <Unimock as TakesEmail>::take(&u, &Email("foo@bar".to_string()));
 }
+
+#[test]
+fn matching_str_or() {
+    #[unimock(api = StringInputMock)]
+    trait StringInput {
+        fn f(&self, s: String);
+    }
+
+    let u = Unimock::new(
+        StringInputMock::f
+            .each_call(matching!("a" | "b"))
+            .returns(()),
+    );
+    u.f("a".to_string());
+}
