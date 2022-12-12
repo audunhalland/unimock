@@ -322,7 +322,7 @@ where
     T: IntoResponseOnce<F::Response>,
     O: Copy,
 {
-    /// Expect this call pattern to be called exactly once.
+    /// Expect this call pattern to be matched exactly once.
     ///
     /// This is the only quantifier that works together with return values that don't implement [Clone].
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
@@ -342,7 +342,7 @@ where
         }
     }
 
-    /// Expect this call pattern to be called exactly the specified number of times.
+    /// Expect this call pattern to be matched exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
     where
         T: IntoResponseClone<F::Response>,
@@ -363,7 +363,10 @@ where
         }
     }
 
-    /// Expect this call pattern to be called at least the specified number of times.
+    /// Expect this call pattern to be matched at least the specified number of times.
+    ///
+    /// This only works for call patterns matched in any ordered.
+    /// Strictly ordered call patterns must have exact quantification.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
         T: IntoResponseClone<F::Response>,
@@ -427,19 +430,19 @@ where
     F: MockFn + 'static,
     O: Ordering,
 {
-    /// Expect this call pattern to be called exactly once.
+    /// Expect this call pattern to be matched exactly once.
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
         self.builder.quantify(1, counter::Exactness::Exact);
         self.into_exact()
     }
 
-    /// Expect this call pattern to be called exactly the specified number of times.
+    /// Expect this call pattern to be matched exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
         self.builder.quantify(times, counter::Exactness::Exact);
         self.into_exact()
     }
 
-    /// Expect this call pattern to be called at least the specified number of times.
+    /// Expect this call pattern to be matched at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast> {
         self.builder.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
@@ -500,7 +503,7 @@ where
         // Opening for a new response, which will be non-exactly quantified unless otherwise specified, set the exactness to AtLeastPlusOne now.
         // The reason it is AtLeastPlusOne is the additive nature.
         // We do not want to add anything to the number now, because it could be added to later in Quantify.
-        // We just want to express that when using `then`, it should be called at least one time, if not `then` would be unnecessary.
+        // We just want to express that when using `then`, it should be matched at least one time, if not `then` would be unnecessary.
         self.builder
             .inner_mut()
             .count_expectation

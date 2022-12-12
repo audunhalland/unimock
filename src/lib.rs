@@ -72,7 +72,8 @@
 //! 1. [`FooMock::foo.each_call(matching!())`](crate::MockFn::each_call): Define a _call pattern_.
 //!    Each call to `Foo::foo` that matches the empty argument list (i.e. always matching, since the method is parameter-less).
 //! 2. [`.returns(1337)`](crate::build::DefineResponse::returns): Each matching call will return the value `1337`.
-//!    In this example there is only one clause.
+//!
+//! In this example there is only one clause.
 //!
 //! ### Call patterns (matching inputs)
 //!
@@ -195,7 +196,7 @@
 //! ```
 //!
 //! The output sequence will be `[1, 1, 2, 2, 2, ..]`.
-//! A call pattern like this _must_ be called at least 3 times.
+//! A call pattern like this _must_ be matched at least 3 times.
 //! 2 times because of the first exact output sequence, then at least one time because of the [`.then()`](build::QuantifiedResponse::then) combinator.
 //!
 //! ### Verifying exact sequence of calls
