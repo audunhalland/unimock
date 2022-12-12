@@ -367,6 +367,7 @@ where
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
         T: IntoResponseClone<F::Response>,
+        O: Ordering<Kind = InAnyOrder>,
     {
         self.builder.push_responder(
             self.return_value

@@ -37,7 +37,7 @@ pub struct Matching<F: MockFn> {
     pub(crate) mock_fn: std::marker::PhantomData<F>,
     pub(crate) matching_fn: Option<MatchingFn<F>>,
     pub(crate) matching_fn_debug: Option<MatchingFnDebug<F>>,
-    pub(crate) pat_debug: Option<debug::InputMatcherDebug>,
+    pub(crate) matcher_debug: Option<debug::InputMatcherDebug>,
 }
 
 impl<F> Matching<F>
@@ -49,7 +49,7 @@ where
             mock_fn: std::marker::PhantomData,
             matching_fn: None,
             matching_fn_debug: None,
-            pat_debug: None,
+            matcher_debug: None,
         }
     }
 
@@ -81,7 +81,7 @@ where
     ///
     /// This way, a mismatch may be easier to debug, as the debug info can be printed as part of panic messages.
     pub fn pat_debug(&mut self, pat_debug: &'static str, file: &'static str, line: u32) {
-        self.pat_debug = Some(debug::InputMatcherDebug {
+        self.matcher_debug = Some(debug::InputMatcherDebug {
             pat_debug,
             file,
             line,

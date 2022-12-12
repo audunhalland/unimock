@@ -39,7 +39,7 @@ impl clause::TerminalSink for MockAssembler {
         let dyn_mock_fn = terminal.dyn_mock_fn.clone();
         let mock_type_id = terminal.dyn_mock_fn.type_id;
 
-        let call_pattern = self.new_call_pattern(terminal)?;
+        let call_pattern = self.new_call_pattern(terminal);
 
         match self.fn_mockers.entry(mock_type_id) {
             Entry::Occupied(mut entry) => {
@@ -70,18 +70,16 @@ impl clause::TerminalSink for MockAssembler {
 }
 
 impl MockAssembler {
-    fn new_call_pattern(&mut self, terminal: TerminalClause) -> Result<CallPattern, String> {
+    fn new_call_pattern(&mut self, terminal: TerminalClause) -> CallPattern {
         let builder = terminal.builder;
 
         let mut ordered_call_index_range: std::ops::Range<usize> = Default::default();
 
         if builder.pattern_match_mode == PatternMatchMode::InOrder {
-            let exact_calls = builder.count_expectation.exact_calls().ok_or_else(|| {
-                format!(
-                    "{name} mock has no exact count expectation, which is needed for a mock.",
-                    name = terminal.dyn_mock_fn.name
-                )
-            })?;
+            let exact_calls = builder
+                .count_expectation
+                .exact_calls()
+                .expect("BUG: Inexact quantification of ordered call pattern.");
 
             ordered_call_index_range.start = self.current_call_index;
             ordered_call_index_range.end = self.current_call_index + exact_calls.0;
@@ -89,11 +87,11 @@ impl MockAssembler {
             self.current_call_index = ordered_call_index_range.end;
         }
 
-        Ok(CallPattern {
+        CallPattern {
             input_matcher: builder.input_matcher,
             responders: builder.responders,
             ordered_call_index_range,
             call_counter: builder.count_expectation.into_counter(),
-        })
+        }
     }
 }

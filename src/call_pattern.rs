@@ -60,7 +60,7 @@ impl CallPattern {
     }
 
     pub fn debug_location(&self, pat_index: PatIndex) -> debug::CallPatternLocation {
-        if let Some(debug) = self.input_matcher.pat_debug {
+        if let Some(debug) = self.input_matcher.matcher_debug {
             debug::CallPatternLocation::Debug(debug)
         } else {
             debug::CallPatternLocation::PatIndex(pat_index)
@@ -74,7 +74,7 @@ impl CallPattern {
 
 pub(crate) struct DynInputMatcher {
     dyn_matching_fn: DynMatchingFn,
-    pub(crate) pat_debug: Option<debug::InputMatcherDebug>,
+    pub(crate) matcher_debug: Option<debug::InputMatcherDebug>,
 }
 
 impl DynInputMatcher {
@@ -88,7 +88,7 @@ impl DynInputMatcher {
                 (Some(f), None) => DynMatchingFn::Matching(Box::new(f)),
                 _ => DynMatchingFn::None,
             },
-            pat_debug: builder.pat_debug,
+            matcher_debug: builder.matcher_debug,
         }
     }
 }
