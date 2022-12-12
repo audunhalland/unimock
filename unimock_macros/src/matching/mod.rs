@@ -395,11 +395,7 @@ fn guess_arg_kind(index: usize, patterns: &[ArgPattern]) -> ArgKind {
             },
             syn::Pat::Slice(_) => ArgKind::Slice,
             syn::Pat::Or(pat_or) => {
-                let kinds = pat_or
-                    .cases
-                    .iter()
-                    .map(|pat| pat_kind(pat))
-                    .collect::<BTreeSet<_>>();
+                let kinds = pat_or.cases.iter().map(pat_kind).collect::<BTreeSet<_>>();
 
                 if kinds.len() == 1 {
                     kinds.into_iter().next().unwrap()
