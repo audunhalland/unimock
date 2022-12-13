@@ -225,21 +225,18 @@ mod mixed_option {
 
         fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
             let output = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
-            Responder(DynResponder::new_cell::<F>(output))
+            Responder(DynResponder::new_borrow::<F>(output))
         }
     }
 
     impl<T0, T> IntoResponseClone<Mix<T>> for Option<T0>
     where
-        T0: Borrow<T> + Clone + Send + Sync + 'static,
+        T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
         fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
-            Responder(DynResponder::new_clone_factory_cell::<F>(move || {
-                Some(<Self as IntoResponseOnce<Mix<T>>>::into_response(
-                    self.clone(),
-                ))
-            }))
+            let output = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
+            Responder(DynResponder::new_borrow::<F>(output))
         }
     }
 
@@ -260,9 +257,12 @@ mod mixed_option {
         }
 
         fn try_borrow_response(
-            _: &'u <Mix<T> as Respond>::Type,
+            response: &'u <Mix<T> as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
-            Err(SignatureError::NotOwned)
+            Ok(match response {
+                Some(value) => Some(value.as_ref().borrow()),
+                None => None,
+            })
         }
     }
 }

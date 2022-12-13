@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make inexact quantification (at_least_times) of strictly ordered clauses (next_call) into a compile error instead of a runtime error.
 ### Fixed
 - `matching!` of str-like arguments in or-pattern (`"a" | "A"`).
+- Remove `T: Clone` bound on `-> Option<&T>` multi-return functions.
 
 ## [0.4.5] - 2022-12-07
 ### Changed
