@@ -13,7 +13,7 @@ use trait_info::TraitInfo;
 use attr::{UnmockFn, UnmockFnParams};
 
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
-    let trait_info = trait_info::TraitInfo::analyze(&item_trait, &attr)?;
+    let trait_info = trait_info::TraitInfo::analyze(&attr.prefix, &item_trait, &attr)?;
     attr.validate(&trait_info)?;
 
     let prefix = &attr.prefix;

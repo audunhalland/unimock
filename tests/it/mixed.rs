@@ -133,3 +133,24 @@ fn in_vec() {
 
     assert_eq!(vec![&1, &2, &3], u.vector());
 }
+
+#[unimock(api = MixedTupleMock)]
+trait MixedTuple {
+    fn tuple2a(&self) -> (&i32, i32);
+    fn tuple2b(&self) -> (i32, &i32);
+}
+
+#[test]
+fn mixed_tuple() {
+    let u = Unimock::new((
+        MixedTupleMock::tuple2a
+            .next_call(matching!())
+            .returns((1, 2)),
+        MixedTupleMock::tuple2b
+            .next_call(matching!())
+            .returns((1, 2)),
+    ));
+
+    assert_eq!((&1, 2), u.tuple2a());
+    assert_eq!((1, &2), u.tuple2b());
+}

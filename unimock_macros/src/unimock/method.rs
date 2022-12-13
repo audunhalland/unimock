@@ -100,6 +100,7 @@ impl<'s> MockMethod<'s> {
 }
 
 pub fn extract_methods<'s>(
+    prefix: &syn::Path,
     item_trait: &'s syn::ItemTrait,
     is_type_generic: bool,
     attr: &Attr,
@@ -124,7 +125,8 @@ pub fn extract_methods<'s>(
                 item_trait.ident.span(),
             );
 
-            let output_structure = output::determine_output_structure(item_trait, &method.sig);
+            let output_structure =
+                output::determine_output_structure(prefix, item_trait, &method.sig);
 
             Ok(Some(MockMethod {
                 method,

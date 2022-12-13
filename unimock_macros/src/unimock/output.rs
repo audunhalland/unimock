@@ -1,5 +1,5 @@
 use quote::quote;
-use syn::visit_mut::VisitMut;
+use syn::{parse_quote, visit_mut::VisitMut};
 
 pub struct OutputStructure<'t> {
     pub wrapping: OutputWrapping<'t>,
@@ -46,7 +46,6 @@ pub enum OutputWrapping<'t> {
     ImplTraitFuture(&'t syn::TraitItemType),
 }
 
-#[derive(Clone, Copy)]
 pub enum OutputOwnership {
     Owned,
     SelfReference,
@@ -72,6 +71,7 @@ impl OutputOwnership {
 }
 
 pub fn determine_output_structure<'t>(
+    prefix: &syn::Path,
     item_trait: &'t syn::ItemTrait,
     sig: &'t syn::Signature,
 ) -> OutputStructure<'t> {
@@ -96,7 +96,7 @@ pub fn determine_output_structure<'t>(
                     output_ty: AssociatedInnerType::new_gat(
                         *type_reference.elem.clone(),
                         &borrow_info,
-                        ownership,
+                        &ownership,
                     ),
                 }
             }
@@ -105,16 +105,17 @@ pub fn determine_output_structure<'t>(
                     && is_self_segment(path.path.segments.first())
                     && (path.path.segments.len() == 2) =>
             {
-                determine_associated_future_structure(item_trait, sig, &path.path)
-                    .unwrap_or_else(|| determine_owned_or_mixed_output_structure(sig, ty))
+                determine_associated_future_structure(prefix, item_trait, sig, &path.path)
+                    .unwrap_or_else(|| determine_owned_or_mixed_output_structure(prefix, sig, ty))
             }
-            _ => determine_owned_or_mixed_output_structure(sig, ty),
+            _ => determine_owned_or_mixed_output_structure(prefix, sig, ty),
         },
     }
 }
 
 /// Determine output structure that is not a reference nor a future
 pub fn determine_owned_or_mixed_output_structure<'t>(
+    prefix: &syn::Path,
     sig: &'t syn::Signature,
     ty: &'t syn::Type,
 ) -> OutputStructure<'t> {
@@ -130,11 +131,62 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
         OutputOwnership::Owned
     };
 
-    OutputStructure {
-        wrapping: OutputWrapping::None,
-        ownership,
-        response_ty: AssociatedInnerType::new_static(inner_ty, &borrow_info),
-        output_ty: AssociatedInnerType::new_gat(ty.clone(), &borrow_info, ownership),
+    match (ownership, inner_ty) {
+        (OutputOwnership::Mixed, syn::Type::Tuple(tuple)) => {
+            let mut response_ty_tuple = syn::TypeTuple {
+                paren_token: syn::token::Paren::default(),
+                elems: Default::default(),
+            };
+            let mut output_ty_tuple = syn::TypeTuple {
+                paren_token: syn::token::Paren::default(),
+                elems: Default::default(),
+            };
+
+            for elem in tuple.elems {
+                match elem {
+                    syn::Type::Reference(reference) => {
+                        let elem = reference.elem;
+
+                        if reference.mutability.is_some() {
+                            panic!("TODO: Mutable references in tuples");
+                        }
+
+                        response_ty_tuple.elems.push(parse_quote! {
+                            #prefix::output::Borrowed<#elem>
+                        });
+                        output_ty_tuple.elems.push(parse_quote! {
+                            #prefix::output::Borrowed<#elem>
+                        });
+                    }
+                    owned => {
+                        response_ty_tuple.elems.push(parse_quote! {
+                            #prefix::output::Owned<#owned>
+                        });
+                        output_ty_tuple.elems.push(parse_quote! {
+                            #prefix::output::Owned<#owned>
+                        });
+                    }
+                }
+            }
+
+            OutputStructure {
+                wrapping: OutputWrapping::None,
+                ownership: OutputOwnership::Mixed,
+                response_ty: AssociatedInnerType::Typed(syn::Type::Tuple(response_ty_tuple)),
+                output_ty: AssociatedInnerType::Typed(syn::Type::Tuple(output_ty_tuple)),
+            }
+        }
+        (ownership, inner_ty) => {
+            let response_ty = AssociatedInnerType::new_static(inner_ty, &borrow_info);
+            let output_ty = AssociatedInnerType::new_gat(ty.clone(), &borrow_info, &ownership);
+
+            OutputStructure {
+                wrapping: OutputWrapping::None,
+                ownership,
+                response_ty,
+                output_ty,
+            }
+        }
     }
 }
 
@@ -146,6 +198,7 @@ fn is_self_segment(segment: Option<&syn::PathSegment>) -> bool {
 }
 
 fn determine_associated_future_structure<'t>(
+    prefix: &syn::Path,
     item_trait: &'t syn::ItemTrait,
     sig: &'t syn::Signature,
     path: &'t syn::Path,
@@ -206,14 +259,14 @@ fn determine_associated_future_structure<'t>(
         .next()?;
 
     let mut future_output_structure =
-        determine_owned_or_mixed_output_structure(sig, &output_binding.ty);
+        determine_owned_or_mixed_output_structure(prefix, sig, &output_binding.ty);
     future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty);
 
     Some(future_output_structure)
 }
 
-fn determine_reference_ownership(
-    sig: &syn::Signature,
+fn determine_reference_ownership<'t>(
+    sig: &'t syn::Signature,
     type_reference: &syn::TypeReference,
 ) -> OutputOwnership {
     if let Some(lifetime) = type_reference.lifetime.as_ref() {
@@ -257,6 +310,7 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
     None
 }
 
+#[derive(Clone)]
 enum AssociatedInnerType {
     Unit,
     Typed(syn::Type),
@@ -275,7 +329,7 @@ impl AssociatedInnerType {
     fn new_gat(
         mut inner_type: syn::Type,
         borrow_info: &BorrowInfo,
-        ownership: OutputOwnership,
+        ownership: &OutputOwnership,
     ) -> Self {
         if borrow_info.has_nonstatic_lifetime {
             match ownership {

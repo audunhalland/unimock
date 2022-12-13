@@ -10,7 +10,11 @@ pub struct TraitInfo<'t> {
 }
 
 impl<'t> TraitInfo<'t> {
-    pub fn analyze(item_trait: &'t syn::ItemTrait, attr: &Attr) -> syn::Result<Self> {
+    pub fn analyze(
+        prefix: &syn::Path,
+        item_trait: &'t syn::ItemTrait,
+        attr: &Attr,
+    ) -> syn::Result<Self> {
         let generics = &item_trait.generics;
         let is_type_generic = item_trait
             .generics
@@ -19,7 +23,7 @@ impl<'t> TraitInfo<'t> {
             .any(|param| matches!(param, syn::GenericParam::Type(_)));
         let generic_params = &generics.params;
 
-        let methods = method::extract_methods(item_trait, is_type_generic, attr)?;
+        let methods = method::extract_methods(prefix, item_trait, is_type_generic, attr)?;
 
         let contains_async = methods.iter().filter_map(Option::as_ref).any(|method| {
             if method.method.sig.asyncness.is_some() {

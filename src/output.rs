@@ -399,3 +399,59 @@ mod mixed_result_borrowed_t {
         }
     }
 }
+
+mod mixed_tuple {
+    use super::*;
+
+    impl<E0: Respond, E1: Respond> Respond for Mixed<(E0, E1)> {
+        type Type = (<E0 as Respond>::Type, <E1 as Respond>::Type);
+    }
+
+    impl<I0, I1, E0, E1> IntoResponseOnce<Mixed<(E0, E1)>> for (I0, I1)
+    where
+        I0: IntoResponseOnce<E0>,
+        E0: Respond,
+        <E0 as Respond>::Type: Send + Sync,
+        I1: IntoResponseOnce<E1>,
+        E1: Respond,
+        <E1 as Respond>::Type: Send + Sync,
+    {
+        fn into_response(self) -> <Mixed<(E0, E1)> as Respond>::Type {
+            (self.0.into_response(), self.1.into_response())
+        }
+
+        fn into_once_responder<F: MockFn<Response = Mixed<(E0, E1)>>>(self) -> Responder {
+            let response = <Self as IntoResponseOnce<Mixed<(E0, E1)>>>::into_response(self);
+            Responder(DynResponder::new_cell::<F>(response))
+        }
+    }
+
+    impl<'u, O0, E0, O1, E1> Output<'u, Mixed<(E0, E1)>> for Mixed<(O0, O1)>
+    where
+        O0: Output<'u, E0>,
+        E0: Respond,
+        O1: Output<'u, E1>,
+        E1: Respond,
+    {
+        type Type = (<O0 as Output<'u, E0>>::Type, <O1 as Output<'u, E1>>::Type);
+
+        fn from_response(
+            response: <Mixed<(E0, E1)> as Respond>::Type,
+            value_chain: &'u ValueChain,
+        ) -> Self::Type {
+            (
+                <O0 as Output<'u, E0>>::from_response(response.0, value_chain),
+                <O1 as Output<'u, E1>>::from_response(response.1, value_chain),
+            )
+        }
+
+        fn try_from_borrowed_response(
+            response: &'u <Mixed<(E0, E1)> as Respond>::Type,
+        ) -> Result<Self::Type, SignatureError> {
+            Ok((
+                <O0 as Output<'u, E0>>::try_from_borrowed_response(&response.0)?,
+                <O1 as Output<'u, E1>>::try_from_borrowed_response(&response.1)?,
+            ))
+        }
+    }
+}
