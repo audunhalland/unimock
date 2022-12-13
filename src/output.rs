@@ -267,6 +267,61 @@ mod mixed_option {
     }
 }
 
+mod mixed_vec {
+    use super::*;
+
+    type Mix<T> = Mixed<Vec<&'static T>>;
+
+    impl<T: ?Sized + 'static> Respond for Mix<T> {
+        type Type = Vec<BoxBorrow<T>>;
+    }
+
+    impl<T0, T> IntoResponseOnce<Mix<T>> for Vec<T0>
+    where
+        T0: Borrow<T> + Send + Sync + 'static,
+        T: ?Sized + 'static,
+    {
+        fn into_response(self) -> <Mix<T> as Respond>::Type {
+            self.into_iter()
+                .map(|item| -> BoxBorrow<T> { Box::new(item) })
+                .collect()
+        }
+
+        fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
+            let response = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
+            Responder(DynResponder::new_borrow::<F>(response))
+        }
+    }
+
+    impl<T0, T> IntoResponseClone<Mix<T>> for Vec<T0>
+    where
+        T0: Borrow<T> + Send + Sync + 'static,
+        T: ?Sized + 'static,
+    {
+        fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
+            let response = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
+            Responder(DynResponder::new_borrow::<F>(response))
+        }
+    }
+
+    impl<'u, T> Output<'u, Mix<T>> for Mixed<Vec<&'u T>>
+    where
+        T: ?Sized + 'u,
+    {
+        type Type = Vec<&'u T>;
+
+        fn from_response(_: <Mix<T> as Respond>::Type, _: &'u ValueChain) -> Self::Type {
+            panic!()
+        }
+
+        fn try_from_borrowed_response(
+            response: &'u <Mix<T> as Respond>::Type,
+        ) -> Result<Self::Type, SignatureError> {
+            Ok(response.iter().map(|b| b.as_ref().borrow()).collect())
+        }
+    }
+}
+
 mod mixed_result_borrowed_t {
     use super::*;
 

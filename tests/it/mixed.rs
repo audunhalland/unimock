@@ -117,3 +117,19 @@ fn in_result_may_multi_respond_on_ok_no_clone() {
     assert_eq!(Ok(&clone::Nope), u.ok_no_clone(true));
     assert_eq!(Ok(&clone::Nope), u.ok_no_clone(true));
 }
+
+#[unimock(api = InVecMock)]
+trait InVec {
+    fn vector(&self) -> Vec<&i32>;
+}
+
+#[test]
+fn in_vec() {
+    let u = Unimock::new(
+        InVecMock::vector
+            .each_call(matching!())
+            .returns(vec![1, 2, 3]),
+    );
+
+    assert_eq!(vec![&1, &2, &3], u.vector());
+}
