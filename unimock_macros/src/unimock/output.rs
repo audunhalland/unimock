@@ -169,6 +169,9 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
                 }
             }
 
+            response_ty_tuple.elems.push_punct(Default::default());
+            output_ty_tuple.elems.push_punct(Default::default());
+
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 ownership: OutputOwnership::Mixed,

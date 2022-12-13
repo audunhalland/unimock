@@ -400,58 +400,68 @@ mod mixed_result_borrowed_t {
     }
 }
 
-mod mixed_tuple {
-    use super::*;
-
-    impl<E0: Respond, E1: Respond> Respond for Mixed<(E0, E1)> {
-        type Type = (<E0 as Respond>::Type, <E1 as Respond>::Type);
-    }
-
-    impl<I0, I1, E0, E1> IntoResponseOnce<Mixed<(E0, E1)>> for (I0, I1)
-    where
-        I0: IntoResponseOnce<E0>,
-        E0: Respond,
-        <E0 as Respond>::Type: Send + Sync,
-        I1: IntoResponseOnce<E1>,
-        E1: Respond,
-        <E1 as Respond>::Type: Send + Sync,
-    {
-        fn into_response(self) -> <Mixed<(E0, E1)> as Respond>::Type {
-            (self.0.into_response(), self.1.into_response())
+macro_rules! mixed_tuples {
+    ($(($t:ident, $a:ident, $i:tt)),+) => {
+        impl<$($t: Respond),+> Respond for Mixed<($($t),+,)> {
+            type Type = ($(<$t as Respond>::Type),+,);
         }
 
-        fn into_once_responder<F: MockFn<Response = Mixed<(E0, E1)>>>(self) -> Responder {
-            let response = <Self as IntoResponseOnce<Mixed<(E0, E1)>>>::into_response(self);
-            Responder(DynResponder::new_cell::<F>(response))
-        }
-    }
+        impl<$($t),+, $($a),+> IntoResponseOnce<Mixed<($($t),+,)>> for ($($a),+,)
+        where
+            $($t: Respond),+,
+            $(<$t as Respond>::Type: Send + Sync),+,
+            $($a: IntoResponseOnce<$t>),+,
+        {
+            fn into_response(self) -> <Mixed<($($t),+,)> as Respond>::Type {
+                ($(self.$i.into_response()),+,)
+            }
 
-    impl<'u, O0, E0, O1, E1> Output<'u, Mixed<(E0, E1)>> for Mixed<(O0, O1)>
-    where
-        O0: Output<'u, E0>,
-        E0: Respond,
-        O1: Output<'u, E1>,
-        E1: Respond,
-    {
-        type Type = (<O0 as Output<'u, E0>>::Type, <O1 as Output<'u, E1>>::Type);
-
-        fn from_response(
-            response: <Mixed<(E0, E1)> as Respond>::Type,
-            value_chain: &'u ValueChain,
-        ) -> Self::Type {
-            (
-                <O0 as Output<'u, E0>>::from_response(response.0, value_chain),
-                <O1 as Output<'u, E1>>::from_response(response.1, value_chain),
-            )
+            fn into_once_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> Responder {
+                let response = <Self as IntoResponseOnce<Mixed<($($t),+,)>>>::into_response(self);
+                Responder(DynResponder::new_cell::<F>(response))
+            }
         }
 
-        fn try_from_borrowed_response(
-            response: &'u <Mixed<(E0, E1)> as Respond>::Type,
-        ) -> Result<Self::Type, SignatureError> {
-            Ok((
-                <O0 as Output<'u, E0>>::try_from_borrowed_response(&response.0)?,
-                <O1 as Output<'u, E1>>::try_from_borrowed_response(&response.1)?,
-            ))
+        impl<$($t),+, $($a),+> IntoResponseClone<Mixed<($($t),+,)>> for ($($a),+,)
+        where
+            $($t: Respond),+,
+            $(<$t as Respond>::Type: Clone + Send + Sync),+,
+            $($a: IntoResponseClone<$t>),+,
+        {
+            fn into_clone_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> Responder {
+                let response = <Self as IntoResponseOnce<Mixed<($($t),+,)>>>::into_response(self);
+                Responder(DynResponder::new_clone_cell::<F>(response))
+            }
         }
-    }
+
+        impl<'u, $($t),+, $($a),+> Output<'u, Mixed<($($t),+,)>> for Mixed<($($a),+,)>
+        where
+            $($t: Respond),+,
+            $($a: Output<'u, $t>),+,
+        {
+            type Type = ($(<$a as Output<'u, $t>>::Type),+,);
+
+            fn from_response(
+                response: <Mixed<($($t),+,)> as Respond>::Type,
+                value_chain: &'u ValueChain,
+            ) -> Self::Type {
+                (
+                    $(<$a as Output<'u, $t>>::from_response(response.$i, value_chain)),+,
+                )
+            }
+
+            fn try_from_borrowed_response(
+                response: &'u <Mixed<($($t),+,)> as Respond>::Type,
+            ) -> Result<Self::Type, SignatureError> {
+                Ok((
+                    $(<$a as Output<'u, $t>>::try_from_borrowed_response(&response.$i)?),+,
+                ))
+            }
+        }
+    };
 }
+
+mixed_tuples!((T0, A0, 0));
+mixed_tuples!((T0, A0, 0), (T1, A1, 1));
+mixed_tuples!((T0, A0, 0), (T1, A1, 1), (T2, A2, 2));
+mixed_tuples!((T0, A0, 0), (T1, A1, 1), (T2, A2, 2), (T3, A3, 3));

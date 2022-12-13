@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Changed
 - Make inexact quantification (at_least_times) of strictly ordered clauses (next_call) into a compile error instead of a runtime error.
+### Added
+- `Vec<&T>` output values.
+- Tuple output values with any combination of borrows of up to 4-element tuples.
 ### Fixed
 - `matching!` of str-like arguments in or-pattern (`"a" | "A"`).
 - Remove `T: Clone` bound on `-> Option<&T>` multi-return functions.

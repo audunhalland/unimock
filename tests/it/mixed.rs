@@ -136,12 +136,14 @@ fn in_vec() {
 
 #[unimock(api = MixedTupleMock)]
 trait MixedTuple {
+    fn tuple1(&self) -> (&i32,);
     fn tuple2a(&self) -> (&i32, i32);
     fn tuple2b(&self) -> (i32, &i32);
+    fn tuple4(&self) -> (&clone::Nope, clone::Nope, &clone::Sure, clone::Sure);
 }
 
 #[test]
-fn mixed_tuple() {
+fn mixed_tuple1() {
     let u = Unimock::new((
         MixedTupleMock::tuple2a
             .next_call(matching!())
@@ -153,4 +155,35 @@ fn mixed_tuple() {
 
     assert_eq!((&1, 2), u.tuple2a());
     assert_eq!((1, &2), u.tuple2b());
+}
+
+#[test]
+fn mixed_tuple_clone_combinatorics_once() {
+    let u = Unimock::new(MixedTupleMock::tuple4.next_call(matching!()).returns((
+        clone::Nope,
+        clone::Nope,
+        clone::Sure,
+        clone::Sure,
+    )));
+
+    assert_eq!(
+        (&clone::Nope, clone::Nope, &clone::Sure, clone::Sure),
+        u.tuple4()
+    );
+}
+
+#[test]
+fn mixed_tuple_clone_combinatorics_many() {
+    let u = Unimock::new(
+        MixedTupleMock::tuple4
+            .each_call(matching!())
+            .answers(|_| (clone::Nope, clone::Nope, clone::Sure, clone::Sure)),
+    );
+
+    for _ in 0..3 {
+        assert_eq!(
+            (&clone::Nope, clone::Nope, &clone::Sure, clone::Sure),
+            u.tuple4()
+        );
+    }
 }
