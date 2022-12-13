@@ -268,8 +268,8 @@ fn determine_associated_future_structure<'t>(
     Some(future_output_structure)
 }
 
-fn determine_reference_ownership<'t>(
-    sig: &'t syn::Signature,
+fn determine_reference_ownership(
+    sig: &syn::Signature,
     type_reference: &syn::TypeReference,
 ) -> OutputOwnership {
     if let Some(lifetime) = type_reference.lifetime.as_ref() {
