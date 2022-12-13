@@ -203,5 +203,5 @@ fn response_to_output<'u, F: MockFn>(
 fn try_borrow_output_from_response<'u, F: MockFn>(
     response: &'u <F::Response as Respond>::Type,
 ) -> Result<<F::Output<'u> as Output<'u, F::Response>>::Type, SignatureError> {
-    <F::Output<'u> as Output<'u, F::Response>>::try_borrow_response(response)
+    <F::Output<'u> as Output<'u, F::Response>>::try_from_borrowed_response(response)
 }

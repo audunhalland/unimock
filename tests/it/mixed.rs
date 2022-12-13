@@ -22,9 +22,13 @@ fn in_option() {
             .next_call(matching!(_))
             .returns(Some("1".to_string())),
         InOptionMock::str.next_call(matching!(_)).returns(Some("2")),
+        InOptionMock::str
+            .next_call(matching!(_))
+            .returns(None::<&str>),
     ));
-    assert_eq!(Some("1"), <Unimock as InOption>::str(&u, ""));
-    assert_eq!(Some("2"), <Unimock as InOption>::str(&u, ""));
+    assert_eq!(Some("1"), u.str(""));
+    assert_eq!(Some("2"), u.str(""));
+    assert_eq!(None, u.str(""));
 }
 
 // This test demonstrates that a `T: Clone` bound is not necessary
@@ -101,7 +105,7 @@ fn in_result_clone_acrobatics() {
 
 #[test]
 #[should_panic(
-    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/mixed.rs:109 to match exactly 1 call, but it actually matched 2 calls."
+    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/mixed.rs:113 to match exactly 1 call, but it actually matched 2 calls."
 )]
 fn in_result_may_multi_respond_on_ok_no_clone() {
     let u = Unimock::new(

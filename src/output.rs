@@ -38,7 +38,7 @@ pub trait Output<'u, R: Respond> {
     fn from_response(response: R::Type, value_chain: &'u ValueChain) -> Self::Type;
 
     #[doc(hidden)]
-    fn try_borrow_response(response: &'u R::Type) -> Result<Self::Type, SignatureError>;
+    fn try_from_borrowed_response(response: &'u R::Type) -> Result<Self::Type, SignatureError>;
 }
 
 #[doc(hidden)]
@@ -103,7 +103,7 @@ mod owned {
             response
         }
 
-        fn try_borrow_response(
+        fn try_from_borrowed_response(
             _: &'u <Self as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
             Err(SignatureError::NotOwned)
@@ -155,7 +155,7 @@ mod borrowed {
             value_ref.as_ref().borrow()
         }
 
-        fn try_borrow_response(
+        fn try_from_borrowed_response(
             response: &'u <Borrowed<T> as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
             Ok(response.as_ref().borrow())
@@ -194,7 +194,7 @@ mod static_ref {
             value
         }
 
-        fn try_borrow_response(
+        fn try_from_borrowed_response(
             value: &'u <Self as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
             Ok(*value)
@@ -256,7 +256,7 @@ mod mixed_option {
             }
         }
 
-        fn try_borrow_response(
+        fn try_from_borrowed_response(
             response: &'u <Mix<T> as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
             Ok(match response {
@@ -333,7 +333,7 @@ mod mixed_result_borrowed_t {
             }
         }
 
-        fn try_borrow_response(
+        fn try_from_borrowed_response(
             response: &'u <Mix<T, E> as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
             match response {
