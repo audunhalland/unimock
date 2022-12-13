@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `matching!` of str-like arguments in or-pattern (`"a" | "A"`).
 - Remove `T: Clone` bound on `-> Option<&T>` multi-return functions.
+- Remove `T: Clone` bound on `-> Result<&T, E>` multi-return functions. There is still a `E: Clone` bound.
 
 ## [0.4.5] - 2022-12-07
 ### Changed
