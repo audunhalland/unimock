@@ -8,10 +8,12 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Mutex;
+use std::thread::ThreadId;
 
 pub(crate) struct SharedState {
     pub fallback_mode: FallbackMode,
     pub fn_mockers: HashMap<TypeId, FnMocker>,
+    pub original_thread: ThreadId,
 
     // A value chain for "dumping" owned return values that
     // a function signature needs to *borrow* instead.
@@ -26,6 +28,7 @@ impl SharedState {
         Self {
             fallback_mode,
             fn_mockers,
+            original_thread: std::thread::current().id(),
             value_chain: ValueChain::default(),
             next_ordered_call_index: AtomicUsize::new(0),
             panic_reasons: Mutex::new(vec![]),

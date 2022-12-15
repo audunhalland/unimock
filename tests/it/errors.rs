@@ -145,3 +145,14 @@ fn should_require_both_calls_2_some_call() {
 
     assert_eq!(42, unimock.foo(1));
 }
+
+#[test]
+#[should_panic(
+    expected = "Original Unimock instance destroyed on a different thread than the one it was created on. To solve this, clone the object before sending it to the other thread."
+)]
+fn should_crash_when_sending_original_unimock_to_another_thread() {
+    let u = Unimock::new(());
+    let drop_u = move || drop(u);
+    let err = std::thread::spawn(drop_u).join().expect_err("Must error");
+    std::panic::resume_unwind(err);
+}

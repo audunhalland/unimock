@@ -608,11 +608,32 @@ enum FallbackMode {
     Unmock,
 }
 
-/// Unimock's purpose is to be an implementor of downstream traits via mock objects.
-/// A single mock object provides the implementation of a single trait method.
+/// A type whose purpose is to provide mocked behaviour for the traits that it implements.
 ///
-/// The interaction with these mock objects always happen via the Unimock facade and
-/// the traits that it implements.
+/// All traits implemented by Unimock can be considered mock implementations, except _marker traits_, [Clone] and [Drop].
+///
+/// The mock configuration is specified up front, as a constructor argument in the form of a simple or compound [Clause].
+/// After instantiation, the unimock configuration is immutable.
+///
+/// Unimock implements [Send](Send) and [Sync](Sync), and is therefore thread safe.
+///
+/// Unimock is meant to be used as a testing utility.
+/// Using it for other purposes is not recommended.
+///
+/// ## Clone semantics
+/// Calling [`clone`](Clone::clone) on unimock creates a derived object which shares internal state with the original.
+///
+/// Unimock runs post-test verifications automatically upon [`drop`](Drop::drop) (it is a RAII utility).
+/// Interaction verifications should be performed only after all expected interactions have completed.
+/// Because of this, only the _original instance_ will run any verifications upon being dropped,
+///     and when dropping the original instance, _it is an error_ if there are derived objects still alive.
+/// In a typical testing context, this scenario usually means that a spawned thread (that owns a derived Unimock) has escaped the test.
+/// Unimock will panic with an appropriate message if this is detected.
+///
+/// This detection is usually reliable.
+/// Unimock will also induce a panic if the original instance gets dropped in a thread that does not equal the creator thread.
+/// Therefore, Unimock should always be cloned before sending off to another thread.
+///
 pub struct Unimock {
     original_instance: bool,
     shared_state: Arc<state::SharedState>,
@@ -727,6 +748,10 @@ impl Drop for Unimock {
 
         if strong_count > 1 {
             panic!("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.");
+        }
+
+        if std::thread::current().id() != self.shared_state.original_thread {
+            panic!("Original Unimock instance destroyed on a different thread than the one it was created on. To solve this, clone the object before sending it to the other thread.");
         }
 
         #[track_caller]
