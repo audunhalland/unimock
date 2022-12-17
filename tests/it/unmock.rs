@@ -93,7 +93,7 @@ fn unmock_recursion() {
     assert_eq!(
         120,
         Unimock::new(FactorialMock::factorial.stub(|each| {
-            each.call(matching!((input) if *input <= 1)).returns(1u32);
+            each.call(matching!(0 | 1)).returns(1u32);
             each.call(matching!(_)).unmocked();
         }))
         .factorial(5)
