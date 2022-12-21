@@ -39,23 +39,22 @@ impl CallPattern {
         inputs: &F::Inputs<'_>,
         mismatch_reporter: Option<&mut MismatchReporter>,
     ) -> MockResult<bool> {
-        match &self.input_matcher.dyn_matching_fn {
-            DynMatchingFn::Matching(f) => {
-                let func: &MatchingFn<F> = downcast_box(f, F::NAME)?;
-                Ok((func.0)(inputs))
+        match (&self.input_matcher.dyn_matching_fn, mismatch_reporter) {
+            (DynMatchingFn::MatchingDebug(f), Some(reporter)) => {
+                Ok((downcast_box::<MatchingFnDebug<F>>(f, F::NAME)?.0)(
+                    inputs, reporter,
+                ))
             }
-            DynMatchingFn::MatchingDebug(f) => {
-                let func: &MatchingFnDebug<F> = downcast_box(f, F::NAME)?;
-                match mismatch_reporter {
-                    Some(reporter) => Ok((func.0)(inputs, reporter)),
-                    None => {
-                        let mut disabled_reporter = MismatchReporter::new_disabled();
-
-                        Ok((func.0)(inputs, &mut disabled_reporter))
-                    }
-                }
+            (DynMatchingFn::MatchingDebug(f), None) => {
+                Ok((downcast_box::<MatchingFnDebug<F>>(f, F::NAME)?.0)(
+                    inputs,
+                    &mut MismatchReporter::new_disabled(),
+                ))
             }
-            DynMatchingFn::None => Err(MockError::NoMatcherFunction { name: F::NAME }),
+            (DynMatchingFn::Matching(f), _) => {
+                Ok((downcast_box::<MatchingFn<F>>(f, F::NAME)?.0)(inputs))
+            }
+            (DynMatchingFn::None, _) => Err(MockError::NoMatcherFunction { name: F::NAME }),
         }
     }
 
@@ -103,8 +102,6 @@ pub(crate) struct MatchingFn<F: MockFn>(
     #[allow(clippy::type_complexity)]
     pub  Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
 );
-
-impl<F: MockFn> MatchingFn<F> {}
 
 pub(crate) struct MatchingFnDebug<F: MockFn>(
     #[allow(clippy::type_complexity)]
