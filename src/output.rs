@@ -250,19 +250,13 @@ mod mixed_option {
             response: <Mix<T> as Respond>::Type,
             value_chain: &'u ValueChain,
         ) -> Self::Type {
-            match response {
-                Some(value) => Some(value_chain.add(value).as_ref().borrow()),
-                None => None,
-            }
+            response.map(|value| value_chain.add(value).as_ref().borrow())
         }
 
         fn try_from_borrowed_response(
             response: &'u <Mix<T> as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
-            Ok(match response {
-                Some(value) => Some(value.as_ref().borrow()),
-                None => None,
-            })
+            Ok(response.as_ref().map(|value| value.as_ref().borrow()))
         }
     }
 }
