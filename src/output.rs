@@ -41,10 +41,10 @@ pub trait Output<'u, R: Respond> {
     fn try_from_borrowed_response(response: &'u R::Type) -> Result<Self::Type, SignatureError>;
 }
 
+#[derive(Debug)]
 #[doc(hidden)]
 pub enum SignatureError {
-    NotOwned,
-    NotBorrowed,
+    OwnershipRequired,
 }
 
 #[doc(hidden)]
@@ -106,7 +106,7 @@ mod owned {
         fn try_from_borrowed_response(
             _: &'u <Self as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
-            Err(SignatureError::NotOwned)
+            Err(SignatureError::OwnershipRequired)
         }
     }
 }
@@ -388,7 +388,7 @@ mod mixed_result_borrowed_t {
             match response {
                 Ok(value) => Ok(Ok(value.as_ref().borrow())),
                 // No chance of converting the E into owned here:
-                Err(_) => Err(SignatureError::NotOwned),
+                Err(_) => Err(SignatureError::OwnershipRequired),
             }
         }
     }
