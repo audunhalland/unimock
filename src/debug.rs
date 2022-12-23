@@ -40,7 +40,7 @@ impl std::fmt::Display for CallPatternDebug {
                 )
             }
             CallPatternLocation::PatIndex(pat_index) => {
-                write!(f, "call pattern {}[#{pat_index}]", self.inner.mock_fn.name)
+                write!(f, "call pattern {}[{pat_index}]", self.inner.mock_fn.name)
             }
         }
     }

@@ -156,3 +156,12 @@ fn should_crash_when_sending_original_unimock_to_another_thread() {
     let err = std::thread::spawn(drop_u).join().expect_err("Must error");
     std::panic::resume_unwind(err);
 }
+
+#[test]
+#[should_panic(
+    expected = "SingleArg::method1(\"\"): No function supplied for matching inputs for call pattern SingleArg::method1[#0]."
+)]
+fn no_matcher_function() {
+    let u = Unimock::new(SingleArgMock::method1.next_call(&|_| ()).returns(""));
+    u.method1("");
+}

@@ -6,12 +6,14 @@ pub(crate) type MockResult<T> = Result<T, MockError>;
 pub(crate) enum MockError {
     Downcast {
         fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
     },
     NoMockImplementation {
         fn_call: debug::FnActualCall,
     },
     NoMatcherFunction {
         fn_call: debug::FnActualCall,
+        pattern: debug::CallPatternDebug,
     },
     NoMatchingCallPatterns {
         fn_call: debug::FnActualCall,
@@ -53,14 +55,17 @@ pub(crate) enum MockError {
 impl std::fmt::Display for MockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Downcast { fn_call } => {
-                write!(f, "{fn_call}: Fatal: Failed to downcast.")
+            Self::Downcast { fn_call, pattern } => {
+                write!(f, "{fn_call}: Fatal: Failed to downcast in {pattern}.")
             }
             Self::NoMockImplementation { fn_call } => {
                 write!(f, "{fn_call}: No mock implementation found.")
             }
-            Self::NoMatcherFunction { fn_call } => {
-                write!(f, "{fn_call}: No function supplied for matching inputs for one of the call patterns.")
+            Self::NoMatcherFunction { fn_call, pattern } => {
+                write!(
+                    f,
+                    "{fn_call}: No function supplied for matching inputs for {pattern}."
+                )
             }
             Self::NoMatchingCallPatterns {
                 fn_call,
