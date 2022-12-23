@@ -6,7 +6,7 @@ trait SingleArg {
 }
 
 #[test]
-#[should_panic(expected = "No mock implementation found for SingleArg::method1")]
+#[should_panic(expected = "SingleArg::method1(\"hoi\"): No mock implementation found.")]
 fn should_panic_for_nonexisting_mock() {
     Unimock::new(()).method1("hoi");
 }
@@ -98,7 +98,7 @@ fn should_crash_when_the_original_instance_disappears_before_the_clone() {
 }
 
 #[test]
-#[should_panic(expected = "No mock implementation found for SingleArg::method1")]
+#[should_panic(expected = "SingleArg::method1(\"\"): No mock implementation found.")]
 fn multithread_error_reporting_works() {
     let unimock = Unimock::new(());
 

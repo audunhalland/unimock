@@ -1,4 +1,6 @@
-use crate::call_pattern::{CallPattern, DynResponder, PatIndex};
+use crate::call_pattern::{
+    CallPattern, DowncastResponder, DynResponder, PatIndex, PatternError, PatternResult,
+};
 use crate::debug;
 use crate::error::{self};
 use crate::error::{MockError, MockResult};
@@ -39,7 +41,11 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
 
     match dyn_ctx.eval_dyn(&|pattern, reporter| pattern.match_inputs::<F>(&inputs, reporter))? {
         EvalResult::Responder(eval_rsp) => match eval_rsp.responder {
-            DynResponder::Cell(dyn_resp) => match dyn_resp.downcast::<F>()?.cell.try_take() {
+            DynResponder::Cell(dyn_resp) => match dyn_ctx
+                .downcast_responder::<F, _>(dyn_resp)?
+                .cell
+                .try_take()
+            {
                 Some(response) => {
                     let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
                         *response,
@@ -56,7 +62,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
             DynResponder::Borrow(dyn_resp) => {
                 let output_result =
                     <F::Output<'u> as Output<'u, F::Response>>::try_from_borrowed_response(
-                        &dyn_resp.downcast::<F>()?.borrowable,
+                        &dyn_ctx.downcast_responder::<F, _>(dyn_resp)?.borrowable,
                     );
 
                 match output_result {
@@ -70,7 +76,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
             }
             DynResponder::Function(dyn_resp) => {
                 let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                    (dyn_resp.downcast::<F>()?.func)(inputs),
+                    (dyn_ctx.downcast_responder::<F, _>(dyn_resp)?.func)(inputs),
                     &shared_state.value_chain,
                 );
                 Ok(Evaluation::Evaluated(output))
@@ -97,13 +103,13 @@ impl<'u, 's> DynCtx<'u, 's> {
     #[inline(never)]
     fn eval_dyn(
         &self,
-        match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> MockResult<bool>,
+        match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> PatternResult<bool>,
     ) -> MockResult<EvalResult<'u>> {
         let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
             None => match self.shared_state.fallback_mode {
                 FallbackMode::Error => {
                     return Err(MockError::NoMockImplementation {
-                        name: self.mock_fn.name,
+                        fn_call: self.fn_call(),
                     })
                 }
                 FallbackMode::Unmock => return Ok(EvalResult::Unmock),
@@ -145,7 +151,7 @@ impl<'u, 's> DynCtx<'u, 's> {
     fn match_call_pattern(
         &self,
         fn_mocker: &'u FnMocker,
-        match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> MockResult<bool>,
+        match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> PatternResult<bool>,
     ) -> MockResult<Option<(PatIndex, &'u CallPattern)>> {
         match fn_mocker.pattern_match_mode {
             PatternMatchMode::InAnyOrder => fn_mocker
@@ -160,7 +166,8 @@ impl<'u, 's> DynCtx<'u, 's> {
                     },
                 )
                 .next()
-                .transpose(),
+                .transpose()
+                .map_err(|err| self.map_pattern_error(err)),
             PatternMatchMode::InOrder => {
                 let ordered_call_index = self.shared_state.bump_ordered_call_index();
 
@@ -176,7 +183,9 @@ impl<'u, 's> DynCtx<'u, 's> {
 
                 let mut mismatch_reporter = MismatchReporter::new_enabled();
 
-                if !match_inputs(pattern, Some(&mut mismatch_reporter))? {
+                if !match_inputs(pattern, Some(&mut mismatch_reporter))
+                    .map_err(|err| self.map_pattern_error(err))?
+                {
                     let mut mismatches = Mismatches::new();
                     mismatches.collect_from_reporter(pat_index, mismatch_reporter);
 
@@ -190,6 +199,31 @@ impl<'u, 's> DynCtx<'u, 's> {
 
                 Ok(Some((pat_index, pattern)))
             }
+        }
+    }
+
+    #[inline]
+    fn downcast_responder<F: MockFn, D>(
+        &self,
+        dyn_responder: &'u D,
+    ) -> MockResult<&'u D::Downcasted>
+    where
+        D: DowncastResponder<F>,
+    {
+        dyn_responder
+            .downcast()
+            .map_err(|err| self.map_pattern_error(err))
+    }
+
+    #[inline(never)]
+    fn map_pattern_error(&self, pattern_error: PatternError) -> MockError {
+        match pattern_error {
+            PatternError::Downcast => MockError::Downcast {
+                fn_call: self.fn_call(),
+            },
+            PatternError::NoMatcherFunction => MockError::NoMatcherFunction {
+                fn_call: self.fn_call(),
+            },
         }
     }
 

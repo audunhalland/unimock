@@ -1,6 +1,5 @@
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
-use crate::error::{MockError, MockResult};
 use crate::macro_api::MismatchReporter;
 use crate::output::Respond;
 use crate::*;
@@ -20,10 +19,17 @@ impl std::fmt::Display for PatIndex {
     }
 }
 
+pub enum PatternError {
+    Downcast,
+    NoMatcherFunction,
+}
+
+pub type PatternResult<T> = Result<T, PatternError>;
+
 pub(crate) type AnyBox = Box<dyn Any + Send + Sync + 'static>;
 
-fn downcast_box<'b, T: 'static>(any_box: &'b AnyBox, name: &'static str) -> MockResult<&'b T> {
-    any_box.downcast_ref().ok_or(MockError::Downcast { name })
+fn downcast_box<T: 'static>(any_box: &AnyBox) -> PatternResult<&T> {
+    any_box.downcast_ref().ok_or(PatternError::Downcast)
 }
 
 pub(crate) struct CallPattern {
@@ -38,23 +44,18 @@ impl CallPattern {
         &self,
         inputs: &F::Inputs<'_>,
         mismatch_reporter: Option<&mut MismatchReporter>,
-    ) -> MockResult<bool> {
+    ) -> PatternResult<bool> {
         match (&self.input_matcher.dyn_matching_fn, mismatch_reporter) {
             (DynMatchingFn::MatchingDebug(f), Some(reporter)) => {
-                Ok((downcast_box::<MatchingFnDebug<F>>(f, F::NAME)?.0)(
-                    inputs, reporter,
-                ))
+                Ok((downcast_box::<MatchingFnDebug<F>>(f)?.0)(inputs, reporter))
             }
-            (DynMatchingFn::MatchingDebug(f), None) => {
-                Ok((downcast_box::<MatchingFnDebug<F>>(f, F::NAME)?.0)(
-                    inputs,
-                    &mut MismatchReporter::new_disabled(),
-                ))
-            }
-            (DynMatchingFn::Matching(f), _) => {
-                Ok((downcast_box::<MatchingFn<F>>(f, F::NAME)?.0)(inputs))
-            }
-            (DynMatchingFn::None, _) => Err(MockError::NoMatcherFunction { name: F::NAME }),
+            (DynMatchingFn::MatchingDebug(f), None) => Ok((downcast_box::<MatchingFnDebug<F>>(f)?
+                .0)(
+                inputs,
+                &mut MismatchReporter::new_disabled(),
+            )),
+            (DynMatchingFn::Matching(f), _) => Ok((downcast_box::<MatchingFn<F>>(f)?.0)(inputs)),
+            (DynMatchingFn::None, _) => Err(PatternError::NoMatcherFunction),
         }
     }
 
@@ -173,21 +174,33 @@ pub(crate) struct DynCellResponder(AnyBox);
 pub(crate) struct DynBorrowResponder(AnyBox);
 pub(crate) struct DynFunctionResponder(AnyBox);
 
-impl DynCellResponder {
-    pub fn downcast<F: MockFn>(&self) -> MockResult<&CellResponder<F>> {
-        downcast_box(&self.0, F::NAME)
+pub trait DowncastResponder<F: MockFn> {
+    type Downcasted;
+
+    fn downcast(&self) -> PatternResult<&Self::Downcasted>;
+}
+
+impl<F: MockFn> DowncastResponder<F> for DynCellResponder {
+    type Downcasted = CellResponder<F>;
+
+    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
+        downcast_box(&self.0)
     }
 }
 
-impl DynBorrowResponder {
-    pub fn downcast<F: MockFn>(&self) -> MockResult<&BorrowResponder<F>> {
-        downcast_box(&self.0, F::NAME)
+impl<F: MockFn> DowncastResponder<F> for DynBorrowResponder {
+    type Downcasted = BorrowResponder<F>;
+
+    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
+        downcast_box(&self.0)
     }
 }
 
-impl DynFunctionResponder {
-    pub fn downcast<F: MockFn>(&self) -> MockResult<&FunctionResponder<F>> {
-        downcast_box(&self.0, F::NAME)
+impl<F: MockFn> DowncastResponder<F> for DynFunctionResponder {
+    type Downcasted = FunctionResponder<F>;
+
+    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
+        downcast_box(&self.0)
     }
 }
 
