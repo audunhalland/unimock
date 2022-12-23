@@ -34,9 +34,9 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
     };
 
     match dyn_ctx.eval_dyn(&|pattern, reporter| pattern.match_inputs::<F>(&inputs, reporter))? {
-        EvalResult::Responder(eval_rsp) => match eval_rsp.dyn_responder {
-            DynResponder::Cell(dyn_resp) => match dyn_ctx
-                .downcast_responder::<F, _>(dyn_resp, &eval_rsp)?
+        EvalResult::Responder(eval_responder) => match eval_responder.dyn_responder {
+            DynResponder::Cell(dyn_cell_responder) => match dyn_ctx
+                .downcast_responder::<F, _>(dyn_cell_responder, &eval_responder)?
                 .cell
                 .try_take()
             {
@@ -50,15 +50,17 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                 }
                 None => Err(MockError::CannotReturnValueMoreThanOnce {
                     fn_call: dyn_ctx.fn_call(),
-                    pattern: eval_rsp.fn_mocker.debug_pattern(eval_rsp.pat_index),
+                    pattern: eval_responder
+                        .fn_mocker
+                        .debug_pattern(eval_responder.pat_index),
                 }),
             },
-            DynResponder::Borrow(dyn_resp) => {
+            DynResponder::Borrow(dyn_borrow_responder) => {
+                let borrow_responder =
+                    dyn_ctx.downcast_responder::<F, _>(dyn_borrow_responder, &eval_responder)?;
                 let output_result =
                     <F::Output<'u> as Output<'u, F::Response>>::try_from_borrowed_response(
-                        &dyn_ctx
-                            .downcast_responder::<F, _>(dyn_resp, &eval_rsp)?
-                            .borrowable,
+                        &borrow_responder.borrowable,
                     );
 
                 match output_result {
@@ -70,18 +72,20 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     ),
                 }
             }
-            DynResponder::Function(dyn_resp) => {
+            DynResponder::Function(dyn_fn_responder) => {
+                let fn_responder =
+                    dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
                 let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                    (dyn_ctx
-                        .downcast_responder::<F, _>(dyn_resp, &eval_rsp)?
-                        .func)(inputs),
+                    (fn_responder.func)(inputs),
                     &shared_state.value_chain,
                 );
                 Ok(Evaluation::Evaluated(output))
             }
             DynResponder::Panic(msg) => Err(MockError::ExplicitPanic {
                 fn_call: dyn_ctx.fn_call(),
-                pattern: eval_rsp.fn_mocker.debug_pattern(eval_rsp.pat_index),
+                pattern: eval_responder
+                    .fn_mocker
+                    .debug_pattern(eval_responder.pat_index),
                 msg: msg.clone(),
             }),
             DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
