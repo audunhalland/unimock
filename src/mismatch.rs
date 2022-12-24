@@ -40,22 +40,25 @@ impl Display for Mismatches {
         let is_unique_pat = self.has_unique_pat_index();
 
         for (pat_index, input_index, mismatch) in &self.mismatches {
-            let mut header_msg = MismatchMsg::new(*pat_index, *input_index, is_unique_pat);
+            let Mismatch {
+                kind,
+                actual,
+                expected,
+            } = mismatch;
+            let mut header_msg = MismatchMsg::new(*pat_index, *input_index, is_unique_pat, *kind);
 
-            match mismatch {
-                Mismatch::Pattern { actual, expected } => {
-                    header_msg.set_kind(MismatchKind::Pattern);
+            match (kind, actual) {
+                (MismatchKind::Pattern, Some(actual)) => {
                     header_msg.has_comparison = true;
                     header_msg.fmt(f)?;
-
                     Diff::new(actual, expected).fmt(f)?;
                 }
-                Mismatch::Eq { actual, expected } => {
-                    header_msg.set_kind(MismatchKind::Eq);
+                (MismatchKind::Eq, Some(actual)) => {
                     if actual == expected {
                         header_msg.fmt(f)?;
 
-                        write!(f, "Actual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
+                        write!(f, "Actual value did not equal expected value, but their Debug representation are identical:")?;
+                        write!(f, "{actual}")?;
                     } else {
                         header_msg.has_comparison = true;
                         header_msg.fmt(f)?;
@@ -63,16 +66,10 @@ impl Display for Mismatches {
                         Diff::new(actual, expected).fmt(f)?;
                     }
                 }
-                Mismatch::Ne { actual, expected } => {
-                    header_msg.set_kind(MismatchKind::Ne);
+                (MismatchKind::Ne, Some(actual)) => {
                     if actual == expected {
                         header_msg.fmt(f)?;
-
-                        if actual == "?" {
-                            write!(f, "Likely missing Debug representation for type: Debug representation was '?'")?;
-                        } else {
-                            write!(f, "{actual}")?;
-                        }
+                        write!(f, "{actual}")?;
                     } else {
                         header_msg.has_comparison = true;
                         header_msg.fmt(f)?;
@@ -80,6 +77,18 @@ impl Display for Mismatches {
                         writeln!(f, "(Warning) Debug representation problem: Expected and actual asserted inequality failed, though Debug representations differ:")?;
                         Diff::new(actual, expected).fmt(f)?;
                     }
+                }
+                (MismatchKind::Pattern, None) => {
+                    header_msg.fmt(f)?;
+                    writeln!(f, "Actual value did not match expected pattern, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
+                }
+                (MismatchKind::Eq, None) => {
+                    header_msg.fmt(f)?;
+                    writeln!(f, "Actual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
+                }
+                (MismatchKind::Ne, None) => {
+                    header_msg.fmt(f)?;
+                    writeln!(f, "Actual value unexpectedly equalled expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
                 }
             }
         }
@@ -89,43 +98,50 @@ impl Display for Mismatches {
 }
 
 #[derive(Clone)]
-pub(crate) enum Mismatch {
-    Pattern { actual: String, expected: String },
-    Eq { actual: String, expected: String },
-    Ne { actual: String, expected: String },
+pub(crate) struct Mismatch {
+    pub kind: MismatchKind,
+    pub actual: Option<String>,
+    pub expected: String,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum MismatchKind {
+    Pattern,
+    Eq,
+    Ne,
 }
 
 struct MismatchMsg {
     pat_index: PatIndex,
     input_index: InputIndex,
     is_unique_pat: bool,
-    mismatch_kind: Option<MismatchKind>,
+    mismatch_kind: MismatchKind,
     has_comparison: bool,
 }
 
 impl MismatchMsg {
-    fn new(pat_index: PatIndex, input_index: InputIndex, is_unique_pat: bool) -> Self {
+    fn new(
+        pat_index: PatIndex,
+        input_index: InputIndex,
+        is_unique_pat: bool,
+        mismatch_kind: MismatchKind,
+    ) -> Self {
         Self {
             pat_index,
             input_index,
             is_unique_pat,
-            mismatch_kind: None,
+            mismatch_kind,
             has_comparison: false,
         }
-    }
-
-    fn set_kind(&mut self, kind: MismatchKind) {
-        self.mismatch_kind = Some(kind);
     }
 }
 
 impl Display for MismatchMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let initial_msg = match self.mismatch_kind {
-            Some(MismatchKind::Pattern) => "Pattern mismatch for ",
-            Some(MismatchKind::Eq) => "Equality mismatch for ",
-            Some(MismatchKind::Ne) => "Inequality mismatch for ",
-            None => "unknown",
+            MismatchKind::Pattern => "Pattern mismatch for ",
+            MismatchKind::Eq => "Equality mismatch for ",
+            MismatchKind::Ne => "Inequality mismatch for ",
         };
 
         write!(f, "{initial_msg}")?;
@@ -140,7 +156,7 @@ impl Display for MismatchMsg {
             )?;
         }
 
-        if let Some(MismatchKind::Pattern | MismatchKind::Eq) = self.mismatch_kind {
+        if let MismatchKind::Pattern | MismatchKind::Eq = self.mismatch_kind {
             if self.has_comparison {
                 write!(f, " (actual / expected)")?;
             }
@@ -149,12 +165,6 @@ impl Display for MismatchMsg {
         writeln!(f, ":")?;
         Ok(())
     }
-}
-
-enum MismatchKind {
-    Pattern,
-    Eq,
-    Ne,
 }
 
 struct Diff<'s> {

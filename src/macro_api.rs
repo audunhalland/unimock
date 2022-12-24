@@ -1,6 +1,6 @@
 use crate::call_pattern::InputIndex;
-use crate::debug;
-use crate::mismatch::Mismatch;
+use crate::debug::{self, filter_questionmark};
+use crate::mismatch::{Mismatch, MismatchKind};
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
 
@@ -120,48 +120,84 @@ impl MismatchReporter {
     }
 
     /// Register failure to match a pattern
+    #[deprecated]
     pub fn pat_fail(
         &mut self,
         input_index: usize,
         actual: impl Into<String>,
         expected: impl Into<String>,
     ) {
+        self.pat_fail_opt_debug(input_index, filter_questionmark(actual.into()), expected);
+    }
+
+    /// Register failure to match a pattern
+    pub fn pat_fail_opt_debug(
+        &mut self,
+        input_index: usize,
+        actual: Option<impl Into<String>>,
+        expected: impl Into<String>,
+    ) {
         self.mismatches.push((
             InputIndex(input_index),
-            Mismatch::Pattern {
-                actual: actual.into(),
+            Mismatch {
+                kind: MismatchKind::Pattern,
+                actual: actual.map(|dbg| dbg.into()),
                 expected: expected.into(),
             },
         ));
     }
 
     /// Register failure for an eq check
+    #[deprecated]
     pub fn eq_fail(
         &mut self,
         input_index: usize,
         actual: impl Into<String>,
         expected: impl Into<String>,
     ) {
+        self.eq_fail_opt_debug(input_index, filter_questionmark(actual.into()), expected);
+    }
+
+    /// Register failure to match a pattern
+    pub fn eq_fail_opt_debug(
+        &mut self,
+        input_index: usize,
+        actual: Option<impl Into<String>>,
+        expected: impl Into<String>,
+    ) {
         self.mismatches.push((
             InputIndex(input_index),
-            Mismatch::Eq {
-                actual: actual.into(),
+            Mismatch {
+                kind: MismatchKind::Eq,
+                actual: actual.map(|dbg| dbg.into()),
                 expected: expected.into(),
             },
         ));
     }
 
     /// Register failure for an ne check
+    #[deprecated]
     pub fn ne_fail(
         &mut self,
         input_index: usize,
         actual: impl Into<String>,
         expected: impl Into<String>,
     ) {
+        self.ne_fail_opt_debug(input_index, filter_questionmark(actual.into()), expected);
+    }
+
+    /// Register failure for an ne check
+    pub fn ne_fail_opt_debug(
+        &mut self,
+        input_index: usize,
+        actual: Option<impl Into<String>>,
+        expected: impl Into<String>,
+    ) {
         self.mismatches.push((
             InputIndex(input_index),
-            Mismatch::Ne {
-                actual: actual.into(),
+            Mismatch {
+                kind: MismatchKind::Ne,
+                actual: actual.map(|dbg| dbg.into()),
                 expected: expected.into(),
             },
         ));
@@ -181,12 +217,18 @@ where
 pub trait ProperDebug {
     /// Format a debug representation.
     fn unimock_try_debug(&self) -> String;
+
+    /// Optionally format a debug representation.
+    fn unimock_try_debug_opt(&self) -> Option<String>;
 }
 
 /// Fallback trait (using autoref specialization) for returning `"?"` when the implementing value does not implement [std::fmt::Debug].
 pub trait NoDebug {
     /// Format a debug representation.
     fn unimock_try_debug(&self) -> String;
+
+    /// Optionally format a debug representation.
+    fn unimock_try_debug_opt(&self) -> Option<String>;
 }
 
 // Autoref specialization:
@@ -196,11 +238,19 @@ impl<T: std::fmt::Debug> ProperDebug for T {
     fn unimock_try_debug(&self) -> String {
         format!("{self:?}")
     }
+
+    fn unimock_try_debug_opt(&self) -> Option<String> {
+        Some(format!("{self:?}"))
+    }
 }
 
 impl<T> NoDebug for &T {
     fn unimock_try_debug(&self) -> String {
         "?".to_string()
+    }
+
+    fn unimock_try_debug_opt(&self) -> Option<String> {
+        None
     }
 }
 

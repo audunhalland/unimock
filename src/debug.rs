@@ -64,3 +64,11 @@ pub(crate) struct InputMatcherDebug {
     pub file: &'static str,
     pub line: u32,
 }
+
+pub(crate) fn filter_questionmark(string: String) -> Option<String> {
+    if string == "?" {
+        None
+    } else {
+        Some(string)
+    }
+}
