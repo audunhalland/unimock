@@ -1,6 +1,6 @@
 [package]
 name = "unimock"
-version = "0.4.7"
+version = "0.4.8"
 authors = ["Audun Halland <audun.halland@pm.me>"]
 edition = "2021"
 rust-version = "1.65"
@@ -18,7 +18,7 @@ pretty-print = ["dep:pretty_assertions"]
 nightly-tests = []
 
 [dependencies]
-unimock_macros = { path = "unimock_macros", version = "0.4.7" }
+unimock_macros = { path = "unimock_macros", version = "0.4.8" }
 once_cell = "1"
 pretty_assertions = { version = "1.3", optional = true }
 
