@@ -13,6 +13,7 @@ pub struct MockMethod<'t> {
     pub mock_fn_ident: syn::Ident,
     pub mock_fn_name: syn::LitStr,
     pub output_structure: output::OutputStructure<'t>,
+    mirrored_attr_indexes: Vec<usize>,
 }
 
 impl<'s> MockMethod<'s> {
@@ -25,6 +26,12 @@ impl<'s> MockMethod<'s> {
             }
             _ => quote! { #mock_fn_ident },
         }
+    }
+
+    pub fn mirrored_attrs(&self) -> impl Iterator<Item = &'_ syn::Attribute> {
+        self.mirrored_attr_indexes
+            .iter()
+            .map(|index| &self.method.attrs[*index])
     }
 
     pub fn inputs_destructuring(&self) -> InputsDestructuring {
@@ -128,6 +135,19 @@ pub fn extract_methods<'s>(
             let output_structure =
                 output::determine_output_structure(prefix, item_trait, &method.sig);
 
+            let mirrored_attr_indexes = method
+                .attrs
+                .iter()
+                .enumerate()
+                .filter_map(|(index, attr)| {
+                    if attr.path.is_ident("cfg") {
+                        Some(index)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
             Ok(Some(MockMethod {
                 method,
                 non_generic_mock_entry_ident: if is_type_generic {
@@ -138,6 +158,7 @@ pub fn extract_methods<'s>(
                 mock_fn_ident: generate_mock_fn_ident(method, index, is_type_generic, attr)?,
                 mock_fn_name,
                 output_structure,
+                mirrored_attr_indexes,
             }))
         })
         .collect()

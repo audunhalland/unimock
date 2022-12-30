@@ -772,3 +772,17 @@ fn eval_name_clash() {
 
     fn unmock(_: &impl std::any::Any, _: i32) {}
 }
+
+#[test]
+fn fn_cfg_attrs() {
+    #[unimock(api = TraitMock)]
+    trait Trait {
+        fn a(&self) -> i32;
+
+        #[cfg(feature = "always-disabled")]
+        fn b(&self) -> NonExistentType;
+    }
+
+    let u = Unimock::new(TraitMock::a.next_call(matching!()).returns(0));
+    u.a();
+}

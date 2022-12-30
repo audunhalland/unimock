@@ -121,6 +121,7 @@ fn def_mock_fn(
 ) -> Option<MockFnDef> {
     let method = method?;
     let prefix = &attr.prefix;
+    let mirrored_attrs = method.mirrored_attrs();
     let mock_fn_ident = &method.mock_fn_ident;
     let mock_fn_path = method.mock_fn_path(attr);
     let mock_fn_name = &method.mock_fn_name;
@@ -174,6 +175,7 @@ fn def_mock_fn(
     };
 
     let impl_blocks = quote! {
+        #(#mirrored_attrs)*
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Response = #response_associated_type;
@@ -240,6 +242,7 @@ fn def_method_impl(
 
     let prefix = &attr.prefix;
     let method_sig = &method.method.sig;
+    let mirrored_attrs = method.mirrored_attrs();
     let mock_fn_path = method.mock_fn_path(attr);
 
     let inputs_destructuring = method.inputs_destructuring();
@@ -291,6 +294,7 @@ fn def_method_impl(
     };
 
     quote! {
+        #(#mirrored_attrs)*
         #[track_caller]
         #method_sig {
             #body
