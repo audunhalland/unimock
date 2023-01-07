@@ -158,3 +158,31 @@ mod generic_with_unmock {
         T::default()
     }
 }
+
+mod method_generics {
+    use super::*;
+
+    #[unimock(api=G1)]
+    trait ParamInlineBound {
+        fn m<T: 'static>(&self, a: T) -> i32;
+    }
+
+    #[unimock(api=G2)]
+    trait ParamWhereBound {
+        fn m<T>(&self, a: T) -> i32
+        where
+            T: 'static;
+    }
+
+    #[unimock(api=G3)]
+    trait ReturnInlineBound {
+        fn m<T: 'static>(&self) -> T;
+    }
+
+    #[unimock(api=G4)]
+    trait ReturnWhereBound {
+        fn m<T>(&self) -> T
+        where
+            T: 'static;
+    }
+}
