@@ -3,7 +3,7 @@ use syn::spanned::Spanned;
 
 use super::attr::MockApi;
 use super::output;
-use super::util::IsTypeGeneric;
+use super::util::{GenericParamsWithBounds, IsTypeGeneric};
 use super::Attr;
 
 use crate::doc;
@@ -11,6 +11,8 @@ use crate::doc;
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemMethod,
     pub adapted_sig: syn::Signature,
+    pub is_type_generic: IsTypeGeneric,
+    pub generic_params_with_bounds: GenericParamsWithBounds,
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
     pub mock_fn_name: syn::LitStr,
@@ -135,8 +137,9 @@ pub fn extract_methods<'s>(
             );
 
             let mut adapted_sig = method.sig.clone();
-            let is_sig_type_generic = adapt_sig(&mut adapted_sig);
-            let is_type_generic = IsTypeGeneric(is_trait_type_generic.0 || is_sig_type_generic.0);
+            let is_method_type_generic = adapt_sig(&mut adapted_sig);
+            let is_type_generic =
+                IsTypeGeneric(is_trait_type_generic.0 || is_method_type_generic.0);
 
             let output_structure =
                 output::determine_output_structure(prefix, item_trait, &adapted_sig);
@@ -154,9 +157,14 @@ pub fn extract_methods<'s>(
                 })
                 .collect();
 
+            let generic_params_with_bounds =
+                GenericParamsWithBounds::new(&adapted_sig.generics, false);
+
             Ok(Some(MockMethod {
                 method,
                 adapted_sig,
+                is_type_generic: is_method_type_generic,
+                generic_params_with_bounds,
                 non_generic_mock_entry_ident: if is_type_generic.0 {
                     Some(generate_mock_fn_ident(
                         method,

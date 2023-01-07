@@ -12,6 +12,8 @@ use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
+use self::util::iter_generic_type_params;
+
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let trait_info = trait_info::TraitInfo::analyze(&attr.prefix, &item_trait, &attr)?;
     attr.validate(&trait_info)?;
@@ -188,10 +190,9 @@ fn def_mock_fn(
 
     let mock_fn_def = if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
         // the trait is generic
-        let phantoms_tuple = util::MockFnPhantomsTuple(trait_info);
-        let untyped_phantoms = trait_info
-            .generic_type_params()
-            .map(|_| util::UntypedPhantomData);
+        let phantoms_tuple = util::MockFnPhantomsTuple { trait_info, method };
+        let untyped_phantoms =
+            iter_generic_type_params(trait_info, method).map(|_| util::UntypedPhantomData);
         let module_scope = match &attr.mock_api {
             MockApi::MockMod(ident) => Some(quote! { #ident:: }),
             _ => None,
