@@ -64,12 +64,7 @@ impl<'t> Generics<'t> {
             .generics
             .params
             .iter()
-            .chain(
-                self.method
-                    .iter()
-                    .flat_map(|method| method.adapted_sig.generics.params.iter()),
-            )
-            .map(|generic_param| match generic_param {
+            .map(|trait_param| match trait_param {
                 syn::GenericParam::Lifetime(lifetime) => {
                     quote! { #lifetime }
                 }
@@ -82,6 +77,22 @@ impl<'t> Generics<'t> {
                     quote! { #ident }
                 }
             })
+            .chain(
+                self.method
+                    .iter()
+                    .flat_map(|method| method.adapted_sig.generics.params.iter())
+                    .filter_map(|method_param| match method_param {
+                        syn::GenericParam::Lifetime(_) => None,
+                        syn::GenericParam::Type(type_param) => {
+                            let ident = &type_param.ident;
+                            Some(quote! { #ident })
+                        }
+                        syn::GenericParam::Const(const_param) => {
+                            let ident = &const_param.ident;
+                            Some(quote! { #ident })
+                        }
+                    }),
+            )
     }
 }
 
