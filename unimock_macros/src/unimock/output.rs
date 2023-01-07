@@ -1,14 +1,14 @@
 use quote::quote;
 use syn::{parse_quote, visit_mut::VisitMut};
 
-pub struct OutputStructure<'t> {
-    pub wrapping: OutputWrapping<'t>,
+pub struct OutputStructure {
+    pub wrapping: OutputWrapping,
     pub ownership: OutputOwnership,
     response_ty: AssociatedInnerType,
     output_ty: AssociatedInnerType,
 }
 
-impl<'t> OutputStructure<'t> {
+impl OutputStructure {
     pub fn response_associated_type(&self, prefix: &syn::Path) -> proc_macro2::TokenStream {
         self.render_associated_type(prefix, &self.response_ty)
     }
@@ -41,9 +41,9 @@ impl<'t> OutputStructure<'t> {
     }
 }
 
-pub enum OutputWrapping<'t> {
+pub enum OutputWrapping {
     None,
-    ImplTraitFuture(&'t syn::TraitItemType),
+    ImplTraitFuture(syn::TraitItemType),
 }
 
 pub enum OutputOwnership {
@@ -70,11 +70,11 @@ impl OutputOwnership {
     }
 }
 
-pub fn determine_output_structure<'t>(
+pub fn determine_output_structure(
     prefix: &syn::Path,
-    item_trait: &'t syn::ItemTrait,
-    sig: &'t syn::Signature,
-) -> OutputStructure<'t> {
+    item_trait: &syn::ItemTrait,
+    sig: &syn::Signature,
+) -> OutputStructure {
     match &sig.output {
         syn::ReturnType::Default => OutputStructure {
             wrapping: OutputWrapping::None,
@@ -114,11 +114,11 @@ pub fn determine_output_structure<'t>(
 }
 
 /// Determine output structure that is not a reference nor a future
-pub fn determine_owned_or_mixed_output_structure<'t>(
+pub fn determine_owned_or_mixed_output_structure(
     prefix: &syn::Path,
-    sig: &'t syn::Signature,
-    ty: &'t syn::Type,
-) -> OutputStructure<'t> {
+    sig: &syn::Signature,
+    ty: &syn::Type,
+) -> OutputStructure {
     let mut inner_ty = ty.clone();
 
     let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
@@ -200,12 +200,12 @@ fn is_self_segment(segment: Option<&syn::PathSegment>) -> bool {
     }
 }
 
-fn determine_associated_future_structure<'t>(
+fn determine_associated_future_structure(
     prefix: &syn::Path,
-    item_trait: &'t syn::ItemTrait,
-    sig: &'t syn::Signature,
-    path: &'t syn::Path,
-) -> Option<OutputStructure<'t>> {
+    item_trait: &syn::ItemTrait,
+    sig: &syn::Signature,
+    path: &syn::Path,
+) -> Option<OutputStructure> {
     let assoc_ident = &path.segments[1].ident;
 
     let assoc_ty = item_trait
@@ -263,7 +263,7 @@ fn determine_associated_future_structure<'t>(
 
     let mut future_output_structure =
         determine_owned_or_mixed_output_structure(prefix, sig, &output_binding.ty);
-    future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty);
+    future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty.clone());
 
     Some(future_output_structure)
 }
