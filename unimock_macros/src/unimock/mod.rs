@@ -12,7 +12,7 @@ use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
-use self::util::iter_generic_type_params;
+use self::util::{iter_generic_type_params, InferImplTrait};
 
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let trait_info = trait_info::TraitInfo::analyze(&attr.prefix, &item_trait, &attr)?;
@@ -60,7 +60,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .filter_map(Option::as_ref)
         .map(|def| &def.impl_details);
     let generic_params = util::Generics::params(&trait_info, None);
-    let generic_args = util::Generics::args(&trait_info, None);
+    let generic_args = util::Generics::args(&trait_info, None, InferImplTrait(false));
 
     let (opt_mock_interface_public, opt_mock_interface_private) = match &attr.mock_api {
         MockApi::Hidden => (
@@ -138,8 +138,7 @@ fn def_mock_fn(
     let input_lifetime = &attr.input_lifetime;
 
     let inputs_tuple = method
-        .method
-        .sig
+        .adapted_sig
         .inputs
         .iter()
         .enumerate()
@@ -154,7 +153,7 @@ fn def_mock_fn(
         .collect::<Vec<_>>();
 
     let generic_params = util::Generics::params(trait_info, Some(method));
-    let generic_args = util::Generics::args(trait_info, Some(method));
+    let generic_args = util::Generics::args(trait_info, Some(method), InferImplTrait(false));
     let where_clause = &trait_info.item.generics.where_clause;
 
     let doc_attrs = if matches!(attr.mock_api, attr::MockApi::Hidden) {
@@ -247,7 +246,7 @@ fn def_method_impl(
     let mock_fn_path = method.mock_fn_path(attr);
 
     let inputs_destructuring = method.inputs_destructuring();
-    let generic_args = util::Generics::args(trait_info, Some(method));
+    let eval_generic_args = util::Generics::args(trait_info, Some(method), InferImplTrait(true));
 
     let has_impl_trait_future = matches!(
         method.output_structure.wrapping,
@@ -275,14 +274,14 @@ fn def_method_impl(
         };
 
         quote! {
-            match #prefix::macro_api::eval::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)) {
+            match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(&self, (#inputs_destructuring)) {
                 #prefix::macro_api::Evaluation::Evaluated(output) => output,
                 #prefix::macro_api::Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #prefix::macro_api::eval::<#mock_fn_path #generic_args>(&self, (#inputs_destructuring)).unwrap(&self)
+            #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(&self, (#inputs_destructuring)).unwrap(&self)
         }
     };
 

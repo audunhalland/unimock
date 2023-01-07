@@ -160,6 +160,8 @@ mod generic_with_unmock {
 }
 
 mod method_generics {
+    use std::any::Any;
+
     use super::*;
 
     #[unimock(api=G1)]
@@ -175,11 +177,16 @@ mod method_generics {
     }
 
     #[unimock(api=G3)]
+    trait ParamImpl {
+        fn m(&self, a: impl Any + 'static) -> i32;
+    }
+
+    #[unimock(api=G4)]
     trait ReturnInlineBound {
         fn m<T: 'static>(&self) -> T;
     }
 
-    #[unimock(api=G4)]
+    #[unimock(api=G5)]
     trait ReturnWhereBound {
         fn m<T>(&self) -> T
         where

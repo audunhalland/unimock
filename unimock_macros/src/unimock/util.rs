@@ -14,8 +14,11 @@ pub struct Generics<'t> {
 enum GenericsKind {
     None,
     GenericParams,
-    Args,
+    Args(InferImplTrait),
 }
+
+#[derive(Clone, Copy)]
+pub struct InferImplTrait(pub bool);
 
 fn is_type_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> IsTypeGeneric {
     if trait_info.is_type_generic.0 {
@@ -46,19 +49,26 @@ impl<'t> Generics<'t> {
     }
 
     // Args: e.g. SomeType<A, B>
-    pub fn args(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
+    pub fn args(
+        trait_info: &'t TraitInfo,
+        method: Option<&'t MockMethod<'t>>,
+        infer: InferImplTrait,
+    ) -> Self {
         Self {
             trait_info,
             method,
             kind: if is_type_generic(trait_info, method).0 {
-                GenericsKind::Args
+                GenericsKind::Args(infer)
             } else {
                 GenericsKind::None
             },
         }
     }
 
-    fn args_iterator(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
+    fn args_iterator(
+        &self,
+        infer_impl_trait: InferImplTrait,
+    ) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
         self.trait_info
             .item
             .generics
@@ -80,12 +90,25 @@ impl<'t> Generics<'t> {
             .chain(
                 self.method
                     .iter()
-                    .flat_map(|method| method.adapted_sig.generics.params.iter())
-                    .filter_map(|method_param| match method_param {
+                    .flat_map(|method| {
+                        method
+                            .adapted_sig
+                            .generics
+                            .params
+                            .iter()
+                            .map(move |param| (method, param))
+                    })
+                    .filter_map(move |(method, method_param)| match method_param {
                         syn::GenericParam::Lifetime(_) => None,
                         syn::GenericParam::Type(type_param) => {
                             let ident = &type_param.ident;
-                            Some(quote! { #ident })
+                            if infer_impl_trait.0
+                                && method.impl_trait_idents.contains(&ident.to_string())
+                            {
+                                Some(quote! { _ })
+                            } else {
+                                Some(quote! { #ident })
+                            }
                         }
                         syn::GenericParam::Const(const_param) => {
                             let ident = &const_param.ident;
@@ -118,8 +141,8 @@ impl<'t> quote::ToTokens for Generics<'t> {
                     method.generic_params_with_bounds.params.to_tokens(tokens);
                 }
             }
-            GenericsKind::Args => {
-                let args = self.args_iterator();
+            GenericsKind::Args(infer_impl_trait) => {
+                let args = self.args_iterator(*infer_impl_trait);
                 quote! {
                     #(#args),*
                 }

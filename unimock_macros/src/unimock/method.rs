@@ -1,5 +1,8 @@
+use std::collections::HashSet;
+
 use quote::quote;
 use syn::spanned::Spanned;
+use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
 use super::output;
@@ -13,6 +16,7 @@ pub struct MockMethod<'t> {
     pub adapted_sig: syn::Signature,
     pub is_type_generic: IsTypeGeneric,
     pub generic_params_with_bounds: GenericParamsWithBounds,
+    pub impl_trait_idents: HashSet<String>,
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
     pub mock_fn_name: syn::LitStr,
@@ -137,9 +141,9 @@ pub fn extract_methods<'s>(
             );
 
             let mut adapted_sig = method.sig.clone();
-            let is_method_type_generic = adapt_sig(&mut adapted_sig);
+            let adapt_sig_result = adapt_sig(&mut adapted_sig);
             let is_type_generic =
-                IsTypeGeneric(is_trait_type_generic.0 || is_method_type_generic.0);
+                IsTypeGeneric(is_trait_type_generic.0 || adapt_sig_result.is_type_generic.0);
 
             let output_structure =
                 output::determine_output_structure(prefix, item_trait, &adapted_sig);
@@ -163,8 +167,9 @@ pub fn extract_methods<'s>(
             Ok(Some(MockMethod {
                 method,
                 adapted_sig,
-                is_type_generic: is_method_type_generic,
+                is_type_generic: adapt_sig_result.is_type_generic,
                 generic_params_with_bounds,
+                impl_trait_idents: adapt_sig_result.impl_trait_idents,
                 non_generic_mock_entry_ident: if is_type_generic.0 {
                     Some(generate_mock_fn_ident(
                         method,
@@ -301,10 +306,58 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
     }
 }
 
+struct AdaptSigResult {
+    is_type_generic: IsTypeGeneric,
+    impl_trait_idents: HashSet<String>,
+}
+
 // TODO: Rewrite impl Trait to normal param
-fn adapt_sig(sig: &mut syn::Signature) -> IsTypeGeneric {
+fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
     let mut generics: syn::Generics = Default::default();
+    let mut impl_trait_idents: HashSet<String> = HashSet::new();
     std::mem::swap(&mut sig.generics, &mut generics);
+
+    struct ImplTraitConverter<'s> {
+        generics: &'s mut syn::Generics,
+        impl_trait_idents: &'s mut HashSet<String>,
+        impl_trait_count: usize,
+    }
+
+    impl<'s> syn::visit_mut::VisitMut for ImplTraitConverter<'s> {
+        fn visit_type_mut(&mut self, ty: &mut syn::Type) {
+            match ty {
+                syn::Type::ImplTrait(impl_trait) => {
+                    let generic_ident = quote::format_ident!("Impl{}", self.impl_trait_count);
+
+                    self.impl_trait_idents.insert(generic_ident.to_string());
+
+                    self.generics
+                        .params
+                        .push(syn::GenericParam::Type(syn::TypeParam {
+                            attrs: vec![],
+                            ident: generic_ident.clone(),
+                            colon_token: Some(syn::token::Colon::default()),
+                            bounds: impl_trait.bounds.clone(),
+                            eq_token: None,
+                            default: None,
+                        }));
+
+                    *ty = syn::parse_quote!( #generic_ident );
+
+                    self.impl_trait_count += 1;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut converter = ImplTraitConverter {
+        generics: &mut generics,
+        impl_trait_idents: &mut impl_trait_idents,
+        impl_trait_count: 0,
+    };
+    converter.visit_signature_mut(sig);
+
     // write back generics
     std::mem::swap(&mut generics, &mut sig.generics);
 
@@ -315,5 +368,8 @@ fn adapt_sig(sig: &mut syn::Signature) -> IsTypeGeneric {
         }
     }
 
-    is_type_generic
+    AdaptSigResult {
+        is_type_generic,
+        impl_trait_idents,
+    }
 }
