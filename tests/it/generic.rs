@@ -257,3 +257,22 @@ mod impl_trait {
         assert_eq!(3, u.mixed("1", 1));
     }
 }
+
+mod generic_combo {
+    use std::any::Any;
+
+    use super::*;
+
+    #[unimock(api=MockCombo)]
+    trait ComboRet<T: 'static> {
+        fn ret<U>(&self, u: U, a: impl Any + 'static) -> (T, &U)
+        where
+            U: 'static;
+    }
+
+    #[unimock(api=MockAsyncCombo)]
+    #[async_trait::async_trait]
+    trait AsyncTraitGenerics<T: 'static + Send> {
+        async fn ret<U: 'static + Send>(&self, u: U, a: impl Any + Send + 'static) -> T;
+    }
+}
