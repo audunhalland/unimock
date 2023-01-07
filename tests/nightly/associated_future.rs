@@ -124,4 +124,14 @@ mod generic {
 
         fn generic_bounds<'s>(&'s self, param: I) -> Self::Fut<'s>;
     }
+
+    #[unimock]
+    trait AsyncGenericComboOutlivesStatic<I> {
+        type Fut<'s, O>: ::core::future::Future<Output = O> + Send
+        where
+            Self: 's,
+            O: 'static;
+
+        fn combo<'s, O: 'static>(&'s self, param: I) -> Self::Fut<'s, O>;
+    }
 }
