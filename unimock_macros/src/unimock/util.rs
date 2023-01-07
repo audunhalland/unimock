@@ -2,6 +2,9 @@ use super::{method::MockMethod, trait_info::TraitInfo};
 
 use quote::*;
 
+#[derive(Clone, Copy)]
+pub struct IsTypeGeneric(pub bool);
+
 pub struct Generics<'t> {
     trait_info: &'t TraitInfo<'t>,
     method: Option<&'t MockMethod<'t>>,

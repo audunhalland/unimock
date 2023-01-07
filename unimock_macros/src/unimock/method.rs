@@ -3,12 +3,14 @@ use syn::spanned::Spanned;
 
 use super::attr::MockApi;
 use super::output;
+use super::util::IsTypeGeneric;
 use super::Attr;
 
 use crate::doc;
 
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemMethod,
+    pub adapted_sig: syn::Signature,
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
     pub mock_fn_name: syn::LitStr,
@@ -109,7 +111,7 @@ impl<'t> MockMethod<'t> {
 pub fn extract_methods<'s>(
     prefix: &syn::Path,
     item_trait: &'s syn::ItemTrait,
-    is_trait_type_generic: bool,
+    is_trait_type_generic: IsTypeGeneric,
     attr: &Attr,
 ) -> syn::Result<Vec<Option<MockMethod<'s>>>> {
     item_trait
@@ -132,15 +134,12 @@ pub fn extract_methods<'s>(
                 item_trait.ident.span(),
             );
 
-            for generic_param in &method.sig.generics.params {
-                match generic_param {
-                    syn::GenericParam::Type(_) => {}
-                    _ => {}
-                }
-            }
+            let mut adapted_sig = method.sig.clone();
+            let is_sig_type_generic = adapt_sig(&mut adapted_sig);
+            let is_type_generic = IsTypeGeneric(is_trait_type_generic.0 || is_sig_type_generic.0);
 
             let output_structure =
-                output::determine_output_structure(prefix, item_trait, &method.sig);
+                output::determine_output_structure(prefix, item_trait, &adapted_sig);
 
             let mirrored_attr_indexes = method
                 .attrs
@@ -157,12 +156,18 @@ pub fn extract_methods<'s>(
 
             Ok(Some(MockMethod {
                 method,
-                non_generic_mock_entry_ident: if is_trait_type_generic {
-                    Some(generate_mock_fn_ident(method, index, false, attr)?)
+                adapted_sig,
+                non_generic_mock_entry_ident: if is_type_generic.0 {
+                    Some(generate_mock_fn_ident(
+                        method,
+                        index,
+                        IsTypeGeneric(false),
+                        attr,
+                    )?)
                 } else {
                     None
                 },
-                mock_fn_ident: generate_mock_fn_ident(method, index, is_trait_type_generic, attr)?,
+                mock_fn_ident: generate_mock_fn_ident(method, index, is_type_generic, attr)?,
                 mock_fn_name,
                 output_structure,
                 mirrored_attr_indexes,
@@ -208,10 +213,10 @@ fn determine_mockable(method: &syn::TraitItemMethod) -> Mockable {
 fn generate_mock_fn_ident(
     method: &syn::TraitItemMethod,
     method_index: usize,
-    generic: bool,
+    generic: IsTypeGeneric,
     attr: &Attr,
 ) -> syn::Result<syn::Ident> {
-    if generic {
+    if generic.0 {
         match &attr.mock_api {
             MockApi::Flattened(flat_mocks) => Ok(quote::format_ident!(
                 "__Generic{}",
@@ -288,6 +293,19 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
     }
 }
 
-pub enum GenericMethodParam {
-    Explicit { generic_index: usize },
+// TODO: Rewrite impl Trait to normal param
+fn adapt_sig(sig: &mut syn::Signature) -> IsTypeGeneric {
+    let mut generics: syn::Generics = Default::default();
+    std::mem::swap(&mut sig.generics, &mut generics);
+    // write back generics
+    std::mem::swap(&mut generics, &mut sig.generics);
+
+    let mut is_type_generic = IsTypeGeneric(false);
+    for generic_param in &sig.generics.params {
+        if matches!(generic_param, syn::GenericParam::Type(_)) {
+            is_type_generic.0 = true;
+        }
+    }
+
+    is_type_generic
 }

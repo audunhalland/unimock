@@ -1,6 +1,7 @@
 use super::attr::Attr;
 use super::method;
 use super::output::OutputWrapping;
+use super::util::IsTypeGeneric;
 
 pub struct TraitInfo<'t> {
     pub item: &'t syn::ItemTrait,
@@ -23,7 +24,8 @@ impl<'t> TraitInfo<'t> {
             .any(|param| matches!(param, syn::GenericParam::Type(_)));
         let generic_params = &generics.params;
 
-        let methods = method::extract_methods(prefix, item_trait, is_type_generic, attr)?;
+        let methods =
+            method::extract_methods(prefix, item_trait, IsTypeGeneric(is_type_generic), attr)?;
 
         let contains_async = methods.iter().filter_map(Option::as_ref).any(|method| {
             if method.method.sig.asyncness.is_some() {
