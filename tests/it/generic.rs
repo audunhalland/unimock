@@ -228,6 +228,13 @@ mod impl_trait {
         fn m2(&self, a: impl Any + 'static, b: impl Any + 'static) -> i32;
     }
 
+    #[unimock(api=G3)]
+    trait Mixed {
+        fn mixed<T>(&self, a: impl Any + 'static, t: T) -> i32
+        where
+            T: 'static;
+    }
+
     #[test]
     fn impl_trait_generics() {
         let u = Unimock::new((
@@ -239,9 +246,14 @@ mod impl_trait {
                 .with_types::<i32, &str>()
                 .each_call(matching!(1, "1"))
                 .returns(2),
+            G3::mixed
+                .with_types::<i32, &str>()
+                .each_call(matching!("1", 1))
+                .returns(3),
         ));
 
         assert_eq!(1, u.m1(1));
         assert_eq!(2, u.m2(1, "1"));
+        assert_eq!(3, u.mixed("1", 1));
     }
 }
