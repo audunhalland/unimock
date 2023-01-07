@@ -301,6 +301,7 @@
 //! * Methods returning any tuple combination of self-borrowed or owned elements up to 4 elements.
 //! * Methods returning data borrowed from non-self arguments (these have to be converted to static reference, e.g. via [`Box::leak`](Box::leak)).
 //! * Methods returning a type containing lifetime parameters. For a mocked return they will have to be `'static`.
+//! * Generic methods using either explicit generic params or argument-position `impl Trait`.
 //! * Async methods when the trait is annotated with `#[async_trait]`.
 //! * Methods that return a future that is an associated type. Requires nightly.
 //!
