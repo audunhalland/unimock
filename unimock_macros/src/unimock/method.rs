@@ -12,11 +12,11 @@ pub struct MockMethod<'t> {
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
     pub mock_fn_name: syn::LitStr,
-    pub output_structure: output::OutputStructure<'t>,
+    pub output_structure: output::OutputStructure,
     mirrored_attr_indexes: Vec<usize>,
 }
 
-impl<'s> MockMethod<'s> {
+impl<'t> MockMethod<'t> {
     pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
 
@@ -68,7 +68,7 @@ impl<'s> MockMethod<'s> {
         }
     }
 
-    pub fn inputs_try_debug_exprs(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 's {
+    pub fn inputs_try_debug_exprs(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 't {
         self.method
             .sig
             .inputs
@@ -109,7 +109,7 @@ impl<'s> MockMethod<'s> {
 pub fn extract_methods<'s>(
     prefix: &syn::Path,
     item_trait: &'s syn::ItemTrait,
-    is_type_generic: bool,
+    is_trait_type_generic: bool,
     attr: &Attr,
 ) -> syn::Result<Vec<Option<MockMethod<'s>>>> {
     item_trait
@@ -132,6 +132,13 @@ pub fn extract_methods<'s>(
                 item_trait.ident.span(),
             );
 
+            for generic_param in &method.sig.generics.params {
+                match generic_param {
+                    syn::GenericParam::Type(_) => {}
+                    _ => {}
+                }
+            }
+
             let output_structure =
                 output::determine_output_structure(prefix, item_trait, &method.sig);
 
@@ -150,12 +157,12 @@ pub fn extract_methods<'s>(
 
             Ok(Some(MockMethod {
                 method,
-                non_generic_mock_entry_ident: if is_type_generic {
+                non_generic_mock_entry_ident: if is_trait_type_generic {
                     Some(generate_mock_fn_ident(method, index, false, attr)?)
                 } else {
                     None
                 },
-                mock_fn_ident: generate_mock_fn_ident(method, index, is_type_generic, attr)?,
+                mock_fn_ident: generate_mock_fn_ident(method, index, is_trait_type_generic, attr)?,
                 mock_fn_name,
                 output_structure,
                 mirrored_attr_indexes,
@@ -279,4 +286,8 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
             }
         }
     }
+}
+
+pub enum GenericMethodParam {
+    Explicit { generic_index: usize },
 }

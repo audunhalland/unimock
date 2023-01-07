@@ -57,8 +57,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .iter()
         .filter_map(Option::as_ref)
         .map(|def| &def.impl_details);
-    let generic_params = util::Generics::params(&trait_info);
-    let generic_args = util::Generics::args(&trait_info);
+    let generic_params = util::Generics::params(&trait_info, None);
+    let generic_args = util::Generics::args(&trait_info, None);
 
     let (opt_mock_interface_public, opt_mock_interface_private) = match &attr.mock_api {
         MockApi::Hidden => (
@@ -151,8 +151,8 @@ fn def_mock_fn(
         .map(|ty| util::substitute_lifetimes(ty, input_lifetime))
         .collect::<Vec<_>>();
 
-    let generic_params = util::Generics::params(trait_info);
-    let generic_args = util::Generics::args(trait_info);
+    let generic_params = util::Generics::params(trait_info, Some(method));
+    let generic_args = util::Generics::args(trait_info, Some(method));
     let where_clause = &trait_info.item.generics.where_clause;
 
     let doc_attrs = if matches!(attr.mock_api, attr::MockApi::Hidden) {
@@ -246,7 +246,7 @@ fn def_method_impl(
     let mock_fn_path = method.mock_fn_path(attr);
 
     let inputs_destructuring = method.inputs_destructuring();
-    let generic_args = util::Generics::args(trait_info);
+    let generic_args = util::Generics::args(trait_info, Some(method));
 
     let has_impl_trait_future = matches!(
         method.output_structure.wrapping,

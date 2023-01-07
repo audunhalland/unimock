@@ -1,9 +1,10 @@
-use super::trait_info::TraitInfo;
+use super::{method::MockMethod, trait_info::TraitInfo};
 
 use quote::*;
 
 pub struct Generics<'t> {
     trait_info: &'t TraitInfo<'t>,
+    method: Option<&'t MockMethod<'t>>,
     kind: GenericsKind,
 }
 
@@ -15,9 +16,10 @@ enum GenericsKind {
 
 impl<'t> Generics<'t> {
     // Params: e.g. impl<A, B>
-    pub fn params(trait_info: &'t TraitInfo) -> Self {
+    pub fn params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
         Self {
             trait_info,
+            method,
             kind: if trait_info.is_type_generic {
                 GenericsKind::GenericParams
             } else {
@@ -27,9 +29,10 @@ impl<'t> Generics<'t> {
     }
 
     // Args: e.g. SomeType<A, B>
-    pub fn args(trait_info: &'t TraitInfo) -> Self {
+    pub fn args(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
         Self {
             trait_info,
+            method,
             kind: if trait_info.is_type_generic {
                 GenericsKind::Args
             } else {
