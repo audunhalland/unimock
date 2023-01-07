@@ -325,28 +325,25 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
 
     impl<'s> syn::visit_mut::VisitMut for ImplTraitConverter<'s> {
         fn visit_type_mut(&mut self, ty: &mut syn::Type) {
-            match ty {
-                syn::Type::ImplTrait(impl_trait) => {
-                    let generic_ident = quote::format_ident!("ImplTrait{}", self.impl_trait_count);
+            if let syn::Type::ImplTrait(impl_trait) = ty {
+                let generic_ident = quote::format_ident!("ImplTrait{}", self.impl_trait_count);
 
-                    self.impl_trait_idents.insert(generic_ident.to_string());
+                self.impl_trait_idents.insert(generic_ident.to_string());
 
-                    self.generics
-                        .params
-                        .push(syn::GenericParam::Type(syn::TypeParam {
-                            attrs: vec![],
-                            ident: generic_ident.clone(),
-                            colon_token: Some(syn::token::Colon::default()),
-                            bounds: impl_trait.bounds.clone(),
-                            eq_token: None,
-                            default: None,
-                        }));
+                self.generics
+                    .params
+                    .push(syn::GenericParam::Type(syn::TypeParam {
+                        attrs: vec![],
+                        ident: generic_ident.clone(),
+                        colon_token: Some(syn::token::Colon::default()),
+                        bounds: impl_trait.bounds.clone(),
+                        eq_token: None,
+                        default: None,
+                    }));
 
-                    *ty = syn::parse_quote!( #generic_ident );
+                *ty = syn::parse_quote!( #generic_ident );
 
-                    self.impl_trait_count += 1;
-                }
-                _ => {}
+                self.impl_trait_count += 1;
             }
         }
     }
