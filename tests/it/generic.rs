@@ -160,36 +160,88 @@ mod generic_with_unmock {
 }
 
 mod method_generics {
-    use std::any::Any;
-
     use super::*;
 
     #[unimock(api=G1)]
     trait ParamInlineBound {
-        fn m<T: 'static>(&self, a: T) -> i32;
+        fn m1<T: 'static>(&self, a: T) -> i32;
     }
 
     #[unimock(api=G2)]
     trait ParamWhereBound {
-        fn m<T>(&self, a: T) -> i32
+        fn m2<T>(&self, a: T) -> i32
         where
             T: 'static;
     }
 
     #[unimock(api=G3)]
-    trait ParamImpl {
-        fn m(&self, a: impl Any + 'static) -> i32;
+    trait ReturnInlineBound {
+        fn m3<T: 'static>(&self) -> T;
     }
 
     #[unimock(api=G4)]
-    trait ReturnInlineBound {
-        fn m<T: 'static>(&self) -> T;
-    }
-
-    #[unimock(api=G5)]
     trait ReturnWhereBound {
-        fn m<T>(&self) -> T
+        fn m4<T>(&self) -> (T, &T)
         where
             T: 'static;
+    }
+
+    #[test]
+    fn method_generics() {
+        let u = Unimock::new((
+            G1::m1
+                .with_types::<&str>()
+                .next_call(matching!("g1"))
+                .returns(1),
+            G2::m2
+                .with_types::<String>()
+                .next_call(matching!("g2"))
+                .returns(2),
+            G3::m3
+                .with_types::<&str>()
+                .next_call(matching!())
+                .returns("g3"),
+            G4::m4
+                .with_types::<i32>()
+                .next_call(matching!())
+                .returns((4, 4)),
+        ));
+
+        assert_eq!(1, u.m1("g1"));
+        assert_eq!(2, u.m2("g2".to_string()));
+        assert_eq!("g3", u.m3::<&str>());
+        assert_eq!((4, &4), u.m4::<i32>());
+    }
+}
+
+mod impl_trait {
+    use super::*;
+    use std::any::Any;
+
+    #[unimock(api=G1)]
+    trait ImplTrait1 {
+        fn m1(&self, a: impl Any + 'static) -> i32;
+    }
+
+    #[unimock(api=G2)]
+    trait ImplTrait2 {
+        fn m2(&self, a: impl Any + 'static, b: impl Any + 'static) -> i32;
+    }
+
+    #[test]
+    fn impl_trait_generics() {
+        let u = Unimock::new((
+            G1::m1
+                .with_types::<i32>()
+                .each_call(matching!(1))
+                .returns(1),
+            G2::m2
+                .with_types::<i32, &str>()
+                .each_call(matching!(1, "1"))
+                .returns(2),
+        ));
+
+        assert_eq!(1, u.m1(1));
+        assert_eq!(2, u.m2(1, "1"));
     }
 }
