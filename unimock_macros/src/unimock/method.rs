@@ -327,7 +327,7 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
         fn visit_type_mut(&mut self, ty: &mut syn::Type) {
             match ty {
                 syn::Type::ImplTrait(impl_trait) => {
-                    let generic_ident = quote::format_ident!("Impl{}", self.impl_trait_count);
+                    let generic_ident = quote::format_ident!("ImplTrait{}", self.impl_trait_count);
 
                     self.impl_trait_idents.insert(generic_ident.to_string());
 

@@ -310,6 +310,9 @@ mod ty {
                 Self::Group(t) => {
                     doc!(out, [&t.elem]);
                 }
+                Self::ImplTrait(t) => {
+                    doc!(out, [&t.impl_token, " ", Sep::ws2(&t.bounds)]);
+                }
                 Self::Infer(_) => {
                     doc!(out, ["_"]);
                 }
@@ -594,6 +597,7 @@ mod token {
     doc_for_token!(SelfType, "Self");
     doc_for_token!(Ref, "ref");
     doc_for_token!(At, "@");
+    doc_for_token!(Impl, "impl");
 }
 
 #[cfg(test)]
