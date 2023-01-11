@@ -1,3 +1,4 @@
+mod assoc_types;
 mod basic;
 mod errors;
 mod generic;

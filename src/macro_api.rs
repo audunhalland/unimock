@@ -4,6 +4,8 @@ use crate::mismatch::{Mismatch, MismatchKind};
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
 
+pub use ::ghost::phantom;
+
 /// The evaluation of a [MockFn].
 ///
 /// Used to tell trait implementations whether to do perform their own evaluation of a call.
@@ -19,7 +21,10 @@ pub enum Evaluation<'u, 'i, F: MockFn> {
 impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
     /// Unwrap the `Evaluated` variant, or panic.
     /// The unimock instance must be passed in order to register that an eventual panic happened.
-    pub fn unwrap(self, unimock: &Unimock) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
+    pub fn unwrap<T>(
+        self,
+        unimock: &Unimock<T>,
+    ) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
         match self {
             Self::Evaluated(output) => output,
             Self::Skipped(_) => panic!(
@@ -206,7 +211,7 @@ impl MismatchReporter {
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
 #[track_caller]
-pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation<'u, 'i, F>
+pub fn eval<'u, 'i, F, T>(unimock: &'u Unimock<T>, inputs: F::Inputs<'i>) -> Evaluation<'u, 'i, F>
 where
     F: MockFn + 'static,
 {

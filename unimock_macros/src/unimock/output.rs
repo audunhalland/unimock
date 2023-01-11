@@ -1,6 +1,8 @@
 use quote::quote;
 use syn::{parse_quote, visit_mut::VisitMut};
 
+use super::util;
+
 pub struct OutputStructure<'t> {
     pub wrapping: OutputWrapping<'t>,
     pub ownership: OutputOwnership,
@@ -85,6 +87,7 @@ pub fn determine_output_structure<'t>(
         syn::ReturnType::Type(_, ty) => match ty.as_ref() {
             syn::Type::Reference(type_reference) => {
                 let mut inner_ty = *type_reference.elem.clone();
+                util::remove_self_nested_type(&mut inner_ty);
 
                 let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
                 let ownership = determine_reference_ownership(sig, type_reference);
@@ -102,7 +105,7 @@ pub fn determine_output_structure<'t>(
             }
             syn::Type::Path(path)
                 if path.qself.is_none()
-                    && is_self_segment(path.path.segments.first())
+                    && util::is_self_segment(path.path.segments.first())
                     && (path.path.segments.len() == 2) =>
             {
                 determine_associated_future_structure(prefix, item_trait, sig, &path.path)
@@ -145,7 +148,8 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
             for elem in tuple.elems {
                 match elem {
                     syn::Type::Reference(reference) => {
-                        let elem = reference.elem;
+                        let mut elem = reference.elem;
+                        util::remove_self_nested_type(&mut elem);
 
                         if reference.mutability.is_some() {
                             panic!("TODO: Mutable references in tuples");
@@ -158,7 +162,8 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
                             #prefix::output::Borrowed<#elem>
                         });
                     }
-                    owned => {
+                    mut owned => {
+                        util::remove_self_nested_type(&mut owned);
                         response_ty_tuple.elems.push(parse_quote! {
                             #prefix::output::Owned<#owned>
                         });
@@ -179,9 +184,26 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
                 output_ty: AssociatedInnerType::Typed(syn::Type::Tuple(output_ty_tuple)),
             }
         }
+        (ownership, syn::Type::Path(mut p)) if p.qself.is_none() => {
+            p.path.segments = util::remove_self_in_segment(p.path.segments.clone());
+
+            let response_ty = AssociatedInnerType::new_static(syn::Type::Path(p), &borrow_info);
+            let mut ty = ty.clone();
+            util::remove_self_nested_type(&mut ty);
+            let output_ty = AssociatedInnerType::new_gat(ty, &borrow_info, &ownership);
+
+            OutputStructure {
+                wrapping: OutputWrapping::None,
+                ownership,
+                response_ty,
+                output_ty,
+            }
+        }
         (ownership, inner_ty) => {
             let response_ty = AssociatedInnerType::new_static(inner_ty, &borrow_info);
-            let output_ty = AssociatedInnerType::new_gat(ty.clone(), &borrow_info, &ownership);
+            let mut ty = ty.clone();
+            util::remove_self_nested_type(&mut ty);
+            let output_ty = AssociatedInnerType::new_gat(ty, &borrow_info, &ownership);
 
             OutputStructure {
                 wrapping: OutputWrapping::None,
@@ -193,13 +215,6 @@ pub fn determine_owned_or_mixed_output_structure<'t>(
     }
 }
 
-fn is_self_segment(segment: Option<&syn::PathSegment>) -> bool {
-    match segment {
-        None => false,
-        Some(segment) => segment.ident == "Self",
-    }
-}
-
 fn determine_associated_future_structure<'t>(
     prefix: &syn::Path,
     item_trait: &'t syn::ItemTrait,
@@ -208,58 +223,50 @@ fn determine_associated_future_structure<'t>(
 ) -> Option<OutputStructure<'t>> {
     let assoc_ident = &path.segments[1].ident;
 
-    let assoc_ty = item_trait
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            syn::TraitItem::Type(item_type) => {
-                if &item_type.ident == assoc_ident {
-                    Some(item_type)
-                } else {
-                    None
-                }
+    let assoc_ty = item_trait.items.iter().find_map(|item| match item {
+        syn::TraitItem::Type(item_type) => {
+            if &item_type.ident == assoc_ident {
+                Some(item_type)
+            } else {
+                None
             }
-            _ => None,
-        })
-        .next()?;
-    let future_bound = assoc_ty
-        .bounds
-        .iter()
-        .filter_map(|bound| match bound {
-            syn::TypeParamBound::Lifetime(_) => None,
-            syn::TypeParamBound::Trait(trait_bound) => {
-                let is_future = trait_bound
-                    .path
-                    .segments
-                    .iter()
-                    .any(|segment| segment.ident == "Future");
+        }
+        _ => None,
+    })?;
+    let future_bound = assoc_ty.bounds.iter().find_map(|bound| match bound {
+        syn::TypeParamBound::Lifetime(_) => None,
+        syn::TypeParamBound::Trait(trait_bound) => {
+            let is_future = trait_bound
+                .path
+                .segments
+                .iter()
+                .any(|segment| segment.ident == "Future");
 
-                if is_future {
-                    Some(trait_bound)
-                } else {
-                    None
-                }
+            if is_future {
+                Some(trait_bound)
+            } else {
+                None
             }
-        })
-        .next()?;
+        }
+    })?;
     let last_future_bound_segment = future_bound.path.segments.last()?;
     let generic_arguments = match &last_future_bound_segment.arguments {
         syn::PathArguments::AngleBracketed(bracketed) => Some(&bracketed.args),
         _ => None,
     }?;
-    let output_binding = generic_arguments
-        .iter()
-        .filter_map(|generic_argument| match generic_argument {
-            syn::GenericArgument::Binding(binding) => {
-                if binding.ident == "Output" {
-                    Some(binding)
-                } else {
-                    None
+    let output_binding =
+        generic_arguments
+            .iter()
+            .find_map(|generic_argument| match generic_argument {
+                syn::GenericArgument::Binding(binding) => {
+                    if binding.ident == "Output" {
+                        Some(binding)
+                    } else {
+                        None
+                    }
                 }
-            }
-            _ => None,
-        })
-        .next()?;
+                _ => None,
+            })?;
 
     let mut future_output_structure =
         determine_owned_or_mixed_output_structure(prefix, sig, &output_binding.ty);
@@ -313,7 +320,6 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
     None
 }
 
-#[derive(Clone)]
 enum AssociatedInnerType {
     Unit,
     Typed(syn::Type),

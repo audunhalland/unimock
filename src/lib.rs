@@ -380,8 +380,8 @@ mod fn_mocker;
 mod mismatch;
 mod state;
 
-use std::any::TypeId;
 use std::sync::Arc;
+use std::{any::TypeId, marker::PhantomData};
 
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
@@ -637,10 +637,17 @@ enum FallbackMode {
 /// Unimock will also induce a panic if the original instance gets dropped in a thread that does not equal the creator thread.
 /// Therefore, Unimock should always be cloned before sending off to another thread.
 ///
-pub struct Unimock {
+pub struct Unimock<Assoc = NoAssocType> {
     original_instance: bool,
     shared_state: Arc<state::SharedState>,
+    _m: PhantomData<Assoc>,
 }
+
+/// This [Unimock] instance has no trait impls with associated types.
+pub struct NoAssocType;
+
+/// This [Unimock] instance has a trait impl with associated type(s).
+pub struct AssocType<T: ?Sized, Next = NoAssocType>(PhantomData<(Next, T)>);
 
 impl Unimock {
     /// Construct a unimock instance which strictly adheres to the description in the passed [Clause].
@@ -661,6 +668,16 @@ impl Unimock {
     /// ```
     #[track_caller]
     pub fn new(setup: impl Clause) -> Self {
+        Self::from_assembler(
+            assemble::MockAssembler::try_from_clause(setup),
+            FallbackMode::Error,
+        )
+    }
+}
+
+impl<Assoc> Unimock<Assoc> {
+    /// TODO
+    pub fn new_with_assoc(setup: impl Clause) -> Self {
         Self::from_assembler(
             assemble::MockAssembler::try_from_clause(setup),
             FallbackMode::Error,
@@ -714,6 +731,7 @@ impl Unimock {
         Self {
             original_instance: true,
             shared_state: Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
+            _m: PhantomData,
         }
     }
 
@@ -726,16 +744,17 @@ impl Unimock {
     }
 }
 
-impl Clone for Unimock {
-    fn clone(&self) -> Unimock {
+impl<T> Clone for Unimock<T> {
+    fn clone(&self) -> Self {
         Unimock {
             original_instance: false,
             shared_state: self.shared_state.clone(),
+            _m: PhantomData,
         }
     }
 }
 
-impl Drop for Unimock {
+impl<T> Drop for Unimock<T> {
     fn drop(&mut self) {
         // skip verification if not the original instance.
         if !self.original_instance {
