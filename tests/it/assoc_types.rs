@@ -852,6 +852,7 @@ mod output {
 
 mod param {
     use super::*;
+    use std::fmt::Debug;
 
     #[unimock(api=GenericParamMock)]
     trait GenericParam<T> {
@@ -950,6 +951,7 @@ mod async_generic {
 
 mod generic_without_module {
     use super::*;
+    use std::fmt::Debug;
 
     #[unimock(api=[Func])]
     trait WithModule<T: Debug> {
@@ -1095,7 +1097,7 @@ fn in_result_clone_acrobatics() {
 
 #[test]
 #[should_panic(
-    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/assoc_types.rs:1108 to match exactly 1 call, but it actually matched 2 calls."
+    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/assoc_types.rs:1105 to match exactly 1 call, but it actually matched 2 calls."
 )]
 fn in_result_may_multi_respond_on_ok_no_clone() {
     let u: Unimock<AssocType<()>> = Unimock::with_assoc(
