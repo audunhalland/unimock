@@ -676,8 +676,34 @@ impl Unimock {
 }
 
 impl<Assoc> Unimock<Assoc> {
-    /// TODO
-    pub fn new_with_assoc(setup: impl Clause) -> Self {
+    /// Construct a unimock instance for mocking a trait with associated types.
+    ///
+    /// Useful only for traits with methods, as it is requires you to specify
+    /// concrete types on a method, as shown in the example below
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unimock::*;
+    /// #[unimock(api=AssocMock)]
+    /// trait HasAssociatedTypes {
+    ///     type Input;
+    ///     type Output;
+    ///
+    ///     fn exec(&self, inp: Self::Input) -> Option<Self::Output>;
+    /// }
+    ///
+    /// let u = Unimock::with_assoc(
+    ///     AssocMock::exec::<i32, f64>
+    ///         .each_call(matching!(42))
+    ///         .returns(42.0)
+    /// );
+    ///
+    /// assert_eq!(Some(42.0), u.exec(42));
+    ///
+    /// ```
+    /// Its also reasonable to create one unimock instance for one trait unless
+    /// traits share a type used in place of associated type.
+    pub fn with_assoc(setup: impl Clause) -> Self {
         Self::from_assembler(
             assemble::MockAssembler::try_from_clause(setup),
             FallbackMode::Error,

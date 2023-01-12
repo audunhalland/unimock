@@ -46,6 +46,7 @@ impl<'t> TraitInfo<'t> {
             for generic_param in generic_params.iter() {
                 if let syn::GenericParam::Type(type_param) = generic_param {
                     let mut bounded_param = type_param.clone();
+                    bounded_param.default = None;
 
                     add_static_bound_if_not_present(&mut bounded_param);
                     if contains_async {

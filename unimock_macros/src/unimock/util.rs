@@ -7,6 +7,7 @@ pub struct Generics<'t> {
     kind: GenericsKind,
 }
 
+#[derive(PartialEq)]
 enum GenericsKind {
     None,
     AssocTypesWithBounds,
@@ -83,24 +84,21 @@ impl<'t> Generics<'t> {
     }
 
     fn args_iterator(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
-        self.trait_info
-            .item
-            .generics
-            .params
-            .iter()
-            .map(|generic_param| match generic_param {
+        self.trait_info.item.generics.params.iter().filter_map(
+            |generic_param| match generic_param {
                 syn::GenericParam::Lifetime(lifetime) => {
-                    quote! { #lifetime }
+                    (self.kind != GenericsKind::ArgsWithAssocTypes).then(|| quote! { #lifetime })
                 }
                 syn::GenericParam::Type(type_param) => {
                     let ident = &type_param.ident;
-                    quote! { #ident }
+                    Some(quote! { #ident })
                 }
                 syn::GenericParam::Const(const_param) => {
                     let ident = &const_param.ident;
-                    quote! { #ident }
+                    Some(quote! { #ident })
                 }
-            })
+            },
+        )
     }
 
     pub fn trait_info(&self) -> &TraitInfo {
@@ -114,12 +112,18 @@ impl<'t> quote::ToTokens for Generics<'t> {
             return;
         }
 
-        syn::token::Lt::default().to_tokens(tokens);
         match &self.kind {
             GenericsKind::None => {}
             GenericsKind::AssocTypesWithBounds => {
                 for item in &self.trait_info.item.items {
                     if let syn::TraitItem::Type(ty) = item {
+                        let mut ty = ty.clone();
+                        for ele in &mut ty.bounds {
+                            if let syn::TypeParamBound::Trait(t) = ele {
+                                t.path.segments = remove_self_in_segment(t.path.segments.clone());
+                            }
+                        }
+                        ty.default = None;
                         ty.ident.to_tokens(tokens);
                         if ty.bounds.is_empty() {
                             quote! { : 'static }.to_tokens(tokens);
@@ -147,11 +151,20 @@ impl<'t> quote::ToTokens for Generics<'t> {
                 self.trait_info.generic_params_with_bounds.to_tokens(tokens);
                 for item in &self.trait_info.item.items {
                     if let syn::TraitItem::Type(ty) = item {
+                        let mut ty = ty.clone();
+                        for ele in &mut ty.bounds {
+                            if let syn::TypeParamBound::Trait(t) = ele {
+                                t.path.segments = remove_self_in_segment(t.path.segments.clone());
+                            }
+                        }
+                        ty.default = None;
+
                         syn::token::Comma::default().to_tokens(tokens);
                         ty.ident.to_tokens(tokens);
                         if ty.bounds.is_empty() {
                             quote! { : 'static }.to_tokens(tokens);
                         } else {
+                            syn::token::Colon::default().to_tokens(tokens);
                             ty.bounds.to_tokens(tokens);
                             quote! { + 'static }.to_tokens(tokens);
                         }
@@ -181,7 +194,6 @@ impl<'t> quote::ToTokens for Generics<'t> {
                 .to_tokens(tokens);
             }
         }
-        syn::token::Gt::default().to_tokens(tokens);
     }
 }
 

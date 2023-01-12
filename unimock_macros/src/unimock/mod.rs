@@ -66,6 +66,13 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .iter()
         .filter_map(Option::as_ref)
         .map(|def| &def.impl_details);
+    let trait_lifetimes = trait_info.item.generics.params.iter().filter_map(|gen| {
+        if let syn::GenericParam::Lifetime(lt) = gen {
+            Some(quote! { #lt, })
+        } else {
+            None
+        }
+    });
     let generic_params_assoc = util::Generics::params_with_assoc_types(&trait_info);
     let generic_args = util::Generics::args(&trait_info);
 
@@ -118,7 +125,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #(#mock_fn_impl_details)*
 
             #(#impl_attributes)*
-            impl #generic_params_assoc #trait_ident #generic_args
+            impl <#(#trait_lifetimes)* #generic_params_assoc> #trait_ident <#generic_args>
                 for #prefix::Unimock<#unimock_generics>
             #where_clause
             {
@@ -234,13 +241,13 @@ fn def_mock_fn(
             #(#doc_attrs)*
             #[allow(unused_)]
             #ghost
-            #mock_visibility struct #non_generic_ident #assoc_types;
+            #mock_visibility struct #non_generic_ident <#assoc_types>;
         }
     };
 
     let impl_blocks = quote! {
         #(#mirrored_attrs)*
-        impl #generic_params_with_assoc_types #prefix::MockFn for #mock_fn_path #generic_args_with_assoc_types #where_clause {
+        impl <#generic_params_with_assoc_types> #prefix::MockFn for #mock_fn_path <#generic_args_with_assoc_types> #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Response = #response_associated_type;
             type Output<'u> = #output_associated_type;
@@ -262,8 +269,8 @@ fn def_mock_fn(
         MockFnDef {
             mock_fn_struct_item: gen_mock_fn_struct_item(non_generic_ident, &assoc_types),
             impl_details: quote! {
-                impl #assoc_types #module_scope #non_generic_ident #assoc_types_no_bounds {
-                    pub fn with_types #generic_params(
+                impl <#assoc_types> #module_scope #non_generic_ident <#assoc_types_no_bounds> {
+                    pub fn with_types <#generic_params>(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = (#(#inputs_tuple),*),
@@ -271,12 +278,12 @@ fn def_mock_fn(
                     >
                         #where_clause
                     {
-                        #mock_fn_ident :: #generic_args_with_assoc_types (#untyped_phantom)
+                        #mock_fn_ident::<#generic_args_with_assoc_types> (#untyped_phantom)
                     }
                 }
 
                 #[allow(non_camel_case_types)]
-                struct #mock_fn_ident #generic_params_with_assoc_types #phantoms_tuple;
+                struct #mock_fn_ident <#generic_params_with_assoc_types> #phantoms_tuple;
 
                 #impl_blocks
             },
@@ -336,14 +343,14 @@ fn def_method_impl(
         };
 
         quote! {
-            match #prefix::macro_api::eval::<#mock_fn_path #generic_args_assoc, _>(&self, (#inputs_destructuring)) {
+            match #prefix::macro_api::eval::<#mock_fn_path <#generic_args_assoc>, _>(&self, (#inputs_destructuring)) {
                 #prefix::macro_api::Evaluation::Evaluated(output) => output,
                 #prefix::macro_api::Evaluation::Skipped((#inputs_destructuring)) => #unmock_expr
             }
         }
     } else {
         quote! {
-            #prefix::macro_api::eval::<#mock_fn_path #generic_args_assoc, _>(&self, (#inputs_destructuring)).unwrap(&self)
+            #prefix::macro_api::eval::<#mock_fn_path <#generic_args_assoc>, _>(&self, (#inputs_destructuring)).unwrap(&self)
         }
     };
 

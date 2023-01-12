@@ -12,7 +12,7 @@ fn noarg_works() {
 
     assert_eq!(
         1_000_000,
-        Unimock::new_with_assoc(
+        Unimock::with_assoc(
             NoArgMock::no_arg::<i32>
                 .next_call(matching!())
                 .returns(1_000_000)
@@ -41,7 +41,7 @@ fn owned_output_works() {
     assert_eq!(
         "ab",
         takes_owned(
-            &Unimock::new_with_assoc(
+            &Unimock::with_assoc(
                 OwnedMock::foo::<String>
                     .next_call(matching!(_, _))
                     .answers(|(a, b)| format!("{a}{b}"))
@@ -54,7 +54,7 @@ fn owned_output_works() {
     assert_eq!(
         "lol",
         takes_owned(
-            &Unimock::new_with_assoc(OwnedMock::foo::<String>.stub(|each| {
+            &Unimock::with_assoc(OwnedMock::foo::<String>.stub(|each| {
                 each.call(matching!(_, _)).returns("lol");
             })),
             "a",
@@ -64,7 +64,7 @@ fn owned_output_works() {
     assert_eq!(
         "",
         takes_owned(
-            &Unimock::new_with_assoc(OwnedMock::foo::<String>.stub(|each| {
+            &Unimock::with_assoc(OwnedMock::foo::<String>.stub(|each| {
                 each.call(matching!("a", "b")).returns_default();
             })),
             "a",
@@ -77,12 +77,12 @@ mod exotic_self_types {
     use super::*;
     use std::rc::Rc;
 
-    // #[unimock]
-    // trait OwnedSelf {
-    //     type X;
+    #[unimock(api=OwnedSelfMock)]
+    trait OwnedSelf {
+        type X;
 
-    //     fn foo(self);
-    // }
+        fn foo(self);
+    }
 
     #[unimock(api=MutSelfMock)]
     trait MutSelf {
@@ -100,7 +100,7 @@ mod exotic_self_types {
 
     #[test]
     fn mut_self() {
-        let mut u: Unimock<AssocType<i32>> = Unimock::new_with_assoc(
+        let mut u: Unimock<AssocType<i32>> = Unimock::with_assoc(
             MutSelfMock::mut_self::<i32>
                 .each_call(matching!())
                 .returns(()),
@@ -111,7 +111,7 @@ mod exotic_self_types {
 
     #[test]
     fn rc_self() {
-        let deps: Rc<Unimock<AssocType<i32>>> = Rc::new(Unimock::new_with_assoc(
+        let deps: Rc<Unimock<AssocType<i32>>> = Rc::new(Unimock::with_assoc(
             RcSelfMock::rc_self::<i32>
                 .each_call(matching!())
                 .returns(()),
@@ -136,7 +136,7 @@ mod exotic_methods {
 
     #[test]
     fn test_provided() {
-        let deps = Unimock::new_with_assoc(
+        let deps = Unimock::with_assoc(
             ProvidedMock::provided::<i32>
                 .each_call(matching!())
                 .returns(42),
@@ -144,15 +144,15 @@ mod exotic_methods {
         assert_eq!(42, deps.provided());
     }
 
-    // #[unimock]
-    // trait SkipStaticProvided {
-    //     type X;
+    #[unimock]
+    trait SkipStaticProvided {
+        type X;
 
-    //     fn skip1() {}
-    //     fn skip2(arg: i32) -> i32 {
-    //         arg
-    //     }
-    // }
+        fn skip1() {}
+        fn skip2(arg: i32) -> i32 {
+            arg
+        }
+    }
 }
 
 mod referenced {
@@ -172,7 +172,7 @@ mod referenced {
 
     #[test]
     fn referenced_with_static_return_value_works() {
-        let u = Unimock::new_with_assoc(ReferencedMock::foo::<&str>.stub(|each| {
+        let u = Unimock::with_assoc(ReferencedMock::foo::<&str>.stub(|each| {
             each.call(matching!("a")).returns("answer".to_string());
         }));
         assert_eq!("answer", takes_referenced(&u, "a",));
@@ -180,7 +180,7 @@ mod referenced {
 
     #[test]
     fn referenced_with_default_return_value_works() {
-        let u = Unimock::new_with_assoc(ReferencedMock::foo::<&str>.stub(|each| {
+        let u = Unimock::with_assoc(ReferencedMock::foo::<&str>.stub(|each| {
             each.call(matching!("Æ")).panics("Should not be called");
             each.call(matching!("a")).returns(String::new());
         }));
@@ -189,7 +189,7 @@ mod referenced {
 
     #[test]
     fn referenced_with_static_ref_works() {
-        let u = Unimock::new_with_assoc(ReferencedMock::foo::<&str>.stub(|each| {
+        let u = Unimock::with_assoc(ReferencedMock::foo::<&str>.stub(|each| {
             each.call(matching!("a")).returns("foobar");
         }));
         assert_eq!("foobar", takes_referenced(&u, "a",));
@@ -211,7 +211,7 @@ mod no_clone_return {
 
     #[test]
     fn test_no_clone_return() {
-        let u = Unimock::new_with_assoc(
+        let u = Unimock::with_assoc(
             FooMock::foo::<NoClone>
                 .some_call(matching!())
                 .returns(NoClone(55)),
@@ -232,7 +232,7 @@ mod each_call_implicitly_clones {
 
     #[test]
     fn each_call_implicit_clone() {
-        let u = Unimock::new_with_assoc(FooMock::foo::<i32>.each_call(matching!()).returns(55));
+        let u = Unimock::with_assoc(FooMock::foo::<i32>.each_call(matching!()).returns(55));
         assert_eq!(55, u.foo());
         assert_eq!(55, u.foo());
     }
@@ -261,7 +261,7 @@ fn test_multiple() {
         t.method2(tmp, tmp)
     }
 
-    let u = Unimock::new_with_assoc((
+    let u = Unimock::with_assoc((
         SingleArgMock::method1::<&'static str>.stub(|each| {
             each.call(matching!("b")).returns("B").once();
         }),
@@ -290,7 +290,7 @@ mod no_debug {
 
     #[test]
     fn can_match_a_non_debug_argument() {
-        match Unimock::new_with_assoc(VeryPrimitiveMock::primitive::<&str>.stub(|each| {
+        match Unimock::with_assoc(VeryPrimitiveMock::primitive::<&str>.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
         }))
@@ -304,7 +304,7 @@ mod no_debug {
     #[test]
     #[should_panic(expected = "VeryPrimitive::primitive(?, ?): No matching call patterns.")]
     fn should_format_non_debug_input_with_a_question_mark() {
-        Unimock::new_with_assoc(VeryPrimitiveMock::primitive::<&str>.stub(|each| {
+        Unimock::with_assoc(VeryPrimitiveMock::primitive::<&str>.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
         }))
@@ -317,26 +317,26 @@ fn should_debug_reference_to_debug_implementing_type() {
     #[derive(Debug)]
     pub enum DebugEnum {}
 
-    // #[unimock]
-    // trait VeryPrimitiveRefZero {
-    //     type X;
+    #[unimock(api=A)]
+    trait VeryPrimitiveRefZero {
+        type X;
 
-    //     fn primitive_ref(&self, a: DebugEnum) -> DebugEnum;
-    // }
+        fn primitive_ref(&self, a: DebugEnum) -> DebugEnum;
+    }
 
-    // #[unimock]
-    // trait VeryPrimitiveRefOnce {
-    //     type X;
+    #[unimock(api=B)]
+    trait VeryPrimitiveRefOnce {
+        type X;
 
-    //     fn primitive_ref(&self, a: &DebugEnum) -> DebugEnum;
-    // }
+        fn primitive_ref(&self, a: &DebugEnum) -> DebugEnum;
+    }
 
-    // #[unimock]
-    // trait VeryPrimitiveRefTwice {
-    //     type X;
+    #[unimock(api=C)]
+    trait VeryPrimitiveRefTwice {
+        type X;
 
-    //     fn primitive_ref(&self, a: &&DebugEnum) -> DebugEnum;
-    // }
+        fn primitive_ref(&self, a: &&DebugEnum) -> DebugEnum;
+    }
 }
 
 #[test]
@@ -353,7 +353,7 @@ fn should_be_able_to_borrow_a_returns_value() {
 
     assert_eq!(
         &Ret(42),
-        Unimock::new_with_assoc(
+        Unimock::with_assoc(
             BorrowsRetMock::borrows_ret::<i32>
                 .each_call(matching!())
                 .returns(&Ret(42))
@@ -375,28 +375,28 @@ fn various_borrowing() {
         t.borrow(input.to_string()).as_str()
     }
 
-    let u = Unimock::new_with_assoc(
+    let u = Unimock::with_assoc(
         BorrowingMock::borrow::<String>
             .next_call(matching!(_))
             .returns("foo".to_string())
             .once(),
     );
     assert_eq!("foo", get_str(&u, ""));
-    let u = Unimock::new_with_assoc(
+    let u = Unimock::with_assoc(
         BorrowingMock::borrow::<String>
             .next_call(matching!(_))
             .returns("foo".to_string())
             .once(),
     );
     assert_eq!("foo", get_str(&u, ""));
-    let u = Unimock::new_with_assoc(
+    let u = Unimock::with_assoc(
         BorrowingMock::borrow::<String>
             .next_call(matching!(_))
             .answers(|input| format!("{input}{input}"))
             .once(),
     );
     assert_eq!("yoyo", get_str(&u, "yo"));
-    let u: Unimock<AssocType<String>> = Unimock::new_with_assoc(
+    let u: Unimock<AssocType<String>> = Unimock::with_assoc(
         BorrowingMock::borrow_static::<String>
             .next_call(matching!(_))
             .answers_leaked_ref(|_| format!("yoyoyo"))
@@ -422,7 +422,7 @@ mod custom_api_module {
         expected = "Single::func: Expected Single::func(_) at tests/it/assoc_types.rs:427 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
-        Unimock::<AssocType<MyType>>::new_with_assoc(
+        Unimock::<AssocType<MyType>>::with_assoc(
             FakeSingle::func::<MyType>
                 .next_call(matching!(_))
                 .returns(MyType)
@@ -498,7 +498,7 @@ async fn test_async_trait() {
     assert_eq!(
         "42",
         takes_async(
-            &Unimock::new_with_assoc(AsyncMock::func::<i32>.stub(|each| {
+            &Unimock::with_assoc(AsyncMock::func::<i32>.stub(|each| {
                 each.call(matching!(_)).returns("42");
             })),
             21
@@ -525,12 +525,12 @@ fn test_cow() {
     assert_eq!(
         "output",
         takes(
-            &Unimock::new_with_assoc(CowBasedMock::func::<str>.stub(|each| {
+            &Unimock::with_assoc(CowBasedMock::func::<str>.stub(|each| {
                 each.call(matching! {("input") | ("foo")}).returns("output");
             })),
             "input".into()
         )
-    )
+    );
 }
 
 #[test]
@@ -549,7 +549,7 @@ fn borrow_intricate_lifetimes() {
         i.foo(&I(std::marker::PhantomData));
     }
 
-    let u: Unimock<AssocType<()>> = Unimock::new_with_assoc(
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc(
         IntricateMock::foo::<()>
             .next_call(matching!(I(_)))
             .returns(O(Box::leak(Box::new("leaked".to_string())))),
@@ -587,7 +587,7 @@ fn clause_helpers() {
         )
     }
 
-    let deps: Unimock<AssocType<i32>> = Unimock::new_with_assoc((
+    let deps: Unimock<AssocType<i32>> = Unimock::with_assoc((
         setup_foo_bar(),
         BazMock::m3::<i32>.each_call(matching!(_)).returns(3),
     ));
@@ -619,7 +619,7 @@ mod responders_in_series {
 
     #[test]
     fn responder_series_should_work() {
-        let a = Unimock::new_with_assoc(clause());
+        let a = Unimock::with_assoc(clause());
 
         assert_eq!(1, a.series());
         assert_eq!(2, a.series());
@@ -636,7 +636,7 @@ mod responders_in_series {
         expected = "Series::series: Expected Series::series() at tests/it/assoc_types.rs:609 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
-        let b = Unimock::new_with_assoc(clause());
+        let b = Unimock::with_assoc(clause());
 
         assert_eq!(1, b.series());
         assert_eq!(2, b.series());
@@ -656,7 +656,7 @@ trait BorrowStatic {
 fn borrow_static_should_work_with_returns_static() {
     assert_eq!(
         "foo",
-        Unimock::new_with_assoc(
+        Unimock::with_assoc(
             BorrowStaticMock::static_str::<i32>
                 .next_call(matching!(_))
                 .returns("foo")
@@ -678,7 +678,7 @@ mod async_argument_borrowing {
 
     #[tokio::test]
     async fn test_argument_borrowing() {
-        let unimock = Unimock::new_with_assoc(
+        let unimock = Unimock::with_assoc(
             BorrowParamMock::borrow_param::<&str>
                 .each_call(matching!(_))
                 .returns(&"foobar"),
@@ -689,7 +689,7 @@ mod async_argument_borrowing {
 
     #[tokio::test]
     async fn test_argument_borrowing_works() {
-        let unimock = Unimock::new_with_assoc(
+        let unimock = Unimock::with_assoc(
             BorrowParamMock::borrow_param::<&str>
                 .each_call(matching!(_))
                 .returns(&"foobar"),
@@ -717,19 +717,22 @@ mod lifetime_constrained_output_type {
         fn borrow_sync_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b, Self::X>;
     }
 
-    // #[unimock]
-    // #[async_trait]
-    // trait BorrowAsync {
-    //     type X;
+    #[unimock(api=Unused)]
+    #[async_trait(?Send)]
+    trait BorrowAsync {
+        type X;
 
-    //     async fn borrow_async_elided(&self) -> Borrowing1<'_>;
-    //     async fn borrow_async_explicit<'a>(&'a self) -> Borrowing1<'a>;
-    //     async fn borrow_async_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
-    // }
+        async fn borrow_async_elided(&self) -> Borrowing1<'_, Self::X>;
+        async fn borrow_async_explicit<'a>(&'a self) -> Borrowing1<'a, Self::X>;
+        async fn borrow_async_explicit2<'a, 'b>(
+            &'a self,
+            arg: &'b str,
+        ) -> Borrowing2<'a, 'b, Self::X>;
+    }
 
     #[test]
     fn test_borrow() {
-        let deps = Unimock::new_with_assoc(
+        let deps = Unimock::with_assoc(
             BorrowSyncMock::borrow_sync_explicit2::<&str>
                 .some_call(matching!("foobar"))
                 .returns(Borrowing2(&"a", &"b")),
@@ -742,7 +745,7 @@ mod lifetime_constrained_output_type {
 
     #[test]
     fn test_borrow_sized() {
-        let deps = Unimock::new_with_assoc(
+        let deps = Unimock::with_assoc(
             BorrowSyncMock::borrow_sync_explicit2::<str>
                 .some_call(matching!("foobar"))
                 .returns(Borrowing2("a", "b")),
@@ -772,19 +775,19 @@ mod slice_matching {
 
     #[test]
     fn vec_of_strings() {
-        Unimock::<AssocType<_, AssocType<String>>>::new_with_assoc(
+        Unimock::<AssocType<_, AssocType<String>>>::with_assoc(
             Mock::vec_of_i32::<i32, String>
                 .next_call(matching!([1, 2]))
                 .returns(()),
         )
         .vec_of_i32(vec![1, 2]);
-        Unimock::<AssocType<_, AssocType<String>>>::new_with_assoc(
+        Unimock::<AssocType<_, AssocType<String>>>::with_assoc(
             Mock::two_vec_of_i32::<i32, String>
                 .next_call(matching!([1, 2], [3, 4]))
                 .returns(()),
         )
         .two_vec_of_i32(vec![1, 2], vec![3, 4]);
-        Unimock::<AssocType<i32, AssocType<_>>>::new_with_assoc(
+        Unimock::<AssocType<i32, AssocType<_>>>::with_assoc(
             Mock::vec_of_string::<i32, String>
                 .next_call(matching!(([a, b]) if a == "1" && b == "2"))
                 .returns(()),
@@ -817,13 +820,9 @@ fn fn_cfg_attrs() {
         fn b(&self) -> NonExistentType;
     }
 
-    let u = Unimock::new_with_assoc(TraitMock::a::<i32>.next_call(matching!()).returns(0));
+    let u = Unimock::with_assoc(TraitMock::a::<i32>.next_call(matching!()).returns(0));
     assert_eq!(0, u.a());
 }
-
-use unimock::*;
-
-use std::fmt::Debug;
 
 mod output {
     use super::*;
@@ -836,7 +835,7 @@ mod output {
 
     #[test]
     fn test_generic_return() {
-        let deps: Unimock<AssocType<String>> = Unimock::new_with_assoc(
+        let deps: Unimock<AssocType<String>> = Unimock::with_assoc(
             GenericOutputMock::generic_output::<String>
                 .with_types::<String>()
                 .each_call(matching!())
@@ -862,7 +861,7 @@ mod param {
 
     #[test]
     fn test_generic_param() {
-        let deps: Unimock<AssocType<i32>> = Unimock::new_with_assoc((
+        let deps: Unimock<AssocType<i32>> = Unimock::with_assoc((
             GenericParamMock::generic_param::<i32>
                 .with_types::<&'static str>()
                 .each_call(matching!("foobar"))
@@ -883,7 +882,7 @@ mod param {
         expected = "GenericParam::generic_param(?): No matching call patterns."
     )]
     fn test_generic_param_panic_no_debug() {
-        let deps: Unimock<AssocType<i32>> = Unimock::new_with_assoc(
+        let deps: Unimock<AssocType<i32>> = Unimock::with_assoc(
             GenericParamMock::generic_param::<i32>
                 .with_types::<i32>()
                 .each_call(matching!(1337))
@@ -905,7 +904,7 @@ mod param {
         expected = "GenericParamDebug::generic_param_debug(42): No matching call patterns."
     )]
     fn test_generic_param_panic_debug() {
-        let deps: Unimock<AssocType<i32>> = Unimock::new_with_assoc(
+        let deps: Unimock<AssocType<i32>> = Unimock::with_assoc(
             GenericParamDebugMock::generic_param_debug::<i32>
                 .with_types::<i32>()
                 .each_call(matching!(1337))
@@ -918,33 +917,35 @@ mod param {
 
 mod combined {
     use super::*;
+    use std::fmt::Debug;
 
-    // #[unimock]
-    // trait GenericBounds<I: Debug, O: Clone> {
-    //     type X;
-    //     fn generic_bounds(&self, param: I) -> O;
-    // }
+    #[unimock(api=A)]
+    trait GenericBounds<I: Debug, O: Clone> {
+        type X;
+        fn generic_bounds(&self, param: I) -> O;
+    }
 
-    // #[unimock]
-    // trait GenericWhereBounds<I, O>
-    // where
-    //     I: Debug,
-    //     O: Clone,
-    // {
-    //     type X;
-    //     fn generic_where_bounds(&self, param: I) -> O;
-    // }
+    #[unimock(api=B)]
+    trait GenericWhereBounds<I, O>
+    where
+        I: Debug,
+        O: Clone,
+    {
+        type X;
+        fn generic_where_bounds(&self, param: I) -> O;
+    }
 }
 
 mod async_generic {
     use super::*;
+    use std::fmt::Debug;
 
-    // #[unimock]
-    // #[async_trait::async_trait(?Send)]
-    // trait AsyncTraitGenericBounds<I: Debug, O: Clone> {
-    //     type X;
-    //     async fn generic_bounds(&self, param: I) -> O;
-    // }
+    #[unimock(api=A)]
+    #[async_trait::async_trait(?Send)]
+    trait AsyncTraitGenericBounds<I: Debug, O: Clone> {
+        type X;
+        async fn generic_bounds(&self, param: I) -> O;
+    }
 }
 
 mod generic_without_module {
@@ -968,6 +969,8 @@ mod generic_without_module {
 mod generic_with_unmock {
     use super::*;
 
+    // unmock is not implemented
+
     // #[unimock(unmock_with=[gen_default(self)])]
     // trait UnmockMe<T: Default> {
     //     type X;
@@ -985,5 +988,245 @@ mod generic_with_unmock {
 
     fn gen_default<D, T: Default>(_: &D) -> T {
         T::default()
+    }
+}
+
+use unimock::*;
+
+mod clone {
+
+    #[derive(Eq, PartialEq, Debug)]
+    pub struct Nope;
+
+    #[derive(Clone, Eq, PartialEq, Debug)]
+    pub struct Sure;
+}
+
+#[unimock(api=InOptionMock)]
+trait InOption {
+    type X;
+    fn str(&self, a: &str) -> Option<&str>;
+    fn not_clone(&self) -> Option<&clone::Nope>;
+}
+
+#[test]
+fn in_option() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc((
+        InOptionMock::str::<()>
+            .next_call(matching!(_))
+            .returns(Some("1".to_string())),
+        InOptionMock::str::<()>
+            .next_call(matching!(_))
+            .returns(Some("2")),
+        InOptionMock::str::<()>
+            .next_call(matching!(_))
+            .returns(None::<&str>),
+    ));
+    assert_eq!(Some("1"), u.str(""));
+    assert_eq!(Some("2"), u.str(""));
+    assert_eq!(None, u.str(""));
+}
+
+// This test demonstrates that a `T: Clone` bound is not necessary
+// on each_call for `Option<&T>`, since the outer option
+// can be generically reconstructed from the inner borrowed one
+#[test]
+fn in_option_not_clone_can_clone_anyway() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc(
+        InOptionMock::not_clone::<()>
+            .each_call(matching!())
+            .returns(Some(clone::Nope)),
+    );
+    assert_eq!(Some(&clone::Nope), <Unimock<_> as InOption>::not_clone(&u));
+    assert_eq!(Some(&clone::Nope), <Unimock<_> as InOption>::not_clone(&u));
+}
+
+#[unimock(api=InResultMock)]
+trait InResult {
+    type X;
+    fn bytes(&self) -> Result<&[u8], clone::Nope>;
+    fn u32_clone(&self) -> Result<&u32, clone::Sure>;
+    fn ok_no_clone(&self, ok: bool) -> Result<&clone::Nope, clone::Sure>;
+    fn err_no_clone(&self) -> Result<&clone::Nope, clone::Nope>;
+}
+
+#[test]
+fn in_result() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc((
+        InResultMock::bytes::<()>
+            .next_call(matching!())
+            .returns(Ok(vec![42])),
+        InResultMock::bytes::<()>
+            .next_call(matching!())
+            .returns(Err::<&[u8], _>(clone::Nope)),
+        InResultMock::u32_clone::<()>
+            .each_call(matching!())
+            .returns(Ok(42))
+            .at_least_times(2),
+    ));
+
+    assert_eq!(Ok(vec![42].as_slice()), <Unimock<_> as InResult>::bytes(&u));
+    assert_eq!(Err(clone::Nope), <Unimock<_> as InResult>::bytes(&u));
+    assert_eq!(Ok(&42), <Unimock<_> as InResult>::u32_clone(&u));
+    assert_eq!(Ok(&42), <Unimock<_> as InResult>::u32_clone(&u));
+}
+
+#[test]
+fn in_result_clone_acrobatics() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc((
+        InResultMock::ok_no_clone::<()>
+            .each_call(matching!(true))
+            .returns(Ok(clone::Nope)),
+        InResultMock::ok_no_clone::<()>
+            .each_call(matching!(false))
+            .returns(Err::<&clone::Nope, _>(clone::Sure)),
+        InResultMock::err_no_clone::<()>
+            .some_call(matching!()) // note: .each_call is impossible
+            .returns(Err::<&clone::Nope, _>(clone::Nope)),
+    ));
+
+    for _ in 0..3 {
+        assert_eq!(Ok(&clone::Nope), u.ok_no_clone(true));
+        assert_eq!(Err(clone::Sure), u.ok_no_clone(false));
+    }
+
+    assert_eq!(Err(clone::Nope), u.err_no_clone());
+}
+
+#[test]
+#[should_panic(
+    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/assoc_types.rs:1108 to match exactly 1 call, but it actually matched 2 calls."
+)]
+fn in_result_may_multi_respond_on_ok_no_clone() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc(
+        InResultMock::ok_no_clone::<()>
+            .some_call(matching!(_))
+            .returns(Ok(clone::Nope)),
+    );
+
+    assert_eq!(Ok(&clone::Nope), u.ok_no_clone(true));
+    assert_eq!(Ok(&clone::Nope), u.ok_no_clone(true));
+}
+
+#[unimock(api = InVecMock)]
+trait InVec {
+    type X;
+    fn vector(&self) -> Vec<&i32>;
+}
+
+#[test]
+fn in_vec() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc(
+        InVecMock::vector::<()>
+            .each_call(matching!())
+            .returns(vec![1, 2, 3]),
+    );
+
+    assert_eq!(vec![&1, &2, &3], u.vector());
+}
+
+#[unimock(api = MixedTupleMock)]
+trait MixedTuple {
+    type X;
+    fn tuple1(&self) -> (&i32,);
+    fn tuple2a(&self) -> (&i32, i32);
+    fn tuple2b(&self) -> (i32, &i32);
+    fn tuple4(&self) -> (&clone::Nope, clone::Nope, &clone::Sure, clone::Sure);
+}
+
+#[test]
+fn mixed_tuple1() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc((
+        MixedTupleMock::tuple2a::<()>
+            .next_call(matching!())
+            .returns((1, 2)),
+        MixedTupleMock::tuple2b::<()>
+            .next_call(matching!())
+            .returns((1, 2)),
+    ));
+
+    assert_eq!((&1, 2), u.tuple2a());
+    assert_eq!((1, &2), u.tuple2b());
+}
+
+#[test]
+fn mixed_tuple_clone_combinatorics_once() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc(
+        MixedTupleMock::tuple4::<()>
+            .next_call(matching!())
+            .returns((clone::Nope, clone::Nope, clone::Sure, clone::Sure)),
+    );
+
+    assert_eq!(
+        (&clone::Nope, clone::Nope, &clone::Sure, clone::Sure),
+        u.tuple4()
+    );
+}
+
+#[test]
+fn mixed_tuple_clone_combinatorics_many() {
+    let u: Unimock<AssocType<()>> = Unimock::with_assoc(
+        MixedTupleMock::tuple4::<()>
+            .each_call(matching!())
+            .answers(|_| (clone::Nope, clone::Nope, clone::Sure, clone::Sure)),
+    );
+
+    for _ in 0..3 {
+        assert_eq!(
+            (&clone::Nope, clone::Nope, &clone::Sure, clone::Sure),
+            u.tuple4()
+        );
+    }
+}
+
+mod complex {
+    use async_trait::async_trait;
+    use unimock::*;
+
+    #[unimock(api=CrazyMock)]
+    #[async_trait(?Send)]
+    trait Crazy<'x, T> {
+        type Ok;
+
+        type Err;
+
+        async fn thing(&'x self, arg: T) -> Result<Self::Ok, Self::Err>;
+    }
+
+    #[tokio::test]
+    async fn crazy() {
+        let u = Unimock::with_assoc(
+            CrazyMock::thing::<i32, String>
+                .with_types::<u32>()
+                .next_call(matching!(666_666))
+                .returns(Ok(42)),
+        );
+
+        assert_eq!(Ok::<_, String>(42), u.thing(666_666u32).await);
+    }
+
+    #[unimock(api=EvenCrazierMock)]
+    #[async_trait(?Send)]
+    trait EvenCrazier<'x, T: Default, Unit = ()>
+    where
+        T: ?Sized,
+    {
+        type Ok: Into<Self::Err>;
+
+        type Err: std::fmt::Display + 'static;
+
+        async fn thing2(&'x self, other: Unit, arg: &T) -> Result<Self::Ok, Self::Err>;
+    }
+
+    #[tokio::test]
+    async fn even_crazier() {
+        let u = Unimock::with_assoc(
+            EvenCrazierMock::thing2::<&str, String>
+                .with_types::<u32, ()>()
+                .next_call(matching!((_, 666_666)))
+                .returns(Ok("42")),
+        );
+
+        assert_eq!(Ok::<_, String>("42"), u.thing2((), &666_666u32).await);
     }
 }
