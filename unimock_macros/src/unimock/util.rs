@@ -11,16 +11,10 @@ pub struct Generics<'t> {
     kind: GenericsKind,
 }
 
-#[derive(PartialEq)]
 enum GenericsKind {
     None,
-    AssocTypesWithBounds,
-    AssocTypesNoBounds,
     GenericParams,
     Args(InferImplTrait),
-    GenericParamsWithAssocTypes,
-    Args,
-    ArgsWithAssocTypes,
 }
 
 #[derive(Clone, Copy)]
@@ -54,34 +48,6 @@ impl<'t> Generics<'t> {
         }
     }
 
-    // Like `Self::params` but with assoc types
-    pub fn params_with_assoc_types(trait_info: &'t TraitInfo) -> Self {
-        Self {
-            trait_info,
-            kind: if trait_info.is_type_generic {
-                GenericsKind::GenericParamsWithAssocTypes
-            } else {
-                GenericsKind::AssocTypesWithBounds
-            },
-        }
-    }
-
-    // Like `Self::params` but with assoc types
-    pub fn params_assoc_types(trait_info: &'t TraitInfo) -> Self {
-        Self {
-            trait_info,
-            kind: GenericsKind::AssocTypesWithBounds,
-        }
-    }
-
-    // Like `Self::params` but with assoc types
-    pub fn args_assoc_types(trait_info: &'t TraitInfo) -> Self {
-        Self {
-            trait_info,
-            kind: GenericsKind::AssocTypesNoBounds,
-        }
-    }
-
     // Args: e.g. SomeType<A, B>
     pub fn args(
         trait_info: &'t TraitInfo,
@@ -90,22 +56,11 @@ impl<'t> Generics<'t> {
     ) -> Self {
         Self {
             trait_info,
+            method,
             kind: if is_type_generic(trait_info, method).0 {
                 GenericsKind::Args(infer)
             } else {
                 GenericsKind::None
-            },
-        }
-    }
-
-    // Args: e.g. SomeType<A, B>
-    pub fn args_with_assoc_types(trait_info: &'t TraitInfo) -> Self {
-        Self {
-            trait_info,
-            kind: if trait_info.is_type_generic {
-                GenericsKind::ArgsWithAssocTypes
-            } else {
-                GenericsKind::AssocTypesNoBounds
             },
         }
     }
@@ -119,17 +74,17 @@ impl<'t> Generics<'t> {
             .generics
             .params
             .iter()
-            .filter_map(|generic_param| match generic_param {
+            .map(|trait_param| match trait_param {
                 syn::GenericParam::Lifetime(lifetime) => {
-                    (self.kind != GenericsKind::ArgsWithAssocTypes).then(|| quote! { #lifetime })
+                    quote! { #lifetime }
                 }
                 syn::GenericParam::Type(type_param) => {
                     let ident = &type_param.ident;
-                    Some(quote! { #ident })
+                    quote! { #ident }
                 }
                 syn::GenericParam::Const(const_param) => {
                     let ident = &const_param.ident;
-                    Some(quote! { #ident })
+                    quote! { #ident }
                 }
             })
             .chain(
@@ -162,6 +117,10 @@ impl<'t> Generics<'t> {
                     }),
             )
     }
+
+    pub fn trait_info(&self) -> &TraitInfo {
+        self.trait_info
+    }
 }
 
 impl<'t> quote::ToTokens for Generics<'t> {
@@ -170,38 +129,9 @@ impl<'t> quote::ToTokens for Generics<'t> {
             return;
         }
 
+        syn::token::Lt::default().to_tokens(tokens);
         match &self.kind {
             GenericsKind::None => {}
-            GenericsKind::AssocTypesWithBounds => {
-                for item in &self.trait_info.item.items {
-                    if let syn::TraitItem::Type(ty) = item {
-                        let mut ty = ty.clone();
-                        for ele in &mut ty.bounds {
-                            if let syn::TypeParamBound::Trait(t) = ele {
-                                t.path.segments = remove_self_in_segment(t.path.segments.clone());
-                            }
-                        }
-                        ty.default = None;
-                        ty.ident.to_tokens(tokens);
-                        if ty.bounds.is_empty() {
-                            quote! { : 'static }.to_tokens(tokens);
-                        } else {
-                            syn::token::Colon::default().to_tokens(tokens);
-                            ty.bounds.to_tokens(tokens);
-                            quote! { + 'static }.to_tokens(tokens);
-                        }
-                        syn::token::Comma::default().to_tokens(tokens);
-                    }
-                }
-            }
-            GenericsKind::AssocTypesNoBounds => {
-                for item in &self.trait_info.item.items {
-                    if let syn::TraitItem::Type(ty) = item {
-                        ty.ident.to_tokens(tokens);
-                        syn::token::Comma::default().to_tokens(tokens);
-                    }
-                }
-            }
             GenericsKind::GenericParams => {
                 self.trait_info
                     .generic_params_with_bounds
@@ -215,30 +145,6 @@ impl<'t> quote::ToTokens for Generics<'t> {
                     method.generic_params_with_bounds.params.to_tokens(tokens);
                 }
             }
-            GenericsKind::GenericParamsWithAssocTypes => {
-                self.trait_info.generic_params_with_bounds.to_tokens(tokens);
-                for item in &self.trait_info.item.items {
-                    if let syn::TraitItem::Type(ty) = item {
-                        let mut ty = ty.clone();
-                        for ele in &mut ty.bounds {
-                            if let syn::TypeParamBound::Trait(t) = ele {
-                                t.path.segments = remove_self_in_segment(t.path.segments.clone());
-                            }
-                        }
-                        ty.default = None;
-
-                        syn::token::Comma::default().to_tokens(tokens);
-                        ty.ident.to_tokens(tokens);
-                        if ty.bounds.is_empty() {
-                            quote! { : 'static }.to_tokens(tokens);
-                        } else {
-                            syn::token::Colon::default().to_tokens(tokens);
-                            ty.bounds.to_tokens(tokens);
-                            quote! { + 'static }.to_tokens(tokens);
-                        }
-                    }
-                }
-            }
             GenericsKind::Args(infer_impl_trait) => {
                 let args = self.args_iterator(*infer_impl_trait);
                 quote! {
@@ -246,22 +152,8 @@ impl<'t> quote::ToTokens for Generics<'t> {
                 }
                 .to_tokens(tokens);
             }
-            GenericsKind::ArgsWithAssocTypes => {
-                let args = self.args_iterator();
-
-                let assoc = self.trait_info.item.items.iter().filter_map(|i| {
-                    if let syn::TraitItem::Type(ty) = i {
-                        Some(&ty.ident)
-                    } else {
-                        None
-                    }
-                });
-                quote! {
-                    #(#args),*, #(#assoc),*
-                }
-                .to_tokens(tokens);
-            }
         }
+        syn::token::Gt::default().to_tokens(tokens);
     }
 }
 
@@ -274,19 +166,15 @@ impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if self.trait_info.is_type_generic.0 || self.method.is_type_generic.0 {
             let phantom_data = iter_generic_type_params(self.trait_info, self.method)
-                .map(|ty| &ty.ident)
-                .chain(self.0.item.items.iter().filter_map(|item| {
-                    if let syn::TraitItem::Type(ty) = item {
-                        Some(&ty.ident)
-                    } else {
-                        None
-                    }
-                }))
+                .map(TypedPhantomData)
                 .collect::<Vec<_>>();
 
-            let phantom_data = TypedPhantomData(&types);
-
-            quote! { (#phantom_data) }.to_tokens(tokens);
+            if !phantom_data.is_empty() {
+                quote! {
+                    (#(#phantom_data),*)
+                }
+                .to_tokens(tokens);
+            }
         }
     }
 }
@@ -302,13 +190,13 @@ impl quote::ToTokens for UntypedPhantomData {
     }
 }
 
-pub struct TypedPhantomData<'t>(&'t [&'t syn::Ident]);
+pub struct TypedPhantomData<'t>(&'t syn::TypeParam);
 
 impl<'t> quote::ToTokens for TypedPhantomData<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let idents = self.0.iter();
+        let ident = &self.0.ident;
         quote! {
-            ::core::marker::PhantomData<(#(#idents),*)>
+            ::core::marker::PhantomData<#ident>
         }
         .to_tokens(tokens);
     }

@@ -320,6 +320,7 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
     None
 }
 
+#[derive(Clone)]
 enum AssociatedInnerType {
     Unit,
     Typed(syn::Type),
