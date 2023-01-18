@@ -12,7 +12,8 @@ use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
-#[allow(clippy::too_many_lines)]
+use self::util::{iter_generic_type_params, InferImplTrait};
+
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let trait_info = trait_info::TraitInfo::analyze(&attr.prefix, &item_trait, &attr)?;
     attr.validate(&trait_info)?;
@@ -73,8 +74,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             None
         }
     });
-    let generic_params_assoc = util::Generics::params_with_assoc_types(&trait_info);
-    let generic_args = util::Generics::args(&trait_info);
+    let generic_params_assoc = util::Generics::params_with_assoc_types(&trait_info, None);
+    let generic_args = util::Generics::args(&trait_info, None, InferImplTrait(false));
 
     let unimock_generics = make_generics_hlist(trait_info.item.items.iter().filter_map(|item| {
         if let syn::TraitItem::Type(ty) = item {
@@ -186,8 +187,7 @@ fn def_mock_fn(
     let input_lifetime = &attr.input_lifetime;
 
     let inputs_tuple = method
-        .method
-        .sig
+        .adapted_sig
         .inputs
         .iter()
         .enumerate()
@@ -205,11 +205,14 @@ fn def_mock_fn(
         .map(|ty| util::substitute_lifetimes(&ty, input_lifetime))
         .collect::<Vec<_>>();
 
-    let generic_params = util::Generics::params(trait_info);
-    let generic_params_with_assoc_types = util::Generics::params_with_assoc_types(trait_info);
-    let generic_args_with_assoc_types = util::Generics::args_with_assoc_types(trait_info);
-    let assoc_types = util::Generics::params_assoc_types(trait_info);
-    let assoc_types_no_bounds = util::Generics::args_assoc_types(trait_info);
+    let generic_params = util::Generics::params(trait_info, Some(method));
+    let generic_params_with_assoc_types =
+        util::Generics::params_with_assoc_types(trait_info, Some(method));
+    let generic_args_with_assoc_types =
+        util::Generics::args_with_assoc_types(trait_info, Some(method), InferImplTrait(false));
+    let assoc_types = util::Generics::params_assoc_types(trait_info, Some(method));
+    let assoc_types_no_bounds =
+        util::Generics::args_assoc_types(trait_info, Some(method), InferImplTrait(false));
     let where_clause = &trait_info.item.generics.where_clause;
 
     let doc_attrs = if matches!(attr.mock_api, attr::MockApi::Hidden) {
@@ -315,7 +318,8 @@ fn def_method_impl(
     let mock_fn_path = method.mock_fn_path(attr);
 
     let inputs_destructuring = method.inputs_destructuring();
-    let generic_args_assoc = util::Generics::args_with_assoc_types(trait_info);
+    let generic_args_assoc =
+        util::Generics::args_with_assoc_types(trait_info, Some(method), InferImplTrait(true));
 
     let has_impl_trait_future = matches!(
         method.output_structure.wrapping,

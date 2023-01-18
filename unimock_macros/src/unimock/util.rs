@@ -1,9 +1,13 @@
-use super::trait_info::TraitInfo;
+use super::{method::MockMethod, trait_info::TraitInfo};
 
 use quote::*;
 
+#[derive(Clone, Copy)]
+pub struct IsTypeGeneric(pub bool);
+
 pub struct Generics<'t> {
     trait_info: &'t TraitInfo<'t>,
+    method: Option<&'t MockMethod<'t>>,
     kind: GenericsKind,
 }
 
@@ -13,17 +17,36 @@ enum GenericsKind {
     AssocTypesWithBounds,
     AssocTypesNoBounds,
     GenericParams,
+    Args(InferImplTrait),
     GenericParamsWithAssocTypes,
     Args,
     ArgsWithAssocTypes,
 }
 
+#[derive(Clone, Copy)]
+pub struct InferImplTrait(pub bool);
+
+fn is_type_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> IsTypeGeneric {
+    if trait_info.is_type_generic.0 {
+        return IsTypeGeneric(true);
+    }
+
+    if let Some(method) = method {
+        if method.is_type_generic.0 {
+            return IsTypeGeneric(true);
+        }
+    }
+
+    IsTypeGeneric(false)
+}
+
 impl<'t> Generics<'t> {
     // Params: e.g. impl<A, B>
-    pub fn params(trait_info: &'t TraitInfo) -> Self {
+    pub fn params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
         Self {
             trait_info,
-            kind: if trait_info.is_type_generic {
+            method,
+            kind: if is_type_generic(trait_info, method).0 {
                 GenericsKind::GenericParams
             } else {
                 GenericsKind::None
@@ -60,11 +83,15 @@ impl<'t> Generics<'t> {
     }
 
     // Args: e.g. SomeType<A, B>
-    pub fn args(trait_info: &'t TraitInfo) -> Self {
+    pub fn args(
+        trait_info: &'t TraitInfo,
+        method: Option<&'t MockMethod<'t>>,
+        infer: InferImplTrait,
+    ) -> Self {
         Self {
             trait_info,
-            kind: if trait_info.is_type_generic {
-                GenericsKind::Args
+            kind: if is_type_generic(trait_info, method).0 {
+                GenericsKind::Args(infer)
             } else {
                 GenericsKind::None
             },
@@ -83,9 +110,16 @@ impl<'t> Generics<'t> {
         }
     }
 
-    fn args_iterator(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
-        self.trait_info.item.generics.params.iter().filter_map(
-            |generic_param| match generic_param {
+    fn args_iterator(
+        &self,
+        infer_impl_trait: InferImplTrait,
+    ) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
+        self.trait_info
+            .item
+            .generics
+            .params
+            .iter()
+            .filter_map(|generic_param| match generic_param {
                 syn::GenericParam::Lifetime(lifetime) => {
                     (self.kind != GenericsKind::ArgsWithAssocTypes).then(|| quote! { #lifetime })
                 }
@@ -97,12 +131,36 @@ impl<'t> Generics<'t> {
                     let ident = &const_param.ident;
                     Some(quote! { #ident })
                 }
-            },
-        )
-    }
-
-    pub fn trait_info(&self) -> &TraitInfo {
-        self.trait_info
+            })
+            .chain(
+                self.method
+                    .iter()
+                    .flat_map(|method| {
+                        method
+                            .adapted_sig
+                            .generics
+                            .params
+                            .iter()
+                            .map(move |param| (method, param))
+                    })
+                    .filter_map(move |(method, method_param)| match method_param {
+                        syn::GenericParam::Lifetime(_) => None,
+                        syn::GenericParam::Type(type_param) => {
+                            let ident = &type_param.ident;
+                            if infer_impl_trait.0
+                                && method.impl_trait_idents.contains(&ident.to_string())
+                            {
+                                Some(quote! { _ })
+                            } else {
+                                Some(quote! { #ident })
+                            }
+                        }
+                        syn::GenericParam::Const(const_param) => {
+                            let ident = &const_param.ident;
+                            Some(quote! { #ident })
+                        }
+                    }),
+            )
     }
 }
 
@@ -145,7 +203,17 @@ impl<'t> quote::ToTokens for Generics<'t> {
                 }
             }
             GenericsKind::GenericParams => {
-                self.trait_info.generic_params_with_bounds.to_tokens(tokens);
+                self.trait_info
+                    .generic_params_with_bounds
+                    .params
+                    .to_tokens(tokens);
+                if let Some(method) = self.method {
+                    if !self.trait_info.generic_params_with_bounds.params.is_empty() {
+                        quote! { , }.to_tokens(tokens);
+                    }
+
+                    method.generic_params_with_bounds.params.to_tokens(tokens);
+                }
             }
             GenericsKind::GenericParamsWithAssocTypes => {
                 self.trait_info.generic_params_with_bounds.to_tokens(tokens);
@@ -171,8 +239,8 @@ impl<'t> quote::ToTokens for Generics<'t> {
                     }
                 }
             }
-            GenericsKind::Args => {
-                let args = self.args_iterator();
+            GenericsKind::Args(infer_impl_trait) => {
+                let args = self.args_iterator(*infer_impl_trait);
                 quote! {
                     #(#args),*
                 }
@@ -197,14 +265,15 @@ impl<'t> quote::ToTokens for Generics<'t> {
     }
 }
 
-pub struct MockFnPhantomsTuple<'t>(pub &'t TraitInfo<'t>);
+pub struct MockFnPhantomsTuple<'t> {
+    pub trait_info: &'t TraitInfo<'t>,
+    pub method: &'t MockMethod<'t>,
+}
 
 impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        if self.0.is_type_generic {
-            let types = self
-                .0
-                .generic_type_params()
+        if self.trait_info.is_type_generic.0 || self.method.is_type_generic.0 {
+            let phantom_data = iter_generic_type_params(self.trait_info, self.method)
                 .map(|ty| &ty.ident)
                 .chain(self.0.item.items.iter().filter_map(|item| {
                     if let syn::TraitItem::Type(ty) = item {
@@ -278,6 +347,81 @@ impl quote::ToTokens for DotAwait {
         use proc_macro2::*;
         tokens.append(Punct::new('.', Spacing::Alone));
         tokens.append(quote::format_ident!("await"));
+    }
+}
+
+pub fn iter_generic_type_params<'t>(
+    trait_info: &'t TraitInfo,
+    method: &'t MockMethod,
+) -> impl Iterator<Item = &'t syn::TypeParam> {
+    trait_info
+        .item
+        .generics
+        .params
+        .iter()
+        .chain(method.adapted_sig.generics.params.iter())
+        .filter_map(|generic_param| match generic_param {
+            syn::GenericParam::Type(type_param) => Some(type_param),
+            _ => None,
+        })
+}
+
+pub struct GenericParamsWithBounds {
+    pub params: syn::punctuated::Punctuated<syn::TypeParam, syn::token::Comma>,
+}
+
+impl GenericParamsWithBounds {
+    pub fn new(generics: &syn::Generics, contains_async: bool) -> Self {
+        let mut params: syn::punctuated::Punctuated<syn::TypeParam, syn::token::Comma> =
+            Default::default();
+
+        // add 'static bounds
+        // TODO(perhaps): should only be needed for generic params which are used as function outputs?
+        for generic_param in generics.params.iter() {
+            if let syn::GenericParam::Type(type_param) = generic_param {
+                let mut bounded_param = type_param.clone();
+
+                add_static_bound_if_not_present(&mut bounded_param);
+                if contains_async {
+                    add_send_bound_if_not_present(&mut bounded_param);
+                }
+
+                params.push(bounded_param);
+            }
+        }
+
+        Self { params }
+    }
+}
+
+fn add_static_bound_if_not_present(type_param: &mut syn::TypeParam) {
+    let has_static_bound = type_param.bounds.iter().any(|bound| match bound {
+        syn::TypeParamBound::Lifetime(lifetime) => lifetime.ident == "static",
+        _ => false,
+    });
+
+    if !has_static_bound {
+        type_param
+            .bounds
+            .push(syn::TypeParamBound::Lifetime(syn::parse_quote! { 'static }));
+    }
+}
+
+fn add_send_bound_if_not_present(type_param: &mut syn::TypeParam) {
+    let has_send_bound = type_param.bounds.iter().any(|bound| match bound {
+        syn::TypeParamBound::Trait(trait_bound) => trait_bound
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident == "Send")
+            .unwrap_or(false),
+        _ => false,
+    });
+
+    if !has_send_bound {
+        type_param
+            .bounds
+            .push(syn::TypeParamBound::Trait(syn::parse_quote! { Send }));
     }
 }
 

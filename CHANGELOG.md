@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.9] - 2023-01-07
+### Added
+- Support for generic trait methods.
+
 ## [0.4.8] - 2022-12-30
 ### Fixed
 - cfg attrs on trait methods are now honoured.

@@ -9,7 +9,7 @@ pub fn def_associated_future(
     method: Option<&method::MockMethod>,
 ) -> Option<proc_macro2::TokenStream> {
     let method = method?;
-    let associated_type = match method.output_structure.wrapping {
+    let associated_type = match &method.output_structure.wrapping {
         output::OutputWrapping::ImplTraitFuture(trait_item_type) => trait_item_type,
         _ => return None,
     };
