@@ -12,35 +12,46 @@ pub struct Generics<'t> {
 }
 
 enum GenericsKind {
+    AllParams,
     None,
     GenericParams,
     Args(InferImplTrait),
+    AssocTypesParams,
+    AssocTypesArgs,
 }
 
 #[derive(Clone, Copy)]
 pub struct InferImplTrait(pub bool);
 
-fn is_type_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> IsTypeGeneric {
+fn is_type_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> bool {
     if trait_info.is_type_generic.0 {
-        return IsTypeGeneric(true);
+        return true;
     }
 
     if let Some(method) = method {
         if method.is_type_generic.0 {
-            return IsTypeGeneric(true);
+            return true;
         }
     }
 
-    IsTypeGeneric(false)
+    false
 }
 
 impl<'t> Generics<'t> {
+    pub fn all_params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
+        Self {
+            trait_info,
+            method,
+            kind: GenericsKind::AllParams,
+        }
+    }
+
     // Params: e.g. impl<A, B>
     pub fn params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
         Self {
             trait_info,
             method,
-            kind: if is_type_generic(trait_info, method).0 {
+            kind: if is_type_generic(trait_info, method) {
                 GenericsKind::GenericParams
             } else {
                 GenericsKind::None
@@ -57,11 +68,30 @@ impl<'t> Generics<'t> {
         Self {
             trait_info,
             method,
-            kind: if is_type_generic(trait_info, method).0 {
+            kind: if is_type_generic(trait_info, method) {
                 GenericsKind::Args(infer)
             } else {
-                GenericsKind::None
+                GenericsKind::AssocTypesArgs
             },
+        }
+    }
+
+    pub fn assoc_types_params(
+        trait_info: &'t TraitInfo,
+        method: Option<&'t MockMethod<'t>>,
+    ) -> Self {
+        Self {
+            trait_info,
+            method,
+            kind: GenericsKind::AssocTypesParams,
+        }
+    }
+
+    pub fn assoc_types_args(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
+        Self {
+            trait_info,
+            method,
+            kind: GenericsKind::AssocTypesArgs,
         }
     }
 
@@ -74,18 +104,16 @@ impl<'t> Generics<'t> {
             .generics
             .params
             .iter()
-            .map(|trait_param| match trait_param {
-                syn::GenericParam::Lifetime(lifetime) => {
-                    quote! { #lifetime }
+            .filter_map(|trait_param| match trait_param {
+                syn::GenericParam::Type(ty) => {
+                    let ident = &ty.ident;
+                    Some(quote! { #ident })
                 }
-                syn::GenericParam::Type(type_param) => {
-                    let ident = &type_param.ident;
-                    quote! { #ident }
+                syn::GenericParam::Const(co) => {
+                    let ident = &co.ident;
+                    Some(quote! { #ident })
                 }
-                syn::GenericParam::Const(const_param) => {
-                    let ident = &const_param.ident;
-                    quote! { #ident }
-                }
+                _ => None,
             })
             .chain(
                 self.method
@@ -116,6 +144,14 @@ impl<'t> Generics<'t> {
                         }
                     }),
             )
+            .chain(self.trait_info.item.items.iter().filter_map(|item| {
+                if let syn::TraitItem::Type(ty) = item {
+                    let ident = &ty.ident;
+                    Some(quote! { #ident })
+                } else {
+                    None
+                }
+            }))
     }
 
     pub fn trait_info(&self) -> &TraitInfo {
@@ -129,7 +165,7 @@ impl<'t> quote::ToTokens for Generics<'t> {
             return;
         }
 
-        syn::token::Lt::default().to_tokens(tokens);
+        quote! { < }.to_tokens(tokens);
         match &self.kind {
             GenericsKind::None => {}
             GenericsKind::GenericParams => {
@@ -138,10 +174,6 @@ impl<'t> quote::ToTokens for Generics<'t> {
                     .params
                     .to_tokens(tokens);
                 if let Some(method) = self.method {
-                    if !self.trait_info.generic_params_with_bounds.params.is_empty() {
-                        quote! { , }.to_tokens(tokens);
-                    }
-
                     method.generic_params_with_bounds.params.to_tokens(tokens);
                 }
             }
@@ -152,8 +184,85 @@ impl<'t> quote::ToTokens for Generics<'t> {
                 }
                 .to_tokens(tokens);
             }
+            GenericsKind::AssocTypesParams => {
+                for item in &self.trait_info.item.items {
+                    if let syn::TraitItem::Type(ty) = item {
+                        let mut ty = ty.clone();
+                        for ele in &mut ty.bounds {
+                            if let syn::TypeParamBound::Trait(t) = ele {
+                                t.path.segments = remove_self_in_segment(t.path.segments.clone());
+                            }
+                        }
+                        ty.default = None;
+                        ty.ident.to_tokens(tokens);
+                        if ty.bounds.is_empty() {
+                            quote! { : Send + 'static }.to_tokens(tokens);
+                        } else {
+                            syn::token::Colon::default().to_tokens(tokens);
+                            ty.bounds.to_tokens(tokens);
+                            quote! { + Send + 'static }.to_tokens(tokens);
+                        }
+                        quote! { , }.to_tokens(tokens);
+                    }
+                }
+            }
+            GenericsKind::AssocTypesArgs => {
+                for item in &self.trait_info.item.items {
+                    if let syn::TraitItem::Type(ty) = item {
+                        ty.ident.to_tokens(tokens);
+                        quote! { , }.to_tokens(tokens);
+                    }
+                }
+            }
+            GenericsKind::AllParams => {
+                if self.method.is_none() {
+                    for lt in self.trait_info.item.generics.lifetimes() {
+                        lt.to_tokens(tokens);
+                        quote! { , }.to_tokens(tokens);
+                    }
+                }
+
+                self.trait_info
+                    .generic_params_with_bounds
+                    .params
+                    .to_tokens(tokens);
+                if !self.trait_info.generic_params_with_bounds.params.is_empty() {
+                    quote! { , }.to_tokens(tokens);
+                }
+                if let Some(method) = self.method {
+                    method.generic_params_with_bounds.params.to_tokens(tokens);
+                }
+                if self
+                    .method
+                    .map(|m| !m.generic_params_with_bounds.params.is_empty())
+                    .unwrap_or_default()
+                {
+                    quote! { , }.to_tokens(tokens);
+                }
+
+                for item in &self.trait_info.item.items {
+                    if let syn::TraitItem::Type(ty) = item {
+                        let mut ty = ty.clone();
+                        for ele in &mut ty.bounds {
+                            if let syn::TypeParamBound::Trait(t) = ele {
+                                t.path.segments = remove_self_in_segment(t.path.segments.clone());
+                            }
+                        }
+                        ty.default = None;
+                        ty.ident.to_tokens(tokens);
+                        if ty.bounds.is_empty() {
+                            quote! { : Send + 'static }.to_tokens(tokens);
+                        } else {
+                            syn::token::Colon::default().to_tokens(tokens);
+                            ty.bounds.to_tokens(tokens);
+                            quote! { + Send + 'static }.to_tokens(tokens);
+                        }
+                        quote! { , }.to_tokens(tokens);
+                    }
+                }
+            }
         }
-        syn::token::Gt::default().to_tokens(tokens);
+        quote! { > }.to_tokens(tokens);
     }
 }
 
@@ -166,6 +275,17 @@ impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if self.trait_info.is_type_generic.0 || self.method.is_type_generic.0 {
             let phantom_data = iter_generic_type_params(self.trait_info, self.method)
+                .map(|param| &param.ident)
+                .chain(
+                    self.trait_info
+                        .item
+                        .items
+                        .iter()
+                        .filter_map(|item| match item {
+                            syn::TraitItem::Type(ty) => Some(&ty.ident),
+                            _ => None,
+                        }),
+                )
                 .map(TypedPhantomData)
                 .collect::<Vec<_>>();
 
@@ -179,22 +299,23 @@ impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
     }
 }
 
-pub struct UntypedPhantomData;
+pub struct TypehintPhantomData<'t>(pub &'t syn::Ident);
 
-impl quote::ToTokens for UntypedPhantomData {
+impl<'t> quote::ToTokens for TypehintPhantomData<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let ident = &self.0;
         quote! {
-            ::core::marker::PhantomData
+            ::core::marker::PhantomData::<#ident>
         }
         .to_tokens(tokens);
     }
 }
 
-pub struct TypedPhantomData<'t>(&'t syn::TypeParam);
+pub struct TypedPhantomData<'t>(&'t syn::Ident);
 
 impl<'t> quote::ToTokens for TypedPhantomData<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let ident = &self.0.ident;
+        let ident = &self.0;
         quote! {
             ::core::marker::PhantomData<#ident>
         }
@@ -260,8 +381,8 @@ pub struct GenericParamsWithBounds {
 
 impl GenericParamsWithBounds {
     pub fn new(generics: &syn::Generics, contains_async: bool) -> Self {
-        let mut params: syn::punctuated::Punctuated<syn::TypeParam, syn::token::Comma> =
-            Default::default();
+        let mut params =
+            syn::punctuated::Punctuated::<syn::TypeParam, syn::token::Comma>::default();
 
         // add 'static bounds
         // TODO(perhaps): should only be needed for generic params which are used as function outputs?
@@ -274,6 +395,8 @@ impl GenericParamsWithBounds {
                     add_send_bound_if_not_present(&mut bounded_param);
                 }
 
+                bounded_param.eq_token = None;
+                bounded_param.default = None;
                 params.push(bounded_param);
             }
         }
@@ -283,6 +406,7 @@ impl GenericParamsWithBounds {
 }
 
 fn add_static_bound_if_not_present(type_param: &mut syn::TypeParam) {
+    type_param.colon_token = Some(syn::token::Colon::default());
     let has_static_bound = type_param.bounds.iter().any(|bound| match bound {
         syn::TypeParamBound::Lifetime(lifetime) => lifetime.ident == "static",
         _ => false,
@@ -296,6 +420,7 @@ fn add_static_bound_if_not_present(type_param: &mut syn::TypeParam) {
 }
 
 fn add_send_bound_if_not_present(type_param: &mut syn::TypeParam) {
+    type_param.colon_token = Some(syn::token::Colon::default());
     let has_send_bound = type_param.bounds.iter().any(|bound| match bound {
         syn::TypeParamBound::Trait(trait_bound) => trait_bound
             .path

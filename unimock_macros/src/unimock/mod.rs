@@ -14,6 +14,7 @@ use attr::{UnmockFn, UnmockFnParams};
 
 use self::util::{iter_generic_type_params, InferImplTrait};
 
+#[allow(clippy::too_many_lines)]
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let trait_info = trait_info::TraitInfo::analyze(&attr.prefix, &item_trait, &attr)?;
     attr.validate(&trait_info)?;
@@ -59,8 +60,23 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .iter()
         .filter_map(Option::as_ref)
         .map(|def| &def.impl_details);
-    let generic_params = util::Generics::params(&trait_info, None);
-    let generic_args = util::Generics::args(&trait_info, None, InferImplTrait(false));
+    let generic_params_assoc_types = util::Generics::all_params(&trait_info, None);
+    let generic_args = trait_info
+        .item
+        .generics
+        .params
+        .iter()
+        .filter_map(|param| match param {
+            syn::GenericParam::Type(ty) => {
+                let ident = &ty.ident;
+                Some(quote! { #ident })
+            }
+            syn::GenericParam::Lifetime(lt) => {
+                let lt = &lt.lifetime;
+                Some(quote! { #lt })
+            }
+            _ => None,
+        });
 
     let (opt_mock_interface_public, opt_mock_interface_private) = match &attr.mock_api {
         MockApi::Hidden => (
@@ -93,6 +109,20 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         ),
     };
 
+    let unimock_generics =
+        make_generics_hlist(trait_info.item.items.iter().filter_map(|item| match item {
+            syn::TraitItem::Type(ty) => Some(&ty.ident),
+            _ => None,
+        }));
+    let associated_types = trait_info.item.items.iter().filter_map(|item| {
+        if let syn::TraitItem::Type(ty) = item {
+            let ident = &ty.ident;
+            Some(quote! { type #ident = #ident; })
+        } else {
+            None
+        }
+    });
+
     Ok(quote! {
         #item_trait
         #opt_mock_interface_public
@@ -103,15 +133,18 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #(#mock_fn_impl_details)*
 
             #(#impl_attributes)*
-            impl #generic_params #trait_ident #generic_args for #prefix::Unimock #where_clause {
+            impl #generic_params_assoc_types #trait_ident <#(#generic_args),*> for #prefix::Unimock <#unimock_generics> #where_clause {
                 #(#associated_futures)*
+                #(#associated_types)*
                 #(#method_impls)*
             }
         };
     })
 }
 
-fn make_generics_hlist(idents: impl Iterator<Item = syn::Ident>) -> proc_macro2::TokenStream {
+fn make_generics_hlist<'i>(
+    idents: impl Iterator<Item = &'i syn::Ident>,
+) -> proc_macro2::TokenStream {
     let mut tokens = proc_macro2::TokenStream::new();
 
     let assoc_type = quote! { ::unimock::AssocType };
@@ -120,13 +153,13 @@ fn make_generics_hlist(idents: impl Iterator<Item = syn::Ident>) -> proc_macro2:
     for ident in idents {
         i += 1;
         assoc_type.to_tokens(&mut tokens);
-        syn::token::Lt::default().to_tokens(&mut tokens);
+        quote! { < }.to_tokens(&mut tokens);
         ident.to_tokens(&mut tokens);
-        syn::token::Comma::default().to_tokens(&mut tokens);
+        quote! { , }.to_tokens(&mut tokens);
     }
 
     for _ in 0..i {
-        syn::token::Gt::default().to_tokens(&mut tokens);
+        quote! { > }.to_tokens(&mut tokens);
     }
 
     tokens
@@ -180,6 +213,9 @@ fn def_mock_fn(
 
     let generic_params = util::Generics::params(trait_info, Some(method));
     let generic_args = util::Generics::args(trait_info, Some(method), InferImplTrait(false));
+    let assoc_types_params = util::Generics::assoc_types_params(trait_info, Some(method));
+    let assoc_types_args = util::Generics::assoc_types_args(trait_info, Some(method));
+    let all_params = util::Generics::all_params(trait_info, Some(method));
     let where_clause = &trait_info.item.generics.where_clause;
 
     let doc_attrs = if matches!(attr.mock_api, attr::MockApi::Hidden) {
@@ -210,14 +246,14 @@ fn def_mock_fn(
             #[allow(non_camel_case_types)]
             #(#doc_attrs)*
             #[allow(unused)]
-            // #ghost
-            #mock_visibility struct #non_generic_ident;
+            #ghost
+            #mock_visibility struct #non_generic_ident #assoc_types;
         }
     };
 
     let impl_blocks = quote! {
         #(#mirrored_attrs)*
-        impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
+        impl #all_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = (#(#inputs_tuple),*);
             type Response = #response_associated_type;
             type Output<'u> = #output_associated_type;
@@ -230,17 +266,22 @@ fn def_mock_fn(
     let mock_fn_def = if let Some(non_generic_ident) = &method.non_generic_mock_entry_ident {
         // the trait is generic
         let phantoms_tuple = util::MockFnPhantomsTuple { trait_info, method };
-        let untyped_phantoms =
-            iter_generic_type_params(trait_info, method).map(|_| util::UntypedPhantomData);
+        let untyped_phantoms = iter_generic_type_params(trait_info, method)
+            .map(|ty| &ty.ident)
+            .chain(trait_info.item.items.iter().filter_map(|item| match item {
+                syn::TraitItem::Type(ty) => Some(&ty.ident),
+                _ => None,
+            }))
+            .map(util::TypehintPhantomData);
         let module_scope = match &attr.mock_api {
             MockApi::MockMod(ident) => Some(quote! { #ident:: }),
             _ => None,
         };
 
         MockFnDef {
-            mock_fn_struct_item: gen_mock_fn_struct_item(non_generic_ident, &generic_params),
+            mock_fn_struct_item: gen_mock_fn_struct_item(non_generic_ident, &assoc_types_params),
             impl_details: quote! {
-                impl #module_scope #non_generic_ident {
+                impl #assoc_types_params #module_scope #non_generic_ident #assoc_types_args {
                     pub fn with_types #generic_params(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
@@ -261,7 +302,7 @@ fn def_mock_fn(
         }
     } else {
         MockFnDef {
-            mock_fn_struct_item: gen_mock_fn_struct_item(mock_fn_ident, &generic_params),
+            mock_fn_struct_item: gen_mock_fn_struct_item(mock_fn_ident, &assoc_types_params),
             impl_details: impl_blocks,
         }
     };
