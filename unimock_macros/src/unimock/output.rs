@@ -32,6 +32,8 @@ impl OutputStructure {
                 quote! { () }
             }
             AssociatedInnerType::Typed(inner_type) => {
+                let mut inner_type = inner_type.clone();
+                util::remove_self_nested_type(&mut inner_type);
                 quote! { #inner_type }
             }
         };

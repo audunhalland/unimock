@@ -38,6 +38,7 @@ fn is_type_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> b
 }
 
 impl<'t> Generics<'t> {
+    // Generics and Associated types as params
     pub fn all_params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
         Self {
             trait_info,
@@ -76,6 +77,7 @@ impl<'t> Generics<'t> {
         }
     }
 
+    // Associated types as params
     pub fn assoc_types_params(
         trait_info: &'t TraitInfo,
         method: Option<&'t MockMethod<'t>>,
@@ -87,6 +89,7 @@ impl<'t> Generics<'t> {
         }
     }
 
+    // Associated types as args
     pub fn assoc_types_args(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
         Self {
             trait_info,
@@ -173,8 +176,18 @@ impl<'t> quote::ToTokens for Generics<'t> {
                     .generic_params_with_bounds
                     .params
                     .to_tokens(tokens);
+                if !self.trait_info.generic_params_with_bounds.params.is_empty() {
+                    quote! { , }.to_tokens(tokens);
+                }
                 if let Some(method) = self.method {
                     method.generic_params_with_bounds.params.to_tokens(tokens);
+                }
+                if self
+                    .method
+                    .map(|m| !m.generic_params_with_bounds.params.is_empty())
+                    .unwrap_or_default()
+                {
+                    quote! { , }.to_tokens(tokens);
                 }
             }
             GenericsKind::Args(infer_impl_trait) => {

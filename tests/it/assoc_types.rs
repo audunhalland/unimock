@@ -830,23 +830,30 @@ mod output {
     #[unimock(api=GenericOutputMock)]
     trait GenericOutput<T> {
         type X;
-        fn generic_output(&self) -> T;
+        fn generic_output(&self) -> (T, Self::X);
     }
 
     #[test]
     fn test_generic_return() {
-        let deps: Unimock<AssocType<String>> = Unimock::with_assoc(
-            GenericOutputMock::generic_output::<String>
+        let deps = Unimock::with_assoc(
+            GenericOutputMock::generic_output::<i32>
                 .with_types::<String>()
                 .each_call(matching!())
-                .returns("success".to_string()),
+                .returns(("success".to_string(), 42)),
         );
 
         let output = <Unimock<_> as GenericOutput<String>>::generic_output(&deps);
-        assert_eq!("success", output);
+        assert_eq!(("success".to_string(), 42), output);
 
-        // let output = <Unimock as GenericOutput<i32>>::generic_output(&deps);
-        // assert_eq!(42, output);
+        let deps = Unimock::with_assoc(
+            GenericOutputMock::generic_output::<String>
+                .with_types::<i32>()
+                .each_call(matching!())
+                .returns((42, "success".to_string())),
+        );
+
+        let output = <Unimock<_> as GenericOutput<i32>>::generic_output(&deps);
+        assert_eq!((42, "success".to_string()), output);
     }
 }
 
@@ -1095,7 +1102,7 @@ fn in_result_clone_acrobatics() {
 
 #[test]
 #[should_panic(
-    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/assoc_types.rs:1103 to match exactly 1 call, but it actually matched 2 calls."
+    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/assoc_types.rs:1110 to match exactly 1 call, but it actually matched 2 calls."
 )]
 fn in_result_may_multi_respond_on_ok_no_clone() {
     let u: Unimock<AssocType<()>> = Unimock::with_assoc(

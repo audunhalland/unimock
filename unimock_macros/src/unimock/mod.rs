@@ -109,11 +109,13 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         ),
     };
 
-    let unimock_generics =
-        make_generics_hlist(trait_info.item.items.iter().filter_map(|item| match item {
+    let unimock_generics = make_generics_hlist(
+        prefix,
+        trait_info.item.items.iter().filter_map(|item| match item {
             syn::TraitItem::Type(ty) => Some(&ty.ident),
             _ => None,
-        }));
+        }),
+    );
     let associated_types = trait_info.item.items.iter().filter_map(|item| {
         if let syn::TraitItem::Type(ty) = item {
             let ident = &ty.ident;
@@ -143,11 +145,12 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
 }
 
 fn make_generics_hlist<'i>(
+    prefix: &syn::Path,
     idents: impl Iterator<Item = &'i syn::Ident>,
 ) -> proc_macro2::TokenStream {
     let mut tokens = proc_macro2::TokenStream::new();
 
-    let assoc_type = quote! { ::unimock::AssocType };
+    let assoc_type = quote! { #prefix::AssocType };
 
     let mut i = 0;
     for ident in idents {
