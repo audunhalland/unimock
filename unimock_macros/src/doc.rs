@@ -595,7 +595,7 @@ mod lit {
                     for byte in s.value() {
                         write!(out, "{}", std::ascii::escape_default(byte)).unwrap();
                     }
-                    write!(out, "\n").unwrap();
+                    write!(out, "\"").unwrap();
                 }
                 syn::Lit::Byte(b) => {
                     write!(out, "b'{}'", std::ascii::escape_default(b.value())).unwrap();
