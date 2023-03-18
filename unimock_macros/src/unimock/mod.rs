@@ -26,7 +26,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .iter()
         .filter(|attribute| match attribute.style {
             syn::AttrStyle::Outer => {
-                if let Some(last_segment) = attribute.path.segments.last() {
+                if let Some(last_segment) = attribute.path().segments.last() {
                     last_segment.ident == "async_trait"
                 } else {
                     false
@@ -129,9 +129,9 @@ fn def_mock_fn(
     let mock_fn_name = &method.mock_fn_name;
 
     let mock_visibility = match &attr.mock_api {
-        MockApi::MockMod(_) => syn::Visibility::Public(syn::VisPublic {
-            pub_token: syn::token::Pub(proc_macro2::Span::call_site()),
-        }),
+        MockApi::MockMod(_) => {
+            syn::Visibility::Public(syn::token::Pub(proc_macro2::Span::call_site()))
+        }
         _ => trait_info.item.vis.clone(),
     };
 

@@ -12,7 +12,7 @@ use super::Attr;
 use crate::doc;
 
 pub struct MockMethod<'t> {
-    pub method: &'t syn::TraitItemMethod,
+    pub method: &'t syn::TraitItemFn,
     pub adapted_sig: syn::Signature,
     pub is_type_generic: IsTypeGeneric,
     pub generic_params_with_bounds: GenericParamsWithBounds,
@@ -124,7 +124,7 @@ pub fn extract_methods<'s>(
         .items
         .iter()
         .filter_map(|item| match item {
-            syn::TraitItem::Method(method) => Some(method),
+            syn::TraitItem::Fn(method) => Some(method),
             _ => None,
         })
         .enumerate()
@@ -153,7 +153,7 @@ pub fn extract_methods<'s>(
                 .iter()
                 .enumerate()
                 .filter_map(|(index, attr)| {
-                    if attr.path.is_ident("cfg") {
+                    if attr.path().is_ident("cfg") {
                         Some(index)
                     } else {
                         None
@@ -195,7 +195,7 @@ enum Mockable {
     Err(syn::Error),
 }
 
-fn determine_mockable(method: &syn::TraitItemMethod) -> Mockable {
+fn determine_mockable(method: &syn::TraitItemFn) -> Mockable {
     fn is_receiver(first_fn_arg: Option<&syn::FnArg>) -> bool {
         match first_fn_arg {
             None => false,
@@ -224,7 +224,7 @@ fn determine_mockable(method: &syn::TraitItemMethod) -> Mockable {
 }
 
 fn generate_mock_fn_ident(
-    method: &syn::TraitItemMethod,
+    method: &syn::TraitItemFn,
     method_index: usize,
     generic: IsTypeGeneric,
     attr: &Attr,

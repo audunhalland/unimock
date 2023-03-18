@@ -386,11 +386,8 @@ fn guess_arg_kind(index: usize, patterns: &[ArgPattern]) -> ArgKind {
 
     fn pat_kind(pattern: &syn::Pat) -> ArgKind {
         match pattern {
-            syn::Pat::Lit(lit) => match lit.expr.as_ref() {
-                syn::Expr::Lit(expr_lit) => match &expr_lit.lit {
-                    syn::Lit::Str(_) => ArgKind::LitStr,
-                    _ => ArgKind::Unknown,
-                },
+            syn::Pat::Lit(expr_lit) => match expr_lit.lit {
+                syn::Lit::Str(_) => ArgKind::LitStr,
                 _ => ArgKind::Unknown,
             },
             syn::Pat::Slice(_) => ArgKind::Slice,

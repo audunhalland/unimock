@@ -19,7 +19,7 @@ pub fn signature_documentation(sig: &syn::Signature, skip_receiver: SkipReceiver
 
 macro_rules! doc {
     ($out:expr, [$lit:literal]) => {
-        $out.push_str($lit);
+        $out.push_str($lit)
     };
     ($out:expr, [$expr:expr]) => {
         $expr.doc($out);
@@ -192,9 +192,6 @@ mod expr {
                 syn::Expr::Assign(assign) => {
                     doc!(out, [assign.left, TokenDoc(&assign.eq_token), assign.right]);
                 }
-                syn::Expr::AssignOp(assign) => {
-                    doc!(out, [assign.left, TokenDoc(&assign.op), assign.right]);
-                }
                 syn::Expr::Binary(bin) => {
                     doc!(out, [bin.left, TokenDoc(&bin.op), bin.right]);
                 }
@@ -262,14 +259,20 @@ mod path {
                 Self::Type(t) => {
                     doc!(out, [t]);
                 }
-                Self::Binding(b) => {
+                Self::AssocType(b) => {
                     doc!(out, [b.ident, " ", b.eq_token, " ", b.ty]);
+                }
+                Self::AssocConst(c) => {
+                    doc!(out, [c.ident, " ", c.eq_token, " ", c.value]);
                 }
                 Self::Constraint(c) => {
                     doc!(out, [c.ident, c.colon_token, " ", Sep::ws(&c.bounds)]);
                 }
                 Self::Const(e) => {
                     doc!(out, [e]);
+                }
+                _ => {
+                    doc!(out, ["?arg?"]);
                 }
             }
         }
@@ -356,7 +359,9 @@ mod ty {
                 Self::Tuple(t) => {
                     doc!(out, ["(", Sep::ws(&t.elems), ")"]);
                 }
-                _ => {}
+                _ => {
+                    doc!(out, ["?type?"]);
+                }
             }
         }
     }
@@ -409,7 +414,7 @@ mod generics {
         }
     }
 
-    impl SynDoc for syn::LifetimeDef {
+    impl SynDoc for syn::LifetimeParam {
         fn doc(&self, out: &mut String) {
             doc!(out, [self.lifetime]);
             if let Some(colon_token) = &self.colon_token {
@@ -444,6 +449,12 @@ mod generics {
                 }
                 Self::Lifetime(lifetime) => {
                     doc!(out, [lifetime]);
+                }
+                Self::Verbatim(stream) => {
+                    write!(out, "{stream}").unwrap();
+                }
+                _ => {
+                    doc!(out, ["?bound?"]);
                 }
             }
         }
@@ -483,8 +494,8 @@ mod pat {
     impl SynDoc for syn::Pat {
         fn doc(&self, out: &mut String) {
             match self {
-                Self::Box(b) => {
-                    doc!(out, ["box ", b.pat]);
+                Self::Const(_) => {
+                    doc!(out, ["const { .. }"]);
                 }
                 Self::Ident(i) => {
                     doc!(
@@ -496,45 +507,60 @@ mod pat {
                     }
                 }
                 Self::Lit(l) => {
-                    doc!(out, [l.expr]);
+                    doc!(out, [l.lit]);
                 }
-                Self::Tuple(t) => {
-                    doc!(out, [t]);
-                }
-                Self::Wild(_) => {
-                    doc!(out, ["_"]);
+                Self::Macro(PatMacro { mac, .. }) => {
+                    doc!(out, [mac.path, "!(..)"]);
                 }
                 Self::Or(or) => {
                     doc!(out, [Sep::ws2(&or.cases)]);
                 }
+                Self::Paren(p) => {
+                    doc!(out, ["(", p.pat, ")"]);
+                }
                 Self::Path(path) => {
                     doc!(out, [path.path]);
                 }
-                Self::TupleStruct(tup) => {
-                    doc!(out, [tup.path, tup.pat]);
-                }
                 Self::Range(range) => {
-                    range.lo.doc(out);
+                    if let Some(start) = &range.start {
+                        start.doc(out);
+                    }
                     match &range.limits {
                         syn::RangeLimits::HalfOpen(_) => out.push_str(".."),
                         syn::RangeLimits::Closed(_) => out.push_str("..="),
                     }
-                    range.hi.doc(out);
+                    if let Some(end) = &range.end {
+                        end.doc(out);
+                    }
                 }
-                Self::Slice(slice) => {
-                    doc!(out, ["[", Sep::ws(&slice.elems), "]"]);
+                Self::Reference(r) => {
+                    doc!(out, ["&", r.pat]);
                 }
                 Self::Rest(_) => {
                     doc!(out, [".."]);
+                }
+                Self::Slice(slice) => {
+                    doc!(out, ["[", Sep::ws(&slice.elems), "]"]);
                 }
                 Self::Struct(pat_struct) => {
                     // Skipping documentation of fields:
                     doc!(out, [pat_struct.path, " {}"]);
                 }
-                Self::Macro(PatMacro { mac, .. }) => {
-                    doc!(out, [mac.path, "!(..)"]);
+                Self::Tuple(t) => {
+                    doc!(out, [t]);
                 }
-                // TODO: More patterns?
+                Self::TupleStruct(tup) => {
+                    doc!(out, [tup.path, "(", Sep::ws(&tup.elems), ")"]);
+                }
+                Self::Type(ty) => {
+                    doc!(out, [ty.pat, ": ", ty.ty]);
+                }
+                Self::Verbatim(stream) => {
+                    write!(out, "{stream}").unwrap();
+                }
+                Self::Wild(_) => {
+                    doc!(out, ["_"]);
+                }
                 _ => {
                     doc!(out, ["?pat?"]);
                 }
@@ -551,6 +577,48 @@ mod pat {
     impl SynDoc for syn::PatTuple {
         fn doc(&self, out: &mut String) {
             doc!(out, ["(", Sep::ws(&self.elems), ")"]);
+        }
+    }
+}
+
+mod lit {
+    use super::*;
+
+    impl SynDoc for syn::Lit {
+        fn doc(&self, out: &mut String) {
+            match self {
+                syn::Lit::Str(s) => {
+                    write!(out, "\"{}\"", s.value()).unwrap();
+                }
+                syn::Lit::ByteStr(s) => {
+                    write!(out, "b\"").unwrap();
+                    for byte in s.value() {
+                        write!(out, "{}", std::ascii::escape_default(byte)).unwrap();
+                    }
+                    write!(out, "\n").unwrap();
+                }
+                syn::Lit::Byte(b) => {
+                    write!(out, "b'{}'", std::ascii::escape_default(b.value())).unwrap();
+                }
+                syn::Lit::Char(c) => {
+                    write!(out, "'{}'", c.value()).unwrap();
+                }
+                syn::Lit::Int(i) => {
+                    write!(out, "{}{}", i.base10_digits(), i.suffix()).unwrap();
+                }
+                syn::Lit::Float(f) => {
+                    write!(out, "{}", f.base10_digits()).unwrap();
+                }
+                syn::Lit::Bool(b) => {
+                    write!(out, "{}", b.value()).unwrap();
+                }
+                syn::Lit::Verbatim(v) => {
+                    write!(out, "{v}").unwrap();
+                }
+                _ => {
+                    doc!(out, ["?lit?"])
+                }
+            }
         }
     }
 }
@@ -576,12 +644,12 @@ mod token {
     doc_for_token!(Lt, "<");
     doc_for_token!(Gt, ">");
     doc_for_token!(Comma, ",");
-    doc_for_token!(Add, "+");
+    doc_for_token!(Plus, "+");
     doc_for_token!(Eq, "=");
     doc_for_token!(For, "for");
     doc_for_token!(Const, "const");
     doc_for_token!(Colon, ":");
-    doc_for_token!(Colon2, "::");
+    doc_for_token!(PathSep, "::");
     doc_for_token!(Semi, ";");
     doc_for_token!(FatArrow, "=>");
     doc_for_token!(RArrow, "->");

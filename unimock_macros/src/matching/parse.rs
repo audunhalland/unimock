@@ -8,14 +8,14 @@ impl syn::parse::Parse for MatchingInput {
         let mut guard = None;
 
         if !input.is_empty() {
-            let first: syn::Pat = parse_pat_with_pipe_if_not_in_tuple(input)?;
+            let first: syn::Pat = parse_pat_then_pipes_unless_parenthesized(input)?;
 
             if input.peek(syn::token::Or) {
                 arg_patterns.push(expect_canonical_arg_pattern(first)?);
 
                 while input.peek(syn::token::Or) {
                     let _: syn::token::Or = input.parse()?;
-                    arg_patterns.push(expect_canonical_arg_pattern(input.parse()?)?);
+                    arg_patterns.push(expect_canonical_arg_pattern(syn::Pat::parse_multi(input)?)?);
                 }
             } else {
                 let mut elems = syn::punctuated::Punctuated::<syn::Pat, syn::token::Comma>::new();
@@ -23,7 +23,7 @@ impl syn::parse::Parse for MatchingInput {
 
                 while input.peek(syn::token::Comma) {
                     elems.push_punct(input.parse()?);
-                    elems.push(parse_pat_with_pipe_if_not_in_tuple(input)?);
+                    elems.push(parse_pat_then_pipes_unless_parenthesized(input)?);
                 }
 
                 arg_patterns.push(ArgPattern {
@@ -56,16 +56,19 @@ impl syn::parse::Parse for MatchingInput {
     }
 }
 
-fn parse_pat_with_pipe_if_not_in_tuple(input: syn::parse::ParseStream) -> syn::Result<syn::Pat> {
-    let pat: syn::Pat = input.parse()?;
-    if input.peek(syn::token::Or) && !matches!(pat, syn::Pat::Tuple(_)) {
+fn parse_pat_then_pipes_unless_parenthesized(
+    input: syn::parse::ParseStream,
+) -> syn::Result<syn::Pat> {
+    let pat = syn::Pat::parse_single(input)?;
+
+    if input.peek(syn::token::Or) && !matches!(pat, syn::Pat::Tuple(_) | syn::Pat::Paren(_)) {
         let mut cases: syn::punctuated::Punctuated<syn::Pat, syn::token::Or> =
             syn::punctuated::Punctuated::new();
         cases.push(pat);
 
         while input.peek(syn::token::Or) {
             cases.push_punct(input.parse()?);
-            cases.push(input.parse()?);
+            cases.push(syn::Pat::parse_multi(input)?);
         }
 
         Ok(syn::Pat::Or(syn::PatOr {
@@ -103,6 +106,17 @@ fn try_flatten_if_single_pattern(arg_patterns: &mut Vec<ArgPattern>) -> syn::Res
 fn expect_canonical_arg_pattern(pat: syn::Pat) -> syn::Result<ArgPattern> {
     match pat {
         syn::Pat::Tuple(tuple) => Ok(ArgPattern { tuple }),
+        syn::Pat::Paren(paren) => {
+            let mut elems = syn::punctuated::Punctuated::new();
+            elems.push(*paren.pat);
+            Ok(ArgPattern {
+                tuple: syn::PatTuple {
+                    attrs: paren.attrs,
+                    paren_token: paren.paren_token,
+                    elems,
+                },
+            })
+        }
         _ => Err(syn::Error::new(pat.span(), "Expected tuple")),
     }
 }

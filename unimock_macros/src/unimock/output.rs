@@ -240,6 +240,7 @@ fn determine_associated_future_structure(
                     None
                 }
             }
+            _ => None,
         })
         .next()?;
     let last_future_bound_segment = future_bound.path.segments.last()?;
@@ -250,12 +251,8 @@ fn determine_associated_future_structure(
     let output_binding = generic_arguments
         .iter()
         .filter_map(|generic_argument| match generic_argument {
-            syn::GenericArgument::Binding(binding) => {
-                if binding.ident == "Output" {
-                    Some(binding)
-                } else {
-                    None
-                }
+            syn::GenericArgument::AssocType(assoc_type) if assoc_type.ident == "Output" => {
+                Some(assoc_type)
             }
             _ => None,
         })
