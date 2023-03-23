@@ -10,10 +10,12 @@ use super::util::{GenericParamsWithBounds, IsTypeGeneric};
 use super::Attr;
 
 use crate::doc;
+use crate::doc::SynDoc;
 
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemFn,
     pub adapted_sig: syn::Signature,
+    pub non_receiver_arg_count: usize,
     pub is_type_generic: IsTypeGeneric,
     pub generic_params_with_bounds: GenericParamsWithBounds,
     pub impl_trait_idents: HashSet<String>,
@@ -24,7 +26,13 @@ pub struct MockMethod<'t> {
     mirrored_attr_indexes: Vec<usize>,
 }
 
+pub struct Tupled(pub bool);
+
 impl<'t> MockMethod<'t> {
+    pub fn span(&self) -> proc_macro2::Span {
+        self.method.sig.span()
+    }
+
     pub fn mock_fn_path(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let mock_fn_ident = &self.mock_fn_ident;
 
@@ -42,8 +50,11 @@ impl<'t> MockMethod<'t> {
             .map(|index| &self.method.attrs[*index])
     }
 
-    pub fn inputs_destructuring(&self) -> InputsDestructuring {
-        InputsDestructuring { method: self }
+    pub fn inputs_destructuring(&self, tupled: Tupled) -> InputsDestructuring {
+        InputsDestructuring {
+            method: self,
+            tupled,
+        }
     }
 
     pub fn generate_debug_inputs_fn(&self, attr: &Attr) -> proc_macro2::TokenStream {
@@ -67,10 +78,10 @@ impl<'t> MockMethod<'t> {
             }
         };
 
-        let inputs_destructuring = self.inputs_destructuring();
+        let inputs = self.inputs_destructuring(Tupled(true));
 
         quote! {
-            fn debug_inputs((#inputs_destructuring): &Self::Inputs<'_>) -> String {
+            fn debug_inputs(#inputs: &Self::Inputs<'_>) -> String {
                 #body
             }
         }
@@ -97,13 +108,14 @@ impl<'t> MockMethod<'t> {
             })
     }
 
-    pub fn mockfn_doc_attrs(&self, trait_ident: &syn::Ident) -> Vec<proc_macro2::TokenStream> {
+    pub fn mockfn_doc_attrs(&self, trait_path: &syn::Path) -> Vec<proc_macro2::TokenStream> {
         let sig_string = doc::signature_documentation(&self.method.sig, doc::SkipReceiver(true));
+        let trait_path_string = trait_path.doc_string();
 
         let doc_string = if self.non_generic_mock_entry_ident.is_some() {
-            format!("Generic mock interface for `{trait_ident}::{sig_string}`. Get a MockFn instance by calling `with_types()`.")
+            format!("Generic mock interface for `{trait_path_string}::{sig_string}`. Get a MockFn instance by calling `with_types()`.")
         } else {
-            format!("MockFn for `{trait_ident}::{sig_string}`.")
+            format!("MockFn for `{trait_path_string}::{sig_string}`.")
         };
 
         let doc_lit = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
@@ -161,12 +173,26 @@ pub fn extract_methods<'s>(
                 })
                 .collect();
 
+            let non_receiver_arg_count = adapted_sig
+                .inputs
+                .iter()
+                .enumerate()
+                .filter(|(index, arg)| match arg {
+                    syn::FnArg::Receiver(_) => false,
+                    syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
+                        (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => false,
+                        _ => true,
+                    },
+                })
+                .count();
+
             let generic_params_with_bounds =
                 GenericParamsWithBounds::new(&adapted_sig.generics, false);
 
             Ok(Some(MockMethod {
                 method,
                 adapted_sig,
+                non_receiver_arg_count,
                 is_type_generic: adapt_sig_result.is_type_generic,
                 generic_params_with_bounds,
                 impl_trait_idents: adapt_sig_result.impl_trait_idents,
@@ -275,31 +301,47 @@ fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::Tok
 
 pub struct InputsDestructuring<'t> {
     method: &'t MockMethod<'t>,
+    tupled: Tupled,
 }
 
 impl<'t> quote::ToTokens for InputsDestructuring<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let inputs = &self.method.method.sig.inputs;
-        if inputs.is_empty() {
-            return;
-        }
+        if self.tupled.0 {
+            let inner = InputsDestructuring {
+                method: self.method,
+                tupled: Tupled(false),
+            };
 
-        let last_index = self.method.method.sig.inputs.len() - 1;
-        for (index, pair) in self.method.method.sig.inputs.pairs().enumerate() {
-            if let syn::FnArg::Typed(pat_type) = pair.value() {
-                match (index, pat_type.pat.as_ref()) {
-                    (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => {}
-                    (_, syn::Pat::Ident(pat_ident)) => {
-                        pat_ident.to_tokens(tokens);
+            if self.method.non_receiver_arg_count == 1 {
+                tokens.extend(inner.to_token_stream());
+            } else {
+                tokens.extend(quote! {
+                    (#inner)
+                });
+            }
+        } else {
+            let inputs = &self.method.method.sig.inputs;
+            if inputs.is_empty() {
+                return;
+            }
+
+            let last_index = self.method.method.sig.inputs.len() - 1;
+            for (index, pair) in self.method.method.sig.inputs.pairs().enumerate() {
+                if let syn::FnArg::Typed(pat_type) = pair.value() {
+                    match (index, pat_type.pat.as_ref()) {
+                        (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => {}
+                        (_, syn::Pat::Ident(pat_ident)) => {
+                            pat_ident.to_tokens(tokens);
+                        }
+                        _ => {
+                            syn::Error::new(pat_type.span(), "Unprocessable argument")
+                                .to_compile_error()
+                                .to_tokens(tokens);
+                        }
+                    };
+                    if index < last_index {
+                        syn::token::Comma::default().to_tokens(tokens);
                     }
-                    _ => {
-                        syn::Error::new(pat_type.span(), "Unprocessable argument")
-                            .to_compile_error()
-                            .to_tokens(tokens);
-                    }
-                };
-                if index < last_index {
-                    syn::token::Comma::default().to_tokens(tokens);
                 }
             }
         }

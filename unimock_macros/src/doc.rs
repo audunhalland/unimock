@@ -7,6 +7,12 @@ pub struct SkipReceiver(pub bool);
 
 pub(crate) trait SynDoc {
     fn doc(&self, out: &mut String);
+
+    fn doc_string(&self) -> String {
+        let mut string = String::new();
+        self.doc(&mut string);
+        string
+    }
 }
 
 pub fn signature_documentation(sig: &syn::Signature, skip_receiver: SkipReceiver) -> String {

@@ -70,7 +70,7 @@ impl<'t> Generics<'t> {
         infer_impl_trait: InferImplTrait,
     ) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
         self.trait_info
-            .item
+            .input_trait
             .generics
             .params
             .iter()
@@ -239,7 +239,7 @@ pub fn iter_generic_type_params<'t>(
     method: &'t MockMethod,
 ) -> impl Iterator<Item = &'t syn::TypeParam> {
     trait_info
-        .item
+        .input_trait
         .generics
         .params
         .iter()
