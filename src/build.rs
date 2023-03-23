@@ -89,7 +89,7 @@ pub struct Each<F: MockFn> {
 
 impl<F> Each<F>
 where
-    F: MockFn + 'static,
+    F: MockFn,
 {
     /// Define the next call pattern, given some input matcher.
     ///
@@ -122,7 +122,7 @@ where
 
 impl<F> ClauseSealed for Each<F>
 where
-    F: MockFn + 'static,
+    F: MockFn,
 {
     fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
         if self.patterns.is_empty() {
@@ -197,7 +197,7 @@ macro_rules! define_response_common_impl {
     ($typename:ident) => {
         impl<'p, F, O> $typename<'p, F, O>
         where
-            F: MockFn + 'static,
+            F: MockFn,
             O: Ordering,
         {
             /// Create a new owned call pattern match.
@@ -427,7 +427,7 @@ pub struct Quantify<'p, F: MockFn, O> {
 
 impl<'p, F, O> Quantify<'p, F, O>
 where
-    F: MockFn + 'static,
+    F: MockFn,
     O: Ordering,
 {
     /// Expect this call pattern to be matched exactly once.
@@ -465,7 +465,7 @@ where
 
 impl<'p, F, O> ClauseSealed for Quantify<'p, F, O>
 where
-    F: MockFn + 'static,
+    F: MockFn,
     O: Ordering,
 {
     fn deconstruct(mut self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
@@ -490,7 +490,7 @@ pub struct QuantifiedResponse<'p, F: MockFn, O, R> {
 
 impl<'p, F, O, R> QuantifiedResponse<'p, F, O, R>
 where
-    F: MockFn + 'static,
+    F: MockFn,
     O: Ordering,
     R: Repetition,
 {
@@ -519,7 +519,7 @@ where
 
 impl<'p, F, O, R> ClauseSealed for QuantifiedResponse<'p, F, O, R>
 where
-    F: MockFn + 'static,
+    F: MockFn,
     O: Ordering,
     R: Repetition,
 {
