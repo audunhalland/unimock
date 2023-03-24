@@ -6,9 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Fixed
-- Code generation: Don't parenthesize inputs when there is only one argument
+- Code generation: Don't parenthesize inputs when there is only one argument.
+- Require dependency versions closer to latest releases.
+- `unimock_macros`: Added `README`.
 ### Added
-- Trait emulation, only intended for internal (and future) use
+- Trait emulation, only intended for internal (and future) use.
 
 ## [0.4.10] - 2023-03-20
 ### Changed
