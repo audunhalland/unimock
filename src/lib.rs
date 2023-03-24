@@ -366,6 +366,11 @@ pub mod macro_api;
 pub mod output;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
+
+// Experimental support for some external traits
+#[cfg(feature = "mock")]
+pub mod mock;
+
 #[doc(hidden)]
 pub mod value_chain;
 

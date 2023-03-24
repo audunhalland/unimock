@@ -1,4 +1,5 @@
 mod basic;
+mod core;
 mod errors;
 mod generic;
 mod matching_eq;
