@@ -179,10 +179,10 @@ pub fn extract_methods<'s>(
                 .enumerate()
                 .filter(|(index, arg)| match arg {
                     syn::FnArg::Receiver(_) => false,
-                    syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
-                        (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => false,
-                        _ => true,
-                    },
+                    syn::FnArg::Typed(pat_type) => !matches!(
+                        (index, pat_type.pat.as_ref()),
+                        (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self"
+                    ),
                 })
                 .count();
 
