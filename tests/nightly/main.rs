@@ -4,10 +4,7 @@
 #![feature(async_fn_in_trait)]
 #![feature(closure_track_caller)]
 
-#[cfg(feature = "nightly-tests")]
 mod associated_future;
-
-#[cfg(feature = "nightly-tests")]
 mod async_fn_in_trait;
 
 fn main() {}
