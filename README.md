@@ -11,7 +11,7 @@
 
 Mocking, in a broad sense, is a way to control API behaviour during test execution.
 
-The _uni_ in unimock indicates one-ness: All mockable traits are implemented by a single type, Unimock.
+The _uni_ in unimock indicates one-ness: All mockable traits are implemented by a single type, [Unimock](https://docs.rs/unimock/latest/unimock/struct.Unimock.html).
 This design allows for a great flexibility in coding style, as will be demonstrated further down.
 
 The first code example is the smallest possible use of unimock:
@@ -29,13 +29,13 @@ takes_foo(Unimock::new(()));
 
 1. `trait Foo` is declared with the `#[unimock]` attribute which makes its behaviour mockable.
 2. `fn takes_foo` accepts some type that implements the trait. This function adheres to zero-cost _Inversion of Control/Dependency Inversion_.
-3. A mock instantiation by calling `Unimock::new(())`, which crates a `Unimock` value which is passed into `takes_foo`.
+3. A mock instantiation by calling [`Unimock::new(())`](https://docs.rs/unimock/latest/unimock/struct.Unimock.html#method.new), which crates a [`Unimock`](https://docs.rs/unimock/latest/unimock/struct.Unimock.html) value which is passed into `takes_foo`.
 
-The `new` function takes an argument called `setup` (implementing `Clause`), in this case the unit value `()`.
+The [`new`](https://docs.rs/unimock/latest/unimock/struct.Unimock.html#method.new) function takes an argument called `setup` (implementing [`Clause`](https://docs.rs/unimock/latest/unimock/trait.Clause.html)), in this case the unit value `()`.
 The setup argument is _what behaviour is being mocked_, in this case nothing at all.
 `Foo` contains no methods, so there is no behaviour to mock.
 
-### Methods and behaviour mocking
+## Methods and behaviour mocking
 
 In order to be somewhat useful, the traits we abstract over should contain some methods.
 In a unit test for some function, we'd like to mock the behaviour of that function's dependencies (expressed as trait bounds).
@@ -56,7 +56,7 @@ We need to tell unimock to expose a separate mocking API.
 This API will be created in form of a new module, [which is named](#selecting-a-name-for-the-mock-api) by passing e.g. `api=TraitMock` to the unimock macro invocation.
 
 Each of the trait's original methods will get exported as mock config entrypoints through this module: For example `TraitMock::method`.
-`method` is a type that will implement `MockFn`, which is the entrypoint for creating a `Clause`:
+`method` is a type that will implement [`MockFn`](https://docs.rs/unimock/latest/unimock/trait.MockFn.html), which is the entrypoint for creating a [`Clause`](https://docs.rs/unimock/latest/unimock/trait.Clause.html):
 
 ```rust
 #[unimock(api=FooMock)]
@@ -81,7 +81,7 @@ Clause construction is a type-state machine that in this example goes through tw
 
 In this example there is only one clause.
 
-#### Call patterns (matching inputs)
+### Call patterns (matching inputs)
 
 It is common to want to control how a function will respond in relation to what input is given to it!
 Inputs are matched by a function that receives the inputs as a tuple, and returns whether it matched as a `bool`.
@@ -92,9 +92,9 @@ It has a syntax inspired by the [`std::matches`](https://doc.rust-lang.org/std/m
 
 Inputs being matched is a condition that needs to be fulfilled in order for the rest of the call pattern to be evaluated.
 
-#### Specifying outputs (responses)
+### Specifying outputs (responses)
 Specifying outputs can be done in several ways. The simplest one is `returns(some_value)`.
-Different ways of specifying outputs are found in `build::DefineResponse`.
+Different ways of specifying outputs are found in [`build::DefineResponse`](https://docs.rs/unimock/latest/unimock/build/struct.DefineResponse.html).
 
 There are different constraints acting on return values based on how the clause gets initialized:
 
@@ -104,7 +104,7 @@ There are different constraints acting on return values based on how the clause 
 
 
 
-### Combining setup clauses
+## Combining setup clauses
 `Unimock::new()` accepts as argument anything that implements [Clause].
 Basic setup clauses can be combined into composite clauses by using _tuples_:
 
@@ -160,7 +160,7 @@ assert_eq!(
 In both these examples, the order in which the clauses are specified do not matter, _except for input matching_.
 In order for unimock to find the correct response, call patterns will be matched in the sequence they were defined.
 
-### Interaction verifications
+## Interaction verifications
 Unimock performs interaction verifications using a declarative approach.
 Expected interactions are configured at construction time, using [Clause]s.
 Rust makes it possible to automatically verify things because of RAII and the [drop] method, which Unimock implements.
@@ -168,7 +168,7 @@ When a Unimock instance goes out of scope, Rust automatically runs its verificat
 
 One verification is always enabled in unimock:
 
-_Each `MockFn` mentioned in some setup clause must be interacted with at least once._
+_Each [`MockFn`](https://docs.rs/unimock/latest/unimock/trait.MockFn.html) mentioned in some setup clause must be interacted with at least once._
 
 If this requirement is not met, Unimock will panic inside its Drop implementation.
 The reason is to help avoiding "bit rot" accumulating over time inside test code.
@@ -176,7 +176,7 @@ When refactoring release code, tests should always follow along and not be overl
 
 In general, clauses do not only encode what behaviour is _allowed_ to happen, but also that this behaviour necessarily _must happen_.
 
-#### Optional call count expectations in call patterns
+### Optional call count expectations in call patterns
 To make a call count expectation for a specific call pattern,
    look at [`Quantify`](build::Quantify) or [`QuantifyReturnValue`](build::QuantifyReturnValue), which have methods like
    [`once()`](build::Quantify::once),
@@ -193,7 +193,7 @@ The output sequence will be `[1, 1, 2, 2, 2, ..]`.
 A call pattern like this _must_ be matched at least 3 times.
 2 times because of the first exact output sequence, then at least one time because of the [`.then()`](build::QuantifiedResponse::then) combinator.
 
-#### Verifying exact sequence of calls
+### Verifying exact sequence of calls
 Exact call sequences may be expressed using _strictly ordered clauses_.
 Use [`next_call`](MockFn::next_call) to define this kind of call pattern.
 
@@ -209,7 +209,7 @@ All clauses constructed by `next_call` are expected to be evaluated in the exact
 Order-sensitive clauses and order-insensitive clauses (like [`some_call`](MockFn::some_call)) do not interfere with each other.
 However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 
-### Application architecture
+## Application architecture
 
 Writing larger, testable applications with unimock requires some degree of architectural discipline.
 We already know how to specify dependencies using trait bounds.
@@ -253,7 +253,7 @@ The previous code snippet is at the extreme end of the loosely-coupled scale: _N
 It shows that unimock is merely a piece in a larger picture.
 To wire all of this together into a full-fledged runtime solution, without too much boilerplate, reach for the _[entrait pattern](https://docs.rs/entrait)_.
 
-#### Gated mock implementation
+### Gated mock implementation
 If the trait definition, the uses of the trait bound and the tests all live within the same crate, it's possible to _gate_ the macro invocation:
 
 ```rust
@@ -261,17 +261,17 @@ If the trait definition, the uses of the trait bound and the tests all live with
 trait Foo {}
 ```
 
-#### Combining release code and mocks: Partial mocks
+### Combining release code and mocks: Partial mocks
 Unimock can be used to create arbitrarily deep integration tests, mocking away layers only indirectly used.
 For that to work, unimock needs to know how to call the "real" implementation of traits.
 
-See the documentation of `new_partial` to see how this works.
+See the documentation of [`new_partial`](https://docs.rs/unimock/latest/unimock/struct.Unimock.html#method.new_partial) to see how this works.
 
 Although this can be implemented with unimock directly, it works best with a higher-level macro like [`entrait`](https://docs.rs/entrait).
 
-#### Misc
+### Misc
 
-##### What kinds of things can be mocked with unimock?
+#### What kinds of things can be mocked with unimock?
 * Traits with any number of methods
 * Traits with generic parameters, although these cannot be lifetime constrained (i.e. need to satisfy `T: 'static`).
 * Methods with any self receiver (`self`, `&self`, `&mut self` or arbitrary (e.g. `self: Rc<Self>`)).
@@ -286,13 +286,13 @@ Although this can be implemented with unimock directly, it works best with a hig
 * Async methods when the trait is annotated with `#[async_trait]`.
 * Methods that return a future that is an associated type. Requires nightly.
 
-##### What kinds of traits or methods cannot be mocked?
+#### What kinds of traits or methods cannot be mocked?
 * Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
 * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
 * Methods receiving `&mut` arguments other than `&mut self`.
     It _might_ work, but is currently unsupported due to stricter lifetime constraints that is harder to express via generics.
 
-#### Selecting a name for the mock `api`
+### Selecting a name for the mock `api`
 Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
     unimock tries to avoid autogenerating any new identifiers that might accidentally create undesired namespace collisions.
 To avoid user confusion through conjuring up new identifier names out of thin air, the name of the mocking API therefore has to be user-supplied.
@@ -307,15 +307,15 @@ This will make it easier to discover the API, as it shares a common prefix with 
 
 
 
-### Project goals
-##### Use only safe Rust
+## Project goals
+#### Use only safe Rust
 Unimock respects the memory safety and soundness provided by Rust.
 Sometimes this fact can lead to less than optimal ergonomics.
 
 For example, in order to use `.returns(value)`, the value must (generally) implement `Clone`, `Send`, `Sync` and `'static`.
 If it's not all of those things, the slightly longer `.answers(|_| value)` can be used instead.
 
-##### Keep the amount of generated code to a minimum
+#### Keep the amount of generated code to a minimum
 The unimock API is mainly built around generics and traits, instead of being macro-generated.
 Any mocking library will likely always require _some_ degree of introspective metaprogramming (like macros),
   but doing too much of that is likely to become more confusing to users, as well as taking longer to compile.
@@ -329,7 +329,7 @@ Rust generics aren't infinitely flexible,
 
 All things considered, this tradedoff seems sound, because this is only testing, after all.
 
-##### Use nice, readable APIs
+#### Use nice, readable APIs
 Unimock's mocking API has been designed to read like natural english sentences.
 
 This was a fun design challenge, but it arguably also has some real value.
