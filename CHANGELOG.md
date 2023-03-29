@@ -5,10 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [0.4.11] - 2023-03-29
 ### Fixed
 - Code generation: Don't parenthesize inputs when there is only one argument.
 - Require dependency versions closer to latest releases.
 - `unimock_macros`: Added `README`.
+- Most hyperlinks in README.md.
 ### Added
 - Trait emulation, only intended for internal (and future) use.
 
