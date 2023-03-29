@@ -386,7 +386,7 @@ fn various_borrowing() {
         <Unimock as Borrowing>::borrow_static(&Unimock::new(
             BorrowingMock::borrow_static
                 .next_call(matching!(_))
-                .answers_leaked_ref(|_| format!("yoyoyo"))
+                .answers_leaked_ref(|_| "yoyoyo".to_string())
                 .once()
         ))
     );

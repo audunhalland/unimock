@@ -19,7 +19,7 @@ jobs:
       - name: Test no-default-features
         run: cargo test --no-default-features
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
   test-nightly:
     runs-on: ubuntu-latest
