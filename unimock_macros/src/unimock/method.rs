@@ -57,6 +57,19 @@ impl<'t> MockMethod<'t> {
         }
     }
 
+    pub fn self_reference(&self) -> SelfReference {
+        let receiver = self.method.sig.inputs.iter().find_map(|arg| match arg {
+            syn::FnArg::Receiver(receiver) => Some(receiver),
+            _ => None,
+        });
+        match receiver {
+            Some(syn::Receiver {
+                reference: None, ..
+            }) => SelfReference { create_ref: true },
+            _ => SelfReference { create_ref: false },
+        }
+    }
+
     pub fn generate_debug_inputs_fn(&self, attr: &Attr) -> proc_macro2::TokenStream {
         let prefix = &attr.prefix;
         let first_param = self
@@ -410,5 +423,18 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
     AdaptSigResult {
         is_type_generic,
         impl_trait_idents,
+    }
+}
+
+pub struct SelfReference {
+    create_ref: bool,
+}
+
+impl quote::ToTokens for SelfReference {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        if self.create_ref {
+            syn::token::And::default().to_tokens(tokens);
+        }
+        syn::token::SelfValue::default().to_tokens(tokens);
     }
 }

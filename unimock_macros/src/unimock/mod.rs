@@ -239,6 +239,7 @@ fn def_method_impl(
     let mirrored_attrs = method.mirrored_attrs();
     let mock_fn_path = method.mock_fn_path(attr);
 
+    let self_ref = method.self_reference();
     let inputs_tupled = {
         let destructuring = method.inputs_destructuring(Tupled(true));
         quote! { #destructuring }
@@ -272,14 +273,14 @@ fn def_method_impl(
         };
 
         quote_spanned! { span=>
-            match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(&self, #inputs_tupled) {
+            match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled) {
                 #prefix::macro_api::Evaluation::Evaluated(output) => output,
                 #prefix::macro_api::Evaluation::Skipped(#inputs_tupled) => #unmock_expr
             }
         }
     } else {
         quote_spanned! { span=>
-            #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(&self, #inputs_tupled).unwrap(&self)
+            #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled).unwrap(#self_ref)
         }
     };
 
