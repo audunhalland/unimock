@@ -106,7 +106,7 @@ pub mod ReadMock {
 impl std::io::Read for Unimock {
     fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
         let (size, bytes) = crate::macro_api::eval::<ReadMock::read>(self, buf).unwrap(self)?;
-        buf.write(&bytes)?;
+        let _ignore = buf.write(&bytes);
         Ok(size)
     }
 
@@ -118,7 +118,7 @@ impl std::io::Read for Unimock {
                 for (index, chunk) in chunks.into_iter().enumerate() {
                     use std::ops::DerefMut;
                     let buf = &mut bufs[index];
-                    buf.deref_mut().write(&chunk)?;
+                    let _ignore = buf.deref_mut().write(&chunk);
                 }
                 Ok(size)
             }
@@ -130,7 +130,7 @@ impl std::io::Read for Unimock {
         match crate::macro_api::eval::<ReadMock::read_to_end>(self, buf) {
             Evaluation::Evaluated(result) => {
                 let (size, bytes) = result?;
-                buf.write(&bytes)?;
+                let _ignored = buf.write(&bytes);
                 Ok(size)
             }
             Evaluation::Skipped(_) => IoFallback(self).read(buf),
@@ -152,7 +152,7 @@ impl std::io::Read for Unimock {
         match crate::macro_api::eval::<ReadMock::read_exact>(self, buf) {
             Evaluation::Evaluated(result) => {
                 let bytes = result?;
-                buf.write(&bytes)?;
+                let _ignored = buf.write(&bytes);
                 Ok(())
             }
             Evaluation::Skipped(_) => IoFallback(self).read_exact(buf),
