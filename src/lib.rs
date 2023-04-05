@@ -357,6 +357,7 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+#![cfg_attr(feature = "unstable-doc-cfg", feature(doc_cfg))]
 
 /// Types used for building and defining mock behaviour.
 pub mod build;
