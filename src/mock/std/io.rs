@@ -102,6 +102,7 @@ pub mod ReadMock {
     }
 }
 
+#[allow(clippy::unused_io_amount)]
 impl std::io::Read for Unimock {
     fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
         let (size, bytes) = crate::macro_api::eval::<ReadMock::read>(self, buf).unwrap(self)?;
