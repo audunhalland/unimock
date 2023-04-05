@@ -1,1 +1,2 @@
-pub mod core;
+#[cfg(feature = "mock-std")]
+pub mod std;

@@ -13,9 +13,10 @@ categories = ["development-tools", "development-tools::testing"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["pretty-print"]
+default = ["pretty-print", "mock-std"]
 pretty-print = ["dep:pretty_assertions"]
 nightly-tests = []
+mock-std = []
 
 [dependencies]
 unimock_macros = { path = "unimock_macros", version = "0.4.12" }

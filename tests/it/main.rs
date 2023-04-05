@@ -1,5 +1,4 @@
 mod basic;
-mod core;
 mod errors;
 mod generic;
 mod matching_eq;
@@ -9,6 +8,7 @@ mod mock_order;
 mod prefix;
 #[cfg(feature = "pretty-print")]
 mod pretty_mismatches;
+mod std;
 mod unmock;
 
 fn main() {}
