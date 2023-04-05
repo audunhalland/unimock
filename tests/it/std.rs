@@ -5,6 +5,41 @@ use std::io::{BufRead, BufReader};
 use unimock::*;
 
 #[test]
+fn test_display() {
+    assert_eq!(
+        "u",
+        Unimock::new(
+            mock::core::fmt::DisplayMock::fmt
+                .next_call(matching!())
+                .returns(Ok("u".to_string())),
+        )
+        .to_string()
+    );
+}
+
+#[test]
+#[should_panic = "a Display implementation returned an error unexpectedly: Error"]
+fn test_display_error() {
+    Unimock::new(
+        mock::core::fmt::DisplayMock::fmt
+            .next_call(matching!())
+            .returns(Err(core::fmt::Error)),
+    )
+    .to_string();
+}
+
+#[test]
+fn test_debug() {
+    let unimock = Unimock::new(
+        mock::core::fmt::DebugMock::fmt
+            .next_call(matching!())
+            .returns(Ok("u".to_string())),
+    );
+
+    assert_eq!("u", format!("{unimock:?}"));
+}
+
+#[test]
 fn test_read() {
     let mut reader = BufReader::new(Unimock::new((
         mock::std::io::ReadMock::read
