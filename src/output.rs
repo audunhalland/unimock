@@ -10,18 +10,22 @@ pub trait Respond {
 /// Trait for values that can be converted into responses.
 ///
 /// This can be implemented by types that do not implement `Clone`.
-pub trait IntoResponseOnce<R: Respond> {
+pub trait IntoResponse<R: Respond> {
     // Convert this type into the output type.
     #[doc(hidden)]
     fn into_response(self) -> <R as Respond>::Type;
+}
 
+/// Types that may converted into a responder that responds once.
+pub trait IntoOnceResponder<R: Respond>: IntoResponse<R> {
     // Convert this type directly into a responder that can respond (at least) once.
     #[doc(hidden)]
     fn into_once_responder<F: MockFn<Response = R>>(self) -> Responder;
 }
 
-/// Trait for `Clone` values which can be converted into a reusable multi-value responder.
-pub trait IntoResponseClone<R: Respond>: IntoResponseOnce<R> {
+/// Types that may converted into a responder that responds any number of times.
+pub trait IntoCloneResponder<R: Respond>: IntoOnceResponder<R> {
+    /// Trait for `Clone` values which can be converted into a reusable multi-value responder.
     #[doc(hidden)]
     fn into_clone_responder<F: MockFn<Response = R>>(self) -> Responder;
 }
@@ -72,26 +76,31 @@ mod owned {
         type Type = T;
     }
 
-    impl<T0, T: Send + Sync + 'static> IntoResponseOnce<Owned<T>> for T0
+    impl<T0, T: 'static> IntoResponse<Owned<T>> for T0
     where
         T0: Into<T>,
     {
         fn into_response(self) -> <Owned<T> as Respond>::Type {
             self.into()
         }
+    }
 
+    impl<T0, T: Send + Sync + 'static> IntoOnceResponder<Owned<T>> for T0
+    where
+        T0: Into<T>,
+    {
         fn into_once_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
-            let response = <T0 as IntoResponseOnce<Owned<T>>>::into_response(self);
+            let response = <T0 as IntoResponse<Owned<T>>>::into_response(self);
             Responder(DynResponder::new_cell::<F>(response))
         }
     }
 
-    impl<T0, T: Clone + Send + Sync + 'static> IntoResponseClone<Owned<T>> for T0
+    impl<T0, T: Clone + Send + Sync + 'static> IntoCloneResponder<Owned<T>> for T0
     where
         T0: Into<T>,
     {
         fn into_clone_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
-            let response = <T0 as IntoResponseOnce<Owned<T>>>::into_response(self);
+            let response = <T0 as IntoResponse<Owned<T>>>::into_response(self);
             Responder(DynResponder::new_clone_cell::<F>(response))
         }
     }
@@ -118,7 +127,7 @@ mod borrowed {
         type Type = Box<dyn Borrow<T> + Send + Sync>;
     }
 
-    impl<T0, T> IntoResponseOnce<Borrowed<T>> for T0
+    impl<T0, T> IntoResponse<Borrowed<T>> for T0
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
@@ -126,20 +135,26 @@ mod borrowed {
         fn into_response(self) -> <Borrowed<T> as Respond>::Type {
             Box::new(self)
         }
+    }
 
+    impl<T0, T> IntoOnceResponder<Borrowed<T>> for T0
+    where
+        T0: Borrow<T> + Send + Sync + 'static,
+        T: ?Sized + 'static,
+    {
         fn into_once_responder<F: MockFn<Response = Borrowed<T>>>(self) -> Responder {
-            let response = <T0 as IntoResponseOnce<Borrowed<T>>>::into_response(self);
+            let response = <T0 as IntoResponse<Borrowed<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(response))
         }
     }
 
-    impl<T0, T> IntoResponseClone<Borrowed<T>> for T0
+    impl<T0, T> IntoCloneResponder<Borrowed<T>> for T0
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
         fn into_clone_responder<F: MockFn<Response = Borrowed<T>>>(self) -> Responder {
-            <T0 as IntoResponseOnce<Borrowed<T>>>::into_once_responder::<F>(self)
+            <T0 as IntoOnceResponder<Borrowed<T>>>::into_once_responder::<F>(self)
         }
     }
 
@@ -170,20 +185,22 @@ mod static_ref {
         type Type = &'static T;
     }
 
-    impl<T: ?Sized + Send + Sync + 'static> IntoResponseOnce<StaticRef<T>> for &'static T {
+    impl<T: ?Sized + Send + Sync + 'static> IntoResponse<StaticRef<T>> for &'static T {
         fn into_response(self) -> <StaticRef<T> as Respond>::Type {
             self
         }
+    }
 
+    impl<T: ?Sized + Send + Sync + 'static> IntoOnceResponder<StaticRef<T>> for &'static T {
         fn into_once_responder<F: MockFn<Response = StaticRef<T>>>(self) -> Responder {
-            let response = <Self as IntoResponseOnce<StaticRef<T>>>::into_response(self);
+            let response = <Self as IntoResponse<StaticRef<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(response))
         }
     }
 
-    impl<T: ?Sized + Send + Sync + 'static> IntoResponseClone<StaticRef<T>> for &'static T {
+    impl<T: ?Sized + Send + Sync + 'static> IntoCloneResponder<StaticRef<T>> for &'static T {
         fn into_clone_responder<F: MockFn<Response = StaticRef<T>>>(self) -> Responder {
-            <Self as IntoResponseOnce<StaticRef<T>>>::into_once_responder::<F>(self)
+            <Self as IntoOnceResponder<StaticRef<T>>>::into_once_responder::<F>(self)
         }
     }
 
@@ -211,7 +228,7 @@ mod mixed_option {
         type Type = Option<BoxBorrow<T>>;
     }
 
-    impl<T0, T> IntoResponseOnce<Mix<T>> for Option<T0>
+    impl<T0, T> IntoResponse<Mix<T>> for Option<T0>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
@@ -222,20 +239,26 @@ mod mixed_option {
                 None => None,
             }
         }
+    }
 
+    impl<T0, T> IntoOnceResponder<Mix<T>> for Option<T0>
+    where
+        T0: Borrow<T> + Send + Sync + 'static,
+        T: ?Sized + 'static,
+    {
         fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
-            let response = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
+            let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(response))
         }
     }
 
-    impl<T0, T> IntoResponseClone<Mix<T>> for Option<T0>
+    impl<T0, T> IntoCloneResponder<Mix<T>> for Option<T0>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
         fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
-            let response = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
+            let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(response))
         }
     }
@@ -270,7 +293,7 @@ mod mixed_vec {
         type Type = Vec<BoxBorrow<T>>;
     }
 
-    impl<T0, T> IntoResponseOnce<Mix<T>> for Vec<T0>
+    impl<T0, T> IntoResponse<Mix<T>> for Vec<T0>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
@@ -280,20 +303,26 @@ mod mixed_vec {
                 .map(|item| -> BoxBorrow<T> { Box::new(item) })
                 .collect()
         }
+    }
 
+    impl<T0, T> IntoOnceResponder<Mix<T>> for Vec<T0>
+    where
+        T0: Borrow<T> + Send + Sync + 'static,
+        T: ?Sized + 'static,
+    {
         fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
-            let response = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
+            let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(response))
         }
     }
 
-    impl<T0, T> IntoResponseClone<Mix<T>> for Vec<T0>
+    impl<T0, T> IntoCloneResponder<Mix<T>> for Vec<T0>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
         fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
-            let response = <Self as IntoResponseOnce<Mix<T>>>::into_response(self);
+            let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
             Responder(DynResponder::new_borrow::<F>(response))
         }
     }
@@ -325,7 +354,7 @@ mod mixed_result_borrowed_t {
         type Type = Result<BoxBorrow<T>, E>;
     }
 
-    impl<T0, T, E> IntoResponseOnce<Mix<T, E>> for Result<T0, E>
+    impl<T0, T, E> IntoResponse<Mix<T, E>> for Result<T0, E>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
@@ -337,7 +366,14 @@ mod mixed_result_borrowed_t {
                 Err(e) => Err(e),
             }
         }
+    }
 
+    impl<T0, T, E> IntoOnceResponder<Mix<T, E>> for Result<T0, E>
+    where
+        T0: Borrow<T> + Send + Sync + 'static,
+        T: ?Sized + 'static,
+        E: Send + Sync + 'static,
+    {
         fn into_once_responder<F: MockFn<Response = Mix<T, E>>>(self) -> Responder {
             match self {
                 // In the Ok variant we make a multi-value responder out of it anyway:
@@ -348,7 +384,7 @@ mod mixed_result_borrowed_t {
         }
     }
 
-    impl<T0, T, E> IntoResponseClone<Mix<T, E>> for Result<T0, E>
+    impl<T0, T, E> IntoCloneResponder<Mix<T, E>> for Result<T0, E>
     where
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
@@ -400,30 +436,38 @@ macro_rules! mixed_tuples {
             type Type = ($(<$t as Respond>::Type),+,);
         }
 
-        impl<$($t),+, $($a),+> IntoResponseOnce<Mixed<($($t),+,)>> for ($($a),+,)
+        impl<$($t),+, $($a),+> IntoResponse<Mixed<($($t),+,)>> for ($($a),+,)
         where
             $($t: Respond),+,
             $(<$t as Respond>::Type: Send + Sync),+,
-            $($a: IntoResponseOnce<$t>),+,
+            $($a: IntoResponse<$t>),+,
         {
             fn into_response(self) -> <Mixed<($($t),+,)> as Respond>::Type {
                 ($(self.$i.into_response()),+,)
             }
+        }
 
+        impl<$($t),+, $($a),+> IntoOnceResponder<Mixed<($($t),+,)>> for ($($a),+,)
+        where
+            $($t: Respond),+,
+            $(<$t as Respond>::Type: Send + Sync),+,
+            $($a: IntoResponse<$t>),+,
+        {
             fn into_once_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> Responder {
-                let response = <Self as IntoResponseOnce<Mixed<($($t),+,)>>>::into_response(self);
+                let response = <Self as IntoResponse<Mixed<($($t),+,)>>>::into_response(self);
                 Responder(DynResponder::new_cell::<F>(response))
             }
         }
 
-        impl<$($t),+, $($a),+> IntoResponseClone<Mixed<($($t),+,)>> for ($($a),+,)
+
+        impl<$($t),+, $($a),+> IntoCloneResponder<Mixed<($($t),+,)>> for ($($a),+,)
         where
             $($t: Respond),+,
             $(<$t as Respond>::Type: Clone + Send + Sync),+,
-            $($a: IntoResponseClone<$t>),+,
+            $($a: IntoCloneResponder<$t>),+,
         {
             fn into_clone_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> Responder {
-                let response = <Self as IntoResponseOnce<Mixed<($($t),+,)>>>::into_response(self);
+                let response = <Self as IntoResponse<Mixed<($($t),+,)>>>::into_response(self);
                 Responder(DynResponder::new_clone_cell::<F>(response))
             }
         }

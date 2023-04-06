@@ -1,7 +1,7 @@
 use crate::call_pattern::*;
 use crate::clause::{self, ClauseSealed, TerminalClause};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{IntoResponseClone, IntoResponseOnce, Respond, StaticRef};
+use crate::output::{IntoCloneResponder, IntoOnceResponder, IntoResponse, Respond, StaticRef};
 use crate::property::*;
 use crate::*;
 
@@ -160,7 +160,7 @@ where
     /// To be able to return this value multiple times, quantify it explicitly.
     pub fn returns<T>(self, value: T) -> QuantifyReturnValue<'p, F, T, O>
     where
-        T: IntoResponseOnce<F::Response>,
+        T: IntoOnceResponder<F::Response>,
     {
         QuantifyReturnValue {
             builder: self.builder,
@@ -186,7 +186,7 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns<V: IntoResponseClone<F::Response>>(mut self, value: V) -> Quantify<'p, F, O> {
+    pub fn returns<V: IntoCloneResponder<F::Response>>(mut self, value: V) -> Quantify<'p, F, O> {
         self.builder
             .push_responder(value.into_clone_responder::<F>().0);
         self.quantify()
@@ -234,7 +234,7 @@ macro_rules! define_response_common_impl {
             pub fn answers<C, R>(mut self, func: C) -> Quantify<'p, F, O>
             where
                 C: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
-                R: IntoResponseOnce<F::Response>,
+                R: IntoResponse<F::Response>,
             {
                 self.builder.push_responder(
                     FunctionResponder::<F> {
@@ -308,7 +308,7 @@ define_response_common_impl!(DefineMultipleResponses);
 pub struct QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoResponseOnce<F::Response>,
+    T: IntoOnceResponder<F::Response>,
 {
     pub(crate) builder: BuilderWrapper<'p>,
     return_value: Option<T>,
@@ -319,7 +319,7 @@ where
 impl<'p, F, T, O> QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoResponseOnce<F::Response>,
+    T: IntoOnceResponder<F::Response>,
     O: Copy,
 {
     /// Expect this call pattern to be matched exactly once.
@@ -345,7 +345,7 @@ where
     /// Expect this call pattern to be matched exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
     where
-        T: IntoResponseClone<F::Response>,
+        T: IntoCloneResponder<F::Response>,
     {
         self.builder.push_responder(
             self.return_value
@@ -369,7 +369,7 @@ where
     /// Strictly ordered call patterns must have exact quantification.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
-        T: IntoResponseClone<F::Response>,
+        T: IntoCloneResponder<F::Response>,
         O: Ordering<Kind = InAnyOrder>,
     {
         self.builder.push_responder(
@@ -392,7 +392,7 @@ where
 impl<'p, F, T, O> ClauseSealed for QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoResponseOnce<F::Response>,
+    T: IntoOnceResponder<F::Response>,
     O: Copy + Ordering,
 {
     fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
@@ -408,7 +408,7 @@ where
 impl<'p, F, T, O> Drop for QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoResponseOnce<F::Response>,
+    T: IntoOnceResponder<F::Response>,
 {
     fn drop(&mut self) {
         if let Some(return_value) = self.return_value.take() {

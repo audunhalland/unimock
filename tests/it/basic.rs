@@ -789,16 +789,15 @@ fn fn_cfg_attrs() {
 
 #[test]
 fn non_send_return() {
-    pub struct Ret(Rc<i32>);
-
     #[unimock(api = NonSendMock)]
     trait NonSend {
-        fn ret(&self) -> Ret;
+        fn return_rc(&self) -> Rc<i32>;
     }
 
     let u = Unimock::new(
-        NonSendMock::ret
+        NonSendMock::return_rc
             .next_call(matching!())
-            .answers(|_| Ret(Rc::new(42))),
+            .answers(|_| Rc::new(42)),
     );
+    assert_eq!(Rc::new(42), u.return_rc());
 }
