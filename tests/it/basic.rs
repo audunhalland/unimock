@@ -484,7 +484,7 @@ async fn test_async_trait() {
     );
 }
 
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc};
 
 #[unimock(api=CowBasedMock)]
 trait CowBased {
@@ -785,4 +785,20 @@ fn fn_cfg_attrs() {
 
     let u = Unimock::new(TraitMock::a.next_call(matching!()).returns(0));
     u.a();
+}
+
+#[test]
+fn non_send_return() {
+    pub struct Ret(Rc<i32>);
+
+    #[unimock(api = NonSendMock)]
+    trait NonSend {
+        fn ret(&self) -> Ret;
+    }
+
+    let u = Unimock::new(
+        NonSendMock::ret
+            .next_call(matching!())
+            .answers(|_| Ret(Rc::new(42))),
+    );
 }
