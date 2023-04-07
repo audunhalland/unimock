@@ -23,10 +23,10 @@ struct EvalResponder<'u> {
     dyn_responder: &'u DynResponder,
 }
 
-pub(crate) fn eval<'u, 'i, 'm, F: MockFn>(
+pub(crate) fn eval<'u, 'i, F: MockFn>(
     shared_state: &'u SharedState,
     inputs: F::Inputs<'i>,
-    mutation: &mut F::Mutation<'m>,
+    mutation: &mut F::Mutation<'_>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
         mock_fn: DynMockFn::new::<F>(),
