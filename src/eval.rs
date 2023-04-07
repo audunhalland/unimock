@@ -98,9 +98,9 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     .debug_pattern(eval_responder.pat_index),
                 msg: msg.clone(),
             }),
-            DynResponder::Unmock => Ok(Evaluation::Skipped(inputs)),
+            DynResponder::Unmock => Ok(Evaluation::Unmocked(inputs)),
         },
-        EvalResult::Unmock => Ok(Evaluation::Skipped(inputs)),
+        EvalResult::Unmock => Ok(Evaluation::Unmocked(inputs)),
     }
 }
 

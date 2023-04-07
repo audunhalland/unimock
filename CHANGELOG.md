@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve `macro_api` debugging API.
 - `MockFn::debug_inputs` now returns `Vec<Option<String>>`.
 - `macro_api::Evalution` is now `#[non_exhaustive]`.
+- `macro_api::Evalution::Skipped` is not called `Unmocked`.
 
 ## [0.4.12] - 2023-03-29
 ### Fixed

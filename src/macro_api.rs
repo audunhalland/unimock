@@ -14,7 +14,7 @@ pub enum Evaluation<'u, 'i, F: MockFn> {
     /// Function evaluated to its output.
     Evaluated(<F::Output<'u> as Output<'u, F::Response>>::Type),
     /// Function not yet evaluated.
-    Skipped(F::Inputs<'i>),
+    Unmocked(F::Inputs<'i>),
 }
 
 impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
@@ -23,7 +23,7 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
     pub fn unwrap(self, unimock: &Unimock) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
         match self {
             Self::Evaluated(output) => output,
-            Self::Skipped(_) => panic!(
+            Self::Unmocked(_) => panic!(
                 "{}",
                 unimock
                     .shared_state

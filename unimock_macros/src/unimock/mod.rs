@@ -276,7 +276,7 @@ fn def_method_impl(
         quote_spanned! { span=>
             match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()) {
                 #prefix::macro_api::Evaluation::Evaluated(output) => output,
-                #prefix::macro_api::Evaluation::Skipped(#inputs_tupled) => #unmock_expr,
+                #prefix::macro_api::Evaluation::Unmocked(#inputs_tupled) => #unmock_expr,
                 _ => unreachable!()
             }
         }
