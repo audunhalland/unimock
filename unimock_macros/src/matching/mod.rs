@@ -44,7 +44,7 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
     if input.arg_patterns.is_empty() {
         return quote! {
             &|_m| {
-                _m.func(|()| true);
+                _m.func(|_, _| true);
                 _m.pat_debug("()", file!(), line!());
             }
         };
@@ -90,7 +90,7 @@ pub fn generate(input: MatchingInput) -> proc_macro2::TokenStream {
 
     quote! {
         &|_m| {
-            _m.debug_func(
+            _m.func(
                 |#arg_pat, reporter| {
                     #(#local_defs)*
                     match #arg_expr {

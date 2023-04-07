@@ -2,7 +2,7 @@ use crate::call_pattern::InputIndex;
 use crate::debug::{self};
 use crate::mismatch::{Mismatch, MismatchKind};
 use crate::output::Output;
-use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
+use crate::{call_pattern::MatchingFn, *};
 
 /// The evaluation of a [MockFn].
 ///
@@ -36,7 +36,6 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
 pub struct Matching<F: MockFn> {
     pub(crate) mock_fn: std::marker::PhantomData<F>,
     pub(crate) matching_fn: Option<MatchingFn<F>>,
-    pub(crate) matching_fn_debug: Option<MatchingFnDebug<F>>,
     pub(crate) matcher_debug: Option<debug::InputMatcherDebug>,
 }
 
@@ -48,7 +47,6 @@ where
         Self {
             mock_fn: std::marker::PhantomData,
             matching_fn: None,
-            matching_fn_debug: None,
             matcher_debug: None,
         }
     }
@@ -59,20 +57,9 @@ where
     ///
     /// The function also receives a [MismatchReporter]
     #[inline]
-    pub fn debug_func<M>(&mut self, matching_fn: M)
-    where
-        M: (for<'i> Fn(&F::Inputs<'i>, &mut MismatchReporter) -> bool) + Send + Sync + 'static,
-    {
-        self.matching_fn_debug = Some(MatchingFnDebug(Box::new(matching_fn)));
-    }
-
-    /// Set the matching function.
-    ///
-    /// The function should accept a reference to inputs as argument, and return a boolean answer representing match or no match.
-    #[inline]
     pub fn func<M>(&mut self, matching_fn: M)
     where
-        M: (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync + 'static,
+        M: (for<'i> Fn(&F::Inputs<'i>, &mut MismatchReporter) -> bool) + Send + Sync + 'static,
     {
         self.matching_fn = Some(MatchingFn(Box::new(matching_fn)));
     }

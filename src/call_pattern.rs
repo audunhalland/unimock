@@ -46,16 +46,14 @@ impl CallPattern {
         mismatch_reporter: Option<&mut MismatchReporter>,
     ) -> PatternResult<bool> {
         match (&self.input_matcher.dyn_matching_fn, mismatch_reporter) {
-            (DynMatchingFn::MatchingDebug(f), Some(reporter)) => {
-                Ok((downcast_box::<MatchingFnDebug<F>>(f)?.0)(inputs, reporter))
+            (Some(DynMatchingFn(f)), Some(reporter)) => {
+                Ok((downcast_box::<MatchingFn<F>>(f)?.0)(inputs, reporter))
             }
-            (DynMatchingFn::MatchingDebug(f), None) => Ok((downcast_box::<MatchingFnDebug<F>>(f)?
-                .0)(
+            (Some(DynMatchingFn(f)), None) => Ok((downcast_box::<MatchingFn<F>>(f)?.0)(
                 inputs,
                 &mut MismatchReporter::new_disabled(),
             )),
-            (DynMatchingFn::Matching(f), _) => Ok((downcast_box::<MatchingFn<F>>(f)?.0)(inputs)),
-            (DynMatchingFn::None, _) => Err(PatternError::NoMatcherFunction),
+            (None, _) => Err(PatternError::NoMatcherFunction),
         }
     }
 
@@ -73,7 +71,7 @@ impl CallPattern {
 }
 
 pub(crate) struct DynInputMatcher {
-    dyn_matching_fn: DynMatchingFn,
+    dyn_matching_fn: Option<DynMatchingFn>,
     pub(crate) matcher_debug: Option<debug::InputMatcherDebug>,
 }
 
@@ -83,28 +81,15 @@ impl DynInputMatcher {
         matching_fn(&mut builder);
 
         Self {
-            dyn_matching_fn: match (builder.matching_fn, builder.matching_fn_debug) {
-                (_, Some(f)) => DynMatchingFn::MatchingDebug(Box::new(f)),
-                (Some(f), None) => DynMatchingFn::Matching(Box::new(f)),
-                _ => DynMatchingFn::None,
-            },
+            dyn_matching_fn: builder.matching_fn.map(|f| DynMatchingFn(Box::new(f))),
             matcher_debug: builder.matcher_debug,
         }
     }
 }
 
-enum DynMatchingFn {
-    MatchingDebug(AnyBox),
-    Matching(AnyBox),
-    None,
-}
+struct DynMatchingFn(AnyBox);
 
 pub(crate) struct MatchingFn<F: MockFn>(
-    #[allow(clippy::type_complexity)]
-    pub  Box<dyn (for<'i> Fn(&F::Inputs<'i>) -> bool) + Send + Sync>,
-);
-
-pub(crate) struct MatchingFnDebug<F: MockFn>(
     #[allow(clippy::type_complexity)]
     pub  Box<dyn (for<'i> Fn(&F::Inputs<'i>, &mut MismatchReporter) -> bool) + Send + Sync>,
 );
