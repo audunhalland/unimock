@@ -85,3 +85,19 @@ fn test_write_fail() {
     use std::io::Write;
     write!(&mut unimock, "hello {}", "world").unwrap();
 }
+
+#[test]
+fn test_fmt_io_multiplex() {
+    let unimock = Unimock::new((
+        mock::core::fmt::DisplayMock::fmt
+            .next_call(matching!())
+            .mutates(|f, ()| write!(f, "hello {}", "unimock")),
+        mock::std::io::WriteMock::write_all
+            .next_call(matching!(eq!(b"hello ")))
+            .returns(Ok(())),
+        mock::std::io::WriteMock::write_all
+            .next_call(matching!(eq!(b"unimock")))
+            .returns(Ok(())),
+    ));
+    write!(&mut unimock.clone(), "{unimock}").unwrap();
+}
