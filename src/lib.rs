@@ -822,6 +822,14 @@ pub trait MockFn: Sized + 'static {
     /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
     type Inputs<'i>;
 
+    /// A mutable parameter.
+    ///
+    /// Some methods are designed around a `&mut T` parameter, where the trait is supposed to
+    /// perform some mutable operation on this parameter. Unimock currently supports 1 such parameter.
+    ///
+    /// For methods without any mutable parameters, this type should be `()`.
+    type Mutation<'m>: ?Sized;
+
     /// A type that describes how the mocked function responds.
     ///
     /// The Respond trait describes a type used internally to store a response value.

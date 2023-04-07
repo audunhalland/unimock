@@ -118,6 +118,7 @@ pub(crate) enum DynResponder {
     Cell(DynCellResponder),
     Borrow(DynBorrowResponder),
     Function(DynFunctionResponder),
+    MutationFunction(DymMutationFunctionResponder),
     Panic(String),
     Unmock,
 }
@@ -173,6 +174,7 @@ impl DynResponder {
 pub(crate) struct DynCellResponder(AnyBox);
 pub(crate) struct DynBorrowResponder(AnyBox);
 pub(crate) struct DynFunctionResponder(AnyBox);
+pub(crate) struct DymMutationFunctionResponder(AnyBox);
 
 pub trait DowncastResponder<F: MockFn> {
     type Downcasted;
@@ -204,6 +206,14 @@ impl<F: MockFn> DowncastResponder<F> for DynFunctionResponder {
     }
 }
 
+impl<F: MockFn> DowncastResponder<F> for DymMutationFunctionResponder {
+    type Downcasted = MutationFunctionResponder<F>;
+
+    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
+        downcast_box(&self.0)
+    }
+}
+
 pub(crate) struct CellResponder<F: MockFn> {
     pub cell: Box<dyn Cell<<F::Response as Respond>::Type>>,
 }
@@ -215,6 +225,15 @@ pub(crate) struct BorrowResponder<F: MockFn> {
 pub(crate) struct FunctionResponder<F: MockFn> {
     #[allow(clippy::type_complexity)]
     pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Response as Respond>::Type) + Send + Sync>,
+}
+
+pub(crate) struct MutationFunctionResponder<F: MockFn> {
+    #[allow(clippy::type_complexity)]
+    pub func: Box<
+        dyn (for<'m, 'i> Fn(&mut F::Mutation<'m>, F::Inputs<'i>) -> <F::Response as Respond>::Type)
+            + Send
+            + Sync,
+    >,
 }
 
 impl<F: MockFn> CellResponder<F> {
@@ -235,6 +254,12 @@ where
 impl<F: MockFn> FunctionResponder<F> {
     pub fn into_dyn_responder(self) -> DynResponder {
         DynResponder::Function(DynFunctionResponder(Box::new(self)))
+    }
+}
+
+impl<F: MockFn> MutationFunctionResponder<F> {
+    pub fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::MutationFunction(DymMutationFunctionResponder(Box::new(self)))
     }
 }
 

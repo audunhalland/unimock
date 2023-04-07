@@ -23,9 +23,10 @@ struct EvalResponder<'u> {
     dyn_responder: &'u DynResponder,
 }
 
-pub(crate) fn eval<'u, 'i, F: MockFn>(
+pub(crate) fn eval<'u, 'i, 'm, F: MockFn>(
     shared_state: &'u SharedState,
     inputs: F::Inputs<'i>,
+    mutation: &mut F::Mutation<'m>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
         mock_fn: DynMockFn::new::<F>(),
@@ -77,6 +78,15 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
                 let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
                     (fn_responder.func)(inputs),
+                    &shared_state.value_chain,
+                );
+                Ok(Evaluation::Evaluated(output))
+            }
+            DynResponder::MutationFunction(dyn_fn_responder) => {
+                let fn_responder =
+                    dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
+                let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
+                    (fn_responder.func)(mutation, inputs),
                     &shared_state.value_chain,
                 );
                 Ok(Evaluation::Evaluated(output))

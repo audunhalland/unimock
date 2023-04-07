@@ -8,8 +8,6 @@ pub trait Respond {
 }
 
 /// Trait for values that can be converted into responses.
-///
-/// This can be implemented by types that do not implement `Clone`.
 pub trait IntoResponse<R: Respond> {
     // Convert this type into the output type.
     #[doc(hidden)]
@@ -17,15 +15,15 @@ pub trait IntoResponse<R: Respond> {
 }
 
 /// Types that may converted into a responder that responds once.
+///
+/// This can be implemented by types that do not implement `Clone`.
 pub trait IntoOnceResponder<R: Respond>: IntoResponse<R> {
-    // Convert this type directly into a responder that can respond (at least) once.
     #[doc(hidden)]
     fn into_once_responder<F: MockFn<Response = R>>(self) -> Responder;
 }
 
 /// Types that may converted into a responder that responds any number of times.
 pub trait IntoCloneResponder<R: Respond>: IntoOnceResponder<R> {
-    /// Trait for `Clone` values which can be converted into a reusable multi-value responder.
     #[doc(hidden)]
     fn into_clone_responder<F: MockFn<Response = R>>(self) -> Responder;
 }

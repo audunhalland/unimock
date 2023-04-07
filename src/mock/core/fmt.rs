@@ -15,7 +15,8 @@ pub mod DisplayMock {
 
     impl MockFn for fmt {
         type Inputs<'i> = ();
-        type Response = Owned<Result<String, std::fmt::Error>>;
+        type Mutation<'u> = core::fmt::Formatter<'u>;
+        type Response = Owned<std::fmt::Result>;
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Display::fmt";
 
@@ -27,9 +28,7 @@ pub mod DisplayMock {
 
 impl core::fmt::Display for Unimock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let string = crate::macro_api::eval::<DisplayMock::fmt>(self, ()).unwrap(self)?;
-        let _ignored = write!(f, "{}", string);
-        Ok(())
+        crate::macro_api::eval::<DisplayMock::fmt>(self, (), f).unwrap(self)
     }
 }
 
@@ -46,7 +45,8 @@ pub mod DebugMock {
 
     impl MockFn for fmt {
         type Inputs<'i> = ();
-        type Response = Owned<Result<String, std::fmt::Error>>;
+        type Mutation<'u> = core::fmt::Formatter<'u>;
+        type Response = Owned<std::fmt::Result>;
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Debug::fmt";
 
@@ -58,8 +58,6 @@ pub mod DebugMock {
 
 impl core::fmt::Debug for Unimock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let string = crate::macro_api::eval::<DebugMock::fmt>(self, ()).unwrap(self)?;
-        let _ignored = write!(f, "{}", string);
-        Ok(())
+        crate::macro_api::eval::<DebugMock::fmt>(self, (), f).unwrap(self)
     }
 }

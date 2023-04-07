@@ -206,11 +206,15 @@ impl MismatchReporter {
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
 #[track_caller]
-pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation<'u, 'i, F>
+pub fn eval<'u, 'i, 'm, F>(
+    unimock: &'u Unimock,
+    inputs: F::Inputs<'i>,
+    mut_input: &mut F::Mutation<'m>,
+) -> Evaluation<'u, 'i, F>
 where
     F: MockFn + 'static,
 {
-    unimock.handle_error(eval::eval(&unimock.shared_state, inputs))
+    unimock.handle_error(eval::eval(&unimock.shared_state, inputs, mut_input))
 }
 
 /// Trait for computing the proper [std::fmt::Debug] representation of a value.

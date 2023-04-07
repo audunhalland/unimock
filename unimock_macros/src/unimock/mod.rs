@@ -172,6 +172,7 @@ fn def_mock_fn(
         #(#mirrored_attrs)*
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = #input_types_tuple;
+            type Mutation<'m> = ();
             type Response = #response_associated_type;
             type Output<'u> = #output_associated_type;
             const NAME: &'static str = #mock_fn_name;
@@ -273,14 +274,14 @@ fn def_method_impl(
         };
 
         quote_spanned! { span=>
-            match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled) {
+            match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()) {
                 #prefix::macro_api::Evaluation::Evaluated(output) => output,
                 #prefix::macro_api::Evaluation::Skipped(#inputs_tupled) => #unmock_expr
             }
         }
     } else {
         quote_spanned! { span=>
-            #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled).unwrap(#self_ref)
+            #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()).unwrap(#self_ref)
         }
     };
 

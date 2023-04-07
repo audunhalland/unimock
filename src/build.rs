@@ -245,6 +245,26 @@ macro_rules! define_response_common_impl {
                 self.quantify()
             }
 
+            /// Specify the response of the call pattern by invoking the given closure that supports mutating _one_ `&mut` parameter from the mocked signature.
+            pub fn mutates<C, R>(mut self, func: C) -> Quantify<'p, F, O>
+            where
+                C: (for<'m, 'i> Fn(&mut F::Mutation<'m>, F::Inputs<'i>) -> R)
+                    + Send
+                    + Sync
+                    + 'static,
+                R: IntoResponse<F::Response>,
+            {
+                self.builder.push_responder(
+                    MutationFunctionResponder::<F> {
+                        func: Box::new(move |inputs, mut_input| {
+                            func(inputs, mut_input).into_response()
+                        }),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
             /// Specify the response of the call pattern to be a static reference to leaked memory.
             ///
             /// The value may be based on the value of input parameters.

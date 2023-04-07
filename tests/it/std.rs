@@ -1,6 +1,6 @@
 #![cfg(feature = "mock-std")]
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 
 use unimock::*;
 
@@ -11,7 +11,7 @@ fn test_display() {
         Unimock::new(
             mock::core::fmt::DisplayMock::fmt
                 .next_call(matching!())
-                .returns(Ok("u".to_string())),
+                .mutates(|f, ()| write!(f, "u"))
         )
         .to_string()
     );
@@ -33,7 +33,7 @@ fn test_debug() {
     let unimock = Unimock::new(
         mock::core::fmt::DebugMock::fmt
             .next_call(matching!())
-            .returns(Ok("u".to_string())),
+            .mutates(|f, ()| write!(f, "u")),
     );
 
     assert_eq!("u", format!("{unimock:?}"));
@@ -43,11 +43,11 @@ fn test_debug() {
 fn test_read() {
     let mut reader = BufReader::new(Unimock::new((
         mock::std::io::ReadMock::read
-            .next_call(matching!(_))
-            .returns(Ok((2, b"ok".to_vec()))),
+            .next_call(matching!())
+            .mutates(|mut f, ()| f.write(b"ok")),
         mock::std::io::ReadMock::read
-            .next_call(matching!(_))
-            .returns(Ok((1, b"\n".to_vec()))),
+            .next_call(matching!())
+            .mutates(|mut f, ()| f.write(b"\n")),
     )));
 
     let mut line = String::new();
