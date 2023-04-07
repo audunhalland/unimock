@@ -50,7 +50,7 @@ impl FnMocker {
             total_calls += pattern
                 .call_counter
                 .verify(
-                    self.dyn_mock_fn.name,
+                    &self.dyn_mock_fn.info,
                     || self.debug_pattern(PatIndex(pat_index)),
                     errors,
                 )
@@ -59,7 +59,7 @@ impl FnMocker {
 
         if total_calls == 0 {
             errors.push(error::MockError::MockNeverCalled {
-                name: self.dyn_mock_fn.name,
+                info: self.dyn_mock_fn.info.clone(),
             });
         }
     }

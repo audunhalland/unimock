@@ -46,8 +46,8 @@ impl clause::TerminalSink for MockAssembler {
                 if entry.get().pattern_match_mode != pattern_match_mode {
                     return Err(
                         format!(
-                            "A clause for {name} has already been registered as {old_mode:?}, but got re-registered as {new_mode:?}. They cannot be mixed for the same MockFn.",
-                            name = entry.get().dyn_mock_fn.name,
+                            "A clause for {path} has already been registered as {old_mode:?}, but got re-registered as {new_mode:?}. They cannot be mixed for the same MockFn.",
+                            path = &entry.get().dyn_mock_fn.info.path,
                             old_mode = entry.get().pattern_match_mode,
                             new_mode = pattern_match_mode,
                         ),

@@ -16,7 +16,10 @@ pub mod DisplayMock {
         type Mutation<'u> = core::fmt::Formatter<'u>;
         type Response = Owned<std::fmt::Result>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Display::fmt";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new().path("Display", "fmt")
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![None]
@@ -44,7 +47,10 @@ pub mod DebugMock {
         type Mutation<'u> = core::fmt::Formatter<'u>;
         type Response = Owned<std::fmt::Result>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Debug::fmt";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new().path("Debug", "fmt")
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![None]

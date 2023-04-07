@@ -1,4 +1,4 @@
-use crate::{debug, mismatch::Mismatches};
+use crate::{debug, mismatch::Mismatches, MockFnInfo};
 
 pub(crate) type MockResult<T> = Result<T, MockError>;
 
@@ -24,7 +24,7 @@ pub(crate) enum MockError {
         pattern: debug::CallPatternDebug,
     },
     MockNeverCalled {
-        name: &'static str,
+        info: MockFnInfo,
     },
     CallOrderNotMatchedForMockFn {
         fn_call: debug::FnActualCall,
@@ -43,7 +43,7 @@ pub(crate) enum MockError {
     },
     FailedVerification(String),
     CannotUnmock {
-        name: &'static str,
+        info: MockFnInfo,
     },
     ExplicitPanic {
         fn_call: debug::FnActualCall,
@@ -79,10 +79,11 @@ impl std::fmt::Display for MockError {
                     "{fn_call}: No output available for after matching {pattern}."
                 )
             }
-            Self::MockNeverCalled { name } => {
+            Self::MockNeverCalled { info } => {
                 write!(
                     f,
-                    "Mock for {name} was never called. Dead mocks should be removed."
+                    "Mock for {path} was never called. Dead mocks should be removed.",
+                    path = info.path
                 )
             }
             Self::CallOrderNotMatchedForMockFn {
@@ -108,10 +109,11 @@ impl std::fmt::Display for MockError {
                 write!(f, "{fn_call}: Cannot return value more than once from {pattern}, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response.")
             }
             Self::FailedVerification(message) => write!(f, "{message}"),
-            Self::CannotUnmock { name } => {
+            Self::CannotUnmock { info } => {
                 write!(
                     f,
-                    "{name} cannot be unmocked as there is no function available to call."
+                    "{path} cannot be unmocked as there is no function available to call.",
+                    path = info.path
                 )
             }
             Self::ExplicitPanic {

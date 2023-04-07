@@ -133,7 +133,8 @@ fn def_mock_fn(
     let mirrored_attrs = method.mirrored_attrs();
     let mock_fn_ident = &method.mock_fn_ident;
     let mock_fn_path = method.mock_fn_path(attr);
-    let mock_fn_name = &method.mock_fn_name;
+    let trait_ident_lit = &trait_info.ident_lit;
+    let method_ident_lit = &method.ident_lit;
 
     let mock_visibility = match &attr.mock_api {
         MockApi::MockMod(_) => {
@@ -175,7 +176,10 @@ fn def_mock_fn(
             type Mutation<'m> = ();
             type Response = #response_associated_type;
             type Output<'u> = #output_associated_type;
-            const NAME: &'static str = #mock_fn_name;
+
+            fn info() -> #prefix::MockFnInfo {
+                #prefix::MockFnInfo::new().path(#trait_ident_lit, #method_ident_lit)
+            }
 
             #debug_inputs_fn
         }

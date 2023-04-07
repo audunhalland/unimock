@@ -15,7 +15,10 @@ pub mod ReadMock {
         type Mutation<'u> = [u8];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Read::read";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new().path("Read", "read")
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![None]
@@ -31,7 +34,12 @@ pub mod ReadMock {
         type Mutation<'u> = [std::io::IoSliceMut<'u>];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Read::read_vectored";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new()
+                .path("Read", "read_vectored")
+                .default_impl()
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![None]
@@ -47,7 +55,12 @@ pub mod ReadMock {
         type Mutation<'u> = [u8];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Read::read_to_end";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new()
+                .path("Read", "read_to_end")
+                .default_impl()
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![None]
@@ -63,7 +76,12 @@ pub mod ReadMock {
         type Mutation<'u> = String;
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Read::read_to_string";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new()
+                .path("Read", "read_to_string")
+                .default_impl()
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![None]
@@ -79,7 +97,12 @@ pub mod ReadMock {
         type Mutation<'u> = [u8];
         type Response = Owned<std::io::Result<()>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Read::read_exact";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new()
+                .path("Read", "read_exact")
+                .default_impl()
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![None]
@@ -102,7 +125,10 @@ pub mod WriteMock {
         type Mutation<'u> = ();
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Write::write";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new().path("Write", "write")
+        }
 
         fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![Some(format!("{inputs:?}"))]
@@ -120,7 +146,12 @@ pub mod WriteMock {
         type Mutation<'u> = ();
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Write::write";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new()
+                .path("Write", "write_vectored")
+                .default_impl()
+        }
 
         fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![Some(format!("{inputs:?}"))]
@@ -136,7 +167,10 @@ pub mod WriteMock {
         type Mutation<'u> = ();
         type Response = Owned<std::io::Result<()>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Write::flush";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new().path("Write", "flush")
+        }
 
         fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![]
@@ -152,7 +186,12 @@ pub mod WriteMock {
         type Mutation<'u> = ();
         type Response = Owned<std::io::Result<()>>;
         type Output<'u> = Self::Response;
-        const NAME: &'static str = "Write::write_all";
+
+        fn info() -> crate::MockFnInfo {
+            crate::MockFnInfo::new()
+                .path("Write", "write_all")
+                .default_impl()
+        }
 
         fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
             vec![Some(format!("{inputs:?}"))]

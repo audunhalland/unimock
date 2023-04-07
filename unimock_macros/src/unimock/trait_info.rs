@@ -7,6 +7,7 @@ pub struct TraitInfo<'t> {
     pub input_trait: &'t syn::ItemTrait,
     pub output_trait: Option<&'t syn::ItemTrait>,
     pub trait_path: syn::Path,
+    pub ident_lit: syn::LitStr,
     pub generic_params_with_bounds: GenericParamsWithBounds,
     pub methods: Vec<Option<method::MockMethod<'t>>>,
     pub is_type_generic: IsTypeGeneric,
@@ -39,11 +40,15 @@ impl<'t> TraitInfo<'t> {
             )
         });
 
+        let ident_lit =
+            syn::LitStr::new(&format!("{}", &input_trait.ident), input_trait.ident.span());
+
         if let Some(emulate) = &attr.emulate {
             Ok(Self {
                 input_trait,
                 output_trait: None,
                 trait_path: emulate.clone(),
+                ident_lit,
                 generic_params_with_bounds: GenericParamsWithBounds::new(generics, contains_async),
                 methods,
                 is_type_generic,
@@ -58,6 +63,7 @@ impl<'t> TraitInfo<'t> {
                 input_trait,
                 output_trait: Some(input_trait),
                 trait_path,
+                ident_lit,
                 generic_params_with_bounds: GenericParamsWithBounds::new(generics, contains_async),
                 methods,
                 is_type_generic,

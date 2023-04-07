@@ -21,7 +21,7 @@ pub struct MockMethod<'t> {
     pub impl_trait_idents: HashSet<String>,
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
-    pub mock_fn_name: syn::LitStr,
+    pub ident_lit: syn::LitStr,
     pub output_structure: output::OutputStructure,
     mirrored_attr_indexes: Vec<usize>,
 }
@@ -160,11 +160,6 @@ pub fn extract_methods<'s>(
                 Mockable::Err(err) => return Err(err),
             };
 
-            let mock_fn_name = syn::LitStr::new(
-                &format!("{}::{}", &item_trait.ident, method.sig.ident),
-                item_trait.ident.span(),
-            );
-
             let mut adapted_sig = method.sig.clone();
             let adapt_sig_result = adapt_sig(&mut adapted_sig);
             let is_type_generic =
@@ -220,7 +215,10 @@ pub fn extract_methods<'s>(
                     None
                 },
                 mock_fn_ident: generate_mock_fn_ident(method, index, is_type_generic, attr)?,
-                mock_fn_name,
+                ident_lit: syn::LitStr::new(
+                    &format!("{}", &method.sig.ident),
+                    method.sig.ident.span(),
+                ),
                 output_structure,
                 mirrored_attr_indexes,
             }))

@@ -391,6 +391,7 @@ use std::sync::Arc;
 
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
+use debug::TraitMethodPath;
 use macro_api::Matching;
 
 ///
@@ -842,8 +843,8 @@ pub trait MockFn: Sized + 'static {
     /// A type that describes the mocked function's actual output type.
     type Output<'u>: output::Output<'u, Self::Response>;
 
-    /// The name to use for runtime errors.
-    const NAME: &'static str;
+    /// Static information about the mocked method
+    fn info() -> MockFnInfo;
 
     /// Compute some debug representation of the inputs.
     fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>>;
@@ -917,6 +918,45 @@ pub trait MockFn: Sized + 'static {
     }
 }
 
+/// Static information about a method
+#[derive(Clone)]
+pub struct MockFnInfo {
+    path: TraitMethodPath,
+    default_impl: bool,
+}
+
+impl MockFnInfo {
+    /// Construct a new MethodInfo.
+    pub const fn new() -> Self {
+        Self {
+            path: TraitMethodPath {
+                trait_ident: "",
+                method_ident: "",
+            },
+            default_impl: false,
+        }
+    }
+
+    /// Set the path of the method
+    pub const fn path(self, trait_ident: &'static str, method_ident: &'static str) -> Self {
+        Self {
+            path: TraitMethodPath {
+                trait_ident,
+                method_ident,
+            },
+            ..self
+        }
+    }
+
+    /// Mark the method as being a default implementation
+    pub const fn default_impl(self) -> Self {
+        Self {
+            default_impl: true,
+            ..self
+        }
+    }
+}
+
 /// A clause represents a recipe for creating a unimock instance.
 ///
 /// Clauses may be _terminal_ (basic) and _non-terminal_ (composite).
@@ -962,14 +1002,14 @@ impl<T: clause::ClauseSealed> Clause for T {}
 #[derive(Clone)]
 pub(crate) struct DynMockFn {
     type_id: TypeId,
-    name: &'static str,
+    info: MockFnInfo,
 }
 
 impl DynMockFn {
     pub fn new<F: crate::MockFn>() -> Self {
         Self {
             type_id: TypeId::of::<F>(),
-            name: F::NAME,
+            info: F::info(),
         }
     }
 }

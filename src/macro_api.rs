@@ -27,7 +27,7 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
                 "{}",
                 unimock
                     .shared_state
-                    .prepare_panic(error::MockError::CannotUnmock { name: F::NAME })
+                    .prepare_panic(error::MockError::CannotUnmock { info: F::info() })
             ),
         }
     }

@@ -1,5 +1,5 @@
-use crate::debug;
 use crate::error::MockError;
+use crate::{debug, MockFnInfo};
 
 use std::{fmt::Display, sync::atomic::AtomicUsize};
 
@@ -16,10 +16,11 @@ impl CallCounter {
 
     pub fn verify(
         &self,
-        name: &'static str,
+        info: &MockFnInfo,
         debug_fn: impl Fn() -> debug::CallPatternDebug,
         errors: &mut Vec<MockError>,
     ) -> NCalls {
+        let path = &info.path;
         let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::SeqCst));
         let lower_bound = self.expectation.lower_bound();
 
@@ -27,13 +28,13 @@ impl CallCounter {
             Exactness::Exact => {
                 if actual_calls.0 != lower_bound.0 {
                     let pattern = debug_fn();
-                    errors.push(MockError::FailedVerification(format!("{name}: Expected {pattern} to match exactly {lower_bound}, but it actually matched {actual_calls}.")));
+                    errors.push(MockError::FailedVerification(format!("{path}: Expected {pattern} to match exactly {lower_bound}, but it actually matched {actual_calls}.")));
                 }
             }
             Exactness::AtLeast | Exactness::AtLeastPlusOne => {
                 if actual_calls.0 < lower_bound.0 {
                     let pattern = debug_fn();
-                    errors.push(MockError::FailedVerification(format!("{name}: Expected {pattern} to match at least {lower_bound}, but it actually matched {actual_calls}.")));
+                    errors.push(MockError::FailedVerification(format!("{path}: Expected {pattern} to match at least {lower_bound}, but it actually matched {actual_calls}.")));
                 }
             }
         };
