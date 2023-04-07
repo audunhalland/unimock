@@ -87,17 +87,21 @@ fn test_write_fail() {
 }
 
 #[test]
-fn test_fmt_io_multiplex() {
+fn test_fmt_io_multiplex_default_impl() {
     let unimock = Unimock::new((
         mock::core::fmt::DisplayMock::fmt
             .next_call(matching!())
             .mutates(|f, ()| write!(f, "hello {}", "unimock")),
-        mock::std::io::WriteMock::write_all
+        // NOTE: write! calls `write_all` which should get re-routed to `write`:
+        mock::std::io::WriteMock::write
             .next_call(matching!(eq!(b"hello ")))
-            .returns(Ok(())),
-        mock::std::io::WriteMock::write_all
+            .returns(Ok(6)),
+        mock::std::io::WriteMock::write
             .next_call(matching!(eq!(b"unimock")))
-            .returns(Ok(())),
+            .returns(Ok("uni".len())),
+        mock::std::io::WriteMock::write
+            .next_call(matching!(eq!(b"mock")))
+            .returns(Ok("mock".len())),
     ));
     write!(&mut unimock.clone(), "{unimock}").unwrap();
 }

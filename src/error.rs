@@ -45,6 +45,9 @@ pub(crate) enum MockError {
     CannotUnmock {
         info: MockFnInfo,
     },
+    NoDefaultImpl {
+        info: MockFnInfo,
+    },
     ExplicitPanic {
         fn_call: debug::FnActualCall,
         pattern: debug::CallPatternDebug,
@@ -113,6 +116,13 @@ impl std::fmt::Display for MockError {
                 write!(
                     f,
                     "{path} cannot be unmocked as there is no function available to call.",
+                    path = info.path
+                )
+            }
+            Self::NoDefaultImpl { info } => {
+                write!(
+                    f,
+                    "{path} has not been set up with a default implementation fallback.",
                     path = info.path
                 )
             }

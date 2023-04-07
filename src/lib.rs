@@ -922,7 +922,7 @@ pub trait MockFn: Sized + 'static {
 #[derive(Clone)]
 pub struct MockFnInfo {
     path: TraitMethodPath,
-    default_impl: bool,
+    has_default_impl: bool,
 }
 
 impl MockFnInfo {
@@ -933,7 +933,7 @@ impl MockFnInfo {
                 trait_ident: "",
                 method_ident: "",
             },
-            default_impl: false,
+            has_default_impl: false,
         }
     }
 
@@ -951,7 +951,7 @@ impl MockFnInfo {
     /// Mark the method as being a default implementation
     pub const fn default_impl(self) -> Self {
         Self {
-            default_impl: true,
+            has_default_impl: true,
             ..self
         }
     }

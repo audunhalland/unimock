@@ -240,7 +240,8 @@ mod mock_io {
         fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
             match crate::macro_api::eval::<WriteMock::write_vectored>(self, bufs, &mut ()) {
                 Evaluation::Evaluated(result) => result,
-                Evaluation::Unmocked(_) => IoFallback(self).write_vectored(bufs),
+                Evaluation::CallDefaultImpl(_) => IoFallback(self).write_vectored(bufs),
+                e => e.unwrap(self),
             }
         }
 
@@ -251,7 +252,8 @@ mod mock_io {
         fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
             match crate::macro_api::eval::<WriteMock::write_all>(self, buf, &mut ()) {
                 Evaluation::Evaluated(result) => result,
-                Evaluation::Unmocked(_) => IoFallback(self).write_all(buf),
+                Evaluation::CallDefaultImpl(_) => IoFallback(self).write_all(buf),
+                e => e.unwrap(self),
             }
         }
 

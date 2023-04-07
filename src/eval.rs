@@ -15,6 +15,7 @@ use crate::{FallbackMode, MockFn};
 enum EvalResult<'u> {
     Responder(EvalResponder<'u>),
     Unmock,
+    CallDefaultImpl,
 }
 
 struct EvalResponder<'u> {
@@ -101,6 +102,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
             DynResponder::Unmock => Ok(Evaluation::Unmocked(inputs)),
         },
         EvalResult::Unmock => Ok(Evaluation::Unmocked(inputs)),
+        EvalResult::CallDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),
     }
 }
 
@@ -118,14 +120,20 @@ impl<'u, 's> DynCtx<'u, 's> {
         match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> PatternResult<bool>,
     ) -> MockResult<EvalResult<'u>> {
         let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
-            None => match self.shared_state.fallback_mode {
-                FallbackMode::Error => {
-                    return Err(MockError::NoMockImplementation {
-                        fn_call: self.fn_call(),
-                    })
+            None => {
+                if self.mock_fn.info.has_default_impl {
+                    return Ok(EvalResult::CallDefaultImpl);
+                } else {
+                    match self.shared_state.fallback_mode {
+                        FallbackMode::Error => {
+                            return Err(MockError::NoMockImplementation {
+                                fn_call: self.fn_call(),
+                            })
+                        }
+                        FallbackMode::Unmock => return Ok(EvalResult::Unmock),
+                    }
                 }
-                FallbackMode::Unmock => return Ok(EvalResult::Unmock),
-            },
+            }
             Some(fn_mocker) => fn_mocker,
         };
 
