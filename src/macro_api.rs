@@ -9,6 +9,7 @@ use crate::{call_pattern::MatchingFn, *};
 /// Used to tell trait implementations whether to do perform their own evaluation of a call.
 ///
 /// The output is generic, because both owned and referenced output are supported.
+#[non_exhaustive]
 pub enum Evaluation<'u, 'i, F: MockFn> {
     /// Function evaluated to its output.
     Evaluated(<F::Output<'u> as Output<'u, F::Response>>::Type),
