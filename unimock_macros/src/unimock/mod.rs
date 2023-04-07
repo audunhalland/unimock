@@ -169,7 +169,13 @@ fn def_mock_fn(
         }
     };
 
-    let impl_blocks = quote_spanned! { span=>
+    let info_set_default_impl = if method.has_default_impl {
+        Some(quote! { .default_impl() })
+    } else {
+        None
+    };
+
+    let impl_block = quote_spanned! { span=>
         #(#mirrored_attrs)*
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = #input_types_tuple;
@@ -178,7 +184,9 @@ fn def_mock_fn(
             type Output<'u> = #output_associated_type;
 
             fn info() -> #prefix::MockFnInfo {
-                #prefix::MockFnInfo::new().path(#trait_ident_lit, #method_ident_lit)
+                #prefix::MockFnInfo::new()
+                    .path(#trait_ident_lit, #method_ident_lit)
+                    #info_set_default_impl
             }
 
             #debug_inputs_fn
@@ -214,13 +222,13 @@ fn def_mock_fn(
                 #[allow(non_camel_case_types)]
                 struct #mock_fn_ident #generic_args #phantoms_tuple;
 
-                #impl_blocks
+                #impl_block
             },
         }
     } else {
         MockFnDef {
             mock_fn_struct_item: gen_mock_fn_struct_item(mock_fn_ident),
-            impl_details: impl_blocks,
+            impl_details: impl_block,
         }
     };
 
@@ -256,37 +264,37 @@ fn def_method_impl(
         output::OutputWrapping::ImplTraitFuture(_)
     );
 
-    let body = if let Some(UnmockFn {
-        path: unmock_path,
-        params: unmock_params,
-    }) = attr.get_unmock_fn(index)
-    {
-        let inputs_destructuring = method.inputs_destructuring(Tupled(false));
-        let opt_dot_await = if method_sig.asyncness.is_some() || has_impl_trait_future {
-            Some(util::DotAwait)
-        } else {
-            None
-        };
+    let unmock_arm = attr.get_unmock_fn(index).map(
+        |UnmockFn {
+             path: unmock_path,
+             params: unmock_params,
+         }| {
+            let inputs_destructuring = method.inputs_destructuring(Tupled(false));
+            let opt_dot_await = if method_sig.asyncness.is_some() || has_impl_trait_future {
+                Some(util::DotAwait)
+            } else {
+                None
+            };
 
-        let unmock_expr = match unmock_params {
-            None => quote! {
-                #unmock_path(self, #inputs_destructuring) #opt_dot_await
-            },
-            Some(UnmockFnParams { params }) => quote! {
-                #unmock_path(#params) #opt_dot_await
-            },
-        };
+            let unmock_expr = match unmock_params {
+                None => quote! {
+                    #unmock_path(self, #inputs_destructuring) #opt_dot_await
+                },
+                Some(UnmockFnParams { params }) => quote! {
+                    #unmock_path(#params) #opt_dot_await
+                },
+            };
 
-        quote_spanned! { span=>
-            match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()) {
-                #prefix::macro_api::Evaluation::Evaluated(output) => output,
+            quote! {
                 #prefix::macro_api::Evaluation::Unmocked(#inputs_tupled) => #unmock_expr,
-                _ => unreachable!()
             }
-        }
-    } else {
-        quote_spanned! { span=>
-            #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()).unwrap(#self_ref)
+        },
+    );
+
+    let body = quote_spanned! { span=>
+        match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()) {
+            #unmock_arm
+            e => e.unwrap(#self_ref)
         }
     };
 

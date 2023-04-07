@@ -22,6 +22,7 @@ pub struct MockMethod<'t> {
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
     pub ident_lit: syn::LitStr,
+    pub has_default_impl: bool,
     pub output_structure: output::OutputStructure,
     mirrored_attr_indexes: Vec<usize>,
 }
@@ -219,6 +220,7 @@ pub fn extract_methods<'s>(
                     &format!("{}", &method.sig.ident),
                     method.sig.ident.span(),
                 ),
+                has_default_impl: method.default.is_some(),
                 output_structure,
                 mirrored_attr_indexes,
             }))
