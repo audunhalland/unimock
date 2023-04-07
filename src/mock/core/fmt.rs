@@ -8,8 +8,6 @@ pub mod DisplayMock {
     use crate::{output::Owned, MockFn};
 
     /// MockFn for [core::fmt::Display::fmt]
-    ///
-    /// Note: The mock signature is pure and returns `Result<String, std::fmt::Result>`.
     #[allow(non_camel_case_types)]
     pub struct fmt;
 
@@ -38,8 +36,6 @@ pub mod DebugMock {
     use crate::{output::Owned, MockFn};
 
     /// MockFn for [core::fmt::Debug::fmt]
-    ///
-    /// Note: The mock signature is pure and returns `Result<String, std::fmt::Result>`.
     #[allow(non_camel_case_types)]
     pub struct fmt;
 

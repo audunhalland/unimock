@@ -7,8 +7,6 @@ pub mod ReadMock {
     use crate::{output::Owned, MockFn};
 
     /// MockFn for [std::io::Read::read]
-    ///
-    /// Note: The mock signature is pure and returns `std::io::Result<(usize, Vec<u8>)>`.
     #[allow(non_camel_case_types)]
     pub struct read;
 
@@ -25,8 +23,6 @@ pub mod ReadMock {
     }
 
     /// MockFn for [std::io::Read::read_vectored]
-    ///
-    /// Note: The mock signature is pure and returns `std::io::Result<(usize, Vec<Vec<u8>>)>`.
     #[allow(non_camel_case_types)]
     pub struct read_vectored;
 
@@ -43,8 +39,6 @@ pub mod ReadMock {
     }
 
     /// MockFn for [std::io::Read::read_to_end]
-    ///
-    /// Note: The mock signature is pure returns `std::io::Result<(usize, Vec<u8>)>`.
     #[allow(non_camel_case_types)]
     pub struct read_to_end;
 
@@ -61,8 +55,6 @@ pub mod ReadMock {
     }
 
     /// MockFn for [std::io::Read::read_to_string]
-    ///
-    /// Note: The mock signature is pure and returns `std::io::Result<(usize, String)>`.
     #[allow(non_camel_case_types)]
     pub struct read_to_string;
 
@@ -79,8 +71,6 @@ pub mod ReadMock {
     }
 
     /// MockFn for [std::io::Read::read_exact]
-    ///
-    /// Note: The mock signature is pure and returns `std::io::Result<Vec<u8>>`.
     #[allow(non_camel_case_types)]
     pub struct read_exact;
 
