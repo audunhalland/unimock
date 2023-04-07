@@ -846,7 +846,7 @@ pub trait MockFn: Sized + 'static {
     const NAME: &'static str;
 
     /// Compute some debug representation of the inputs.
-    fn debug_inputs(inputs: &Self::Inputs<'_>) -> String;
+    fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>>;
 
     /// Create a stubbing clause by grouping calls.
     ///

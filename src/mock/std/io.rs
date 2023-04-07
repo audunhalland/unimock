@@ -19,9 +19,8 @@ pub mod ReadMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Read::read";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![None]
         }
     }
 
@@ -38,9 +37,8 @@ pub mod ReadMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Read::read_vectored";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![None]
         }
     }
 
@@ -57,9 +55,8 @@ pub mod ReadMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Read::read_to_end";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![None]
         }
     }
 
@@ -76,9 +73,8 @@ pub mod ReadMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Read::read_to_string";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![None]
         }
     }
 
@@ -95,9 +91,8 @@ pub mod ReadMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Read::read_exact";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![None]
         }
     }
 }
@@ -119,9 +114,8 @@ pub mod WriteMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Write::write";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![Some(format!("{inputs:?}"))]
         }
     }
 
@@ -138,9 +132,8 @@ pub mod WriteMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Write::write";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![Some(format!("{inputs:?}"))]
         }
     }
 
@@ -155,8 +148,8 @@ pub mod WriteMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Write::flush";
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> String {
-            crate::macro_api::format_inputs(&[])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![]
         }
     }
 
@@ -171,9 +164,8 @@ pub mod WriteMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Write::write_all";
 
-        fn debug_inputs(inputs: &Self::Inputs<'_>) -> String {
-            use crate::macro_api::ProperDebug;
-            crate::macro_api::format_inputs(&[(*inputs).unimock_try_debug()])
+        fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![Some(format!("{inputs:?}"))]
         }
     }
 }

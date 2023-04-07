@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Added
 - Support for mutating one `&mut` parameter with `.mutates`.
+### Changed
+- Improve `macro_api` debugging API.
+- `MockFn::debug_inputs` now returns `Vec<Option<String>>`.
 
 ## [0.4.12] - 2023-03-29
 ### Fixed

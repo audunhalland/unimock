@@ -108,7 +108,7 @@ pub(crate) fn eval<'u, 'i, 'm, F: MockFn>(
 struct DynCtx<'u, 's> {
     mock_fn: DynMockFn,
     shared_state: &'u SharedState,
-    input_debugger: &'s dyn Fn() -> String,
+    input_debugger: &'s dyn Fn() -> Vec<Option<String>>,
 }
 
 impl<'u, 's> DynCtx<'u, 's> {
@@ -254,7 +254,7 @@ impl<'u, 's> DynCtx<'u, 's> {
         }
     }
 
-    fn debug_inputs(&self) -> String {
+    fn debug_inputs(&self) -> Vec<Option<String>> {
         (self.input_debugger)()
     }
 }

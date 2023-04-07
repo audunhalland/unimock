@@ -3,12 +3,24 @@ use crate::{call_pattern::PatIndex, DynMockFn};
 #[derive(Clone)]
 pub(crate) struct FnActualCall {
     pub mock_fn: crate::DynMockFn,
-    pub inputs_debug: String,
+    pub inputs_debug: Vec<Option<String>>,
 }
 
 impl std::fmt::Display for FnActualCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.mock_fn.name, self.inputs_debug)
+        write!(f, "{}(", self.mock_fn.name)?;
+
+        let mut iter = self.inputs_debug.iter().peekable();
+        while let Some(next) = iter.next() {
+            match next {
+                Some(debug) => write!(f, "{debug}")?,
+                None => write!(f, "?")?,
+            }
+            if iter.peek().is_some() {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, ")")
     }
 }
 
@@ -63,12 +75,4 @@ pub(crate) struct InputMatcherDebug {
     pub pat_debug: &'static str,
     pub file: &'static str,
     pub line: u32,
-}
-
-pub(crate) fn filter_questionmark(string: String) -> Option<String> {
-    if string == "?" {
-        None
-    } else {
-        Some(string)
-    }
 }

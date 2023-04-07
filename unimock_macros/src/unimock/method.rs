@@ -83,18 +83,18 @@ impl<'t> MockMethod<'t> {
             let inputs_try_debug_exprs = self.inputs_try_debug_exprs();
             quote! {
                 use #prefix::macro_api::{ProperDebug, NoDebug};
-                #prefix::macro_api::format_inputs(&[#(#inputs_try_debug_exprs),*])
+                vec![#(#inputs_try_debug_exprs),*]
             }
         } else {
             quote! {
-                #prefix::macro_api::format_inputs(&[])
+                vec![]
             }
         };
 
         let inputs = self.inputs_destructuring(Tupled(true));
 
         quote! {
-            fn debug_inputs(#inputs: &Self::Inputs<'_>) -> String {
+            fn debug_inputs(#inputs: &Self::Inputs<'_>) -> std::vec::Vec<core::option::Option<String>> {
                 #body
             }
         }

@@ -47,13 +47,13 @@ impl Display for Mismatches {
             } = mismatch;
             let mut header_msg = MismatchMsg::new(*pat_index, *input_index, is_unique_pat, *kind);
 
-            match (kind, actual) {
-                (MismatchKind::Pattern, Some(actual)) => {
+            match (kind, actual, expected) {
+                (MismatchKind::Pattern, Some(actual), Some(expected)) => {
                     header_msg.has_comparison = true;
                     header_msg.fmt(f)?;
                     Diff::new(actual, expected).fmt(f)?;
                 }
-                (MismatchKind::Eq, Some(actual)) => {
+                (MismatchKind::Eq, Some(actual), Some(expected)) => {
                     if actual == expected {
                         header_msg.fmt(f)?;
 
@@ -66,7 +66,7 @@ impl Display for Mismatches {
                         Diff::new(actual, expected).fmt(f)?;
                     }
                 }
-                (MismatchKind::Ne, Some(actual)) => {
+                (MismatchKind::Ne, Some(actual), Some(expected)) => {
                     if actual == expected {
                         header_msg.fmt(f)?;
                         write!(f, "{actual}")?;
@@ -78,15 +78,15 @@ impl Display for Mismatches {
                         Diff::new(actual, expected).fmt(f)?;
                     }
                 }
-                (MismatchKind::Pattern, None) => {
+                (MismatchKind::Pattern, _, _) => {
                     header_msg.fmt(f)?;
                     writeln!(f, "Actual value did not match expected pattern, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
                 }
-                (MismatchKind::Eq, None) => {
+                (MismatchKind::Eq, _, _) => {
                     header_msg.fmt(f)?;
                     writeln!(f, "Actual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
                 }
-                (MismatchKind::Ne, None) => {
+                (MismatchKind::Ne, _, _) => {
                     header_msg.fmt(f)?;
                     writeln!(f, "Actual value unexpectedly equalled expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)].")?;
                 }
@@ -101,7 +101,7 @@ impl Display for Mismatches {
 pub(crate) struct Mismatch {
     pub kind: MismatchKind,
     pub actual: Option<String>,
-    pub expected: String,
+    pub expected: Option<String>,
 }
 
 #[derive(Clone, Copy)]

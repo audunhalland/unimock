@@ -1,5 +1,5 @@
 use crate::call_pattern::InputIndex;
-use crate::debug::{self, filter_questionmark};
+use crate::debug::{self};
 use crate::mismatch::{Mismatch, MismatchKind};
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, call_pattern::MatchingFnDebug, *};
@@ -120,85 +120,52 @@ impl MismatchReporter {
     }
 
     /// Register failure to match a pattern
-    #[deprecated]
     pub fn pat_fail(
         &mut self,
         input_index: usize,
-        actual: impl Into<String>,
-        expected: impl Into<String>,
-    ) {
-        self.pat_fail_opt_debug(input_index, filter_questionmark(actual.into()), expected);
-    }
-
-    /// Register failure to match a pattern
-    pub fn pat_fail_opt_debug(
-        &mut self,
-        input_index: usize,
         actual: Option<impl Into<String>>,
-        expected: impl Into<String>,
+        expected: Option<impl Into<String>>,
     ) {
         self.mismatches.push((
             InputIndex(input_index),
             Mismatch {
                 kind: MismatchKind::Pattern,
                 actual: actual.map(|dbg| dbg.into()),
-                expected: expected.into(),
+                expected: expected.map(|dbg| dbg.into()),
             },
         ));
     }
 
-    /// Register failure for an eq check
-    #[deprecated]
+    /// Register failure to match a pattern
     pub fn eq_fail(
         &mut self,
         input_index: usize,
-        actual: impl Into<String>,
-        expected: impl Into<String>,
-    ) {
-        self.eq_fail_opt_debug(input_index, filter_questionmark(actual.into()), expected);
-    }
-
-    /// Register failure to match a pattern
-    pub fn eq_fail_opt_debug(
-        &mut self,
-        input_index: usize,
         actual: Option<impl Into<String>>,
-        expected: impl Into<String>,
+        expected: Option<impl Into<String>>,
     ) {
         self.mismatches.push((
             InputIndex(input_index),
             Mismatch {
                 kind: MismatchKind::Eq,
                 actual: actual.map(|dbg| dbg.into()),
-                expected: expected.into(),
+                expected: expected.map(|dbg| dbg.into()),
             },
         ));
     }
 
     /// Register failure for an ne check
-    #[deprecated]
     pub fn ne_fail(
         &mut self,
         input_index: usize,
-        actual: impl Into<String>,
-        expected: impl Into<String>,
-    ) {
-        self.ne_fail_opt_debug(input_index, filter_questionmark(actual.into()), expected);
-    }
-
-    /// Register failure for an ne check
-    pub fn ne_fail_opt_debug(
-        &mut self,
-        input_index: usize,
         actual: Option<impl Into<String>>,
-        expected: impl Into<String>,
+        expected: Option<impl Into<String>>,
     ) {
         self.mismatches.push((
             InputIndex(input_index),
             Mismatch {
                 kind: MismatchKind::Ne,
                 actual: actual.map(|dbg| dbg.into()),
-                expected: expected.into(),
+                expected: expected.map(|dbg| dbg.into()),
             },
         ));
     }
@@ -219,49 +186,29 @@ where
 
 /// Trait for computing the proper [std::fmt::Debug] representation of a value.
 pub trait ProperDebug {
-    /// Format a debug representation.
-    fn unimock_try_debug(&self) -> String;
-
     /// Optionally format a debug representation.
-    fn unimock_try_debug_opt(&self) -> Option<String>;
+    fn unimock_try_debug(&self) -> Option<String>;
 }
 
 /// Fallback trait (using autoref specialization) for returning `"?"` when the implementing value does not implement [std::fmt::Debug].
 pub trait NoDebug {
-    /// Format a debug representation.
-    fn unimock_try_debug(&self) -> String;
-
     /// Optionally format a debug representation.
-    fn unimock_try_debug_opt(&self) -> Option<String>;
+    fn unimock_try_debug(&self) -> Option<String>;
 }
 
 // Autoref specialization:
 // https://github.com/dtolnay/case-studies/blob/master/autoref-specialization/README.md
 
 impl<T: std::fmt::Debug> ProperDebug for T {
-    fn unimock_try_debug(&self) -> String {
-        format!("{self:?}")
-    }
-
-    fn unimock_try_debug_opt(&self) -> Option<String> {
+    fn unimock_try_debug(&self) -> Option<String> {
         Some(format!("{self:?}"))
     }
 }
 
 impl<T> NoDebug for &T {
-    fn unimock_try_debug(&self) -> String {
-        "?".to_string()
-    }
-
-    fn unimock_try_debug_opt(&self) -> Option<String> {
+    fn unimock_try_debug(&self) -> Option<String> {
         None
     }
-}
-
-/// Take a vector of strings, comma separate and put within parentheses.
-pub fn format_inputs(inputs: &[String]) -> String {
-    let joined = inputs.join(", ");
-    format!("({joined})")
 }
 
 /// Convert any type implementing `AsRef<str>` to a `&str`.

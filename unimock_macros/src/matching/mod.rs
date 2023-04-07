@@ -253,7 +253,7 @@ impl ArgMatcher {
                             #pat => {}
                             mismatch => {
                                 use ::unimock::macro_api::{ProperDebug, NoDebug};
-                                reporter.pat_fail_opt_debug(#index, mismatch.unimock_try_debug_opt(), #doc_lit);
+                                reporter.pat_fail(#index, mismatch.unimock_try_debug(), Some(#doc_lit));
                             }
                         }
                     })
@@ -266,8 +266,8 @@ impl ArgMatcher {
 
                 let reporter_method = syn::Ident::new(
                     match &compare_matcher.compare_macro {
-                        CompareMacro::Eq => "eq_fail_opt_debug",
-                        CompareMacro::Ne => "ne_fail_opt_debug",
+                        CompareMacro::Eq => "eq_fail",
+                        CompareMacro::Ne => "ne_fail",
                     },
                     span,
                 );
@@ -275,7 +275,7 @@ impl ArgMatcher {
                 Some(quote! {
                     if !(#arg_expr #operator #local_ident) {
                         use ::unimock::macro_api::{ProperDebug, NoDebug};
-                        reporter.#reporter_method(#index, #arg_expr.unimock_try_debug_opt(), #local_ident.unimock_try_debug());
+                        reporter.#reporter_method(#index, #arg_expr.unimock_try_debug(), #local_ident.unimock_try_debug());
                     }
                 })
             }

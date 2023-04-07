@@ -20,8 +20,8 @@ pub mod DisplayMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Display::fmt";
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> String {
-            crate::macro_api::format_inputs(&[])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![None]
         }
     }
 }
@@ -50,8 +50,8 @@ pub mod DebugMock {
         type Output<'u> = Self::Response;
         const NAME: &'static str = "Debug::fmt";
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> String {
-            crate::macro_api::format_inputs(&[])
+        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![None]
         }
     }
 }
