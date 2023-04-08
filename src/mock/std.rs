@@ -1,6 +1,7 @@
 //! Mock APIs for `std` traits
 
 /// Mock APIs for `std::io` traits
+#[doc_cfg::doc_cfg(feature = "mock-std")]
 pub mod io {
     use std::io::{IoSlice, IoSliceMut, Result};
 
