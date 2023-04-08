@@ -50,10 +50,10 @@ fn test_debug() {
 fn test_read() {
     let mut reader = BufReader::new(Unimock::new((
         ReadMock::read
-            .next_call(matching!())
+            .next_call(matching!(_))
             .mutates(|mut f, _| f.write(b"ok")),
         ReadMock::read
-            .next_call(matching!())
+            .next_call(matching!(_))
             .mutates(|mut f, _| f.write(b"\n")),
     )));
 

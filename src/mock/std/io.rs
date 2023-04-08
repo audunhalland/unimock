@@ -214,23 +214,39 @@ mod mock_io {
             &mut self,
             bufs: &mut [std::io::IoSliceMut<'_>],
         ) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read_vectored>(self, PhantomMut::new(), bufs)
-                .unwrap(self)
+            match crate::macro_api::eval::<ReadMock::read_vectored>(self, PhantomMut::new(), bufs) {
+                Evaluation::CallDefaultImpl(_) => {
+                    IoDefaultImplDelegator(self.clone()).read_vectored(bufs)
+                }
+                e => e.unwrap(self),
+            }
         }
 
         fn read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read_to_end>(self, PhantomMut::new(), buf)
-                .unwrap(self)
+            match crate::macro_api::eval::<ReadMock::read_to_end>(self, PhantomMut::new(), buf) {
+                Evaluation::CallDefaultImpl(_) => {
+                    IoDefaultImplDelegator(self.clone()).read_to_end(buf)
+                }
+                e => e.unwrap(self),
+            }
         }
 
         fn read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read_to_string>(self, PhantomMut::new(), buf)
-                .unwrap(self)
+            match crate::macro_api::eval::<ReadMock::read_to_string>(self, PhantomMut::new(), buf) {
+                Evaluation::CallDefaultImpl(_) => {
+                    IoDefaultImplDelegator(self.clone()).read_to_string(buf)
+                }
+                e => e.unwrap(self),
+            }
         }
 
         fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
-            crate::macro_api::eval::<ReadMock::read_exact>(self, PhantomMut::new(), buf)
-                .unwrap(self)
+            match crate::macro_api::eval::<ReadMock::read_exact>(self, PhantomMut::new(), buf) {
+                Evaluation::CallDefaultImpl(_) => {
+                    IoDefaultImplDelegator(self.clone()).read_exact(buf)
+                }
+                e => e.unwrap(self),
+            }
         }
     }
 
@@ -243,7 +259,9 @@ mod mock_io {
 
         fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
             match crate::macro_api::eval::<WriteMock::write_vectored>(self, bufs, &mut ()) {
-                Evaluation::CallDefaultImpl(_) => IoFallback(self.clone()).write_vectored(bufs),
+                Evaluation::CallDefaultImpl(_) => {
+                    IoDefaultImplDelegator(self.clone()).write_vectored(bufs)
+                }
                 eval => eval.unwrap(self),
             }
         }
@@ -254,7 +272,9 @@ mod mock_io {
 
         fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
             match crate::macro_api::eval::<WriteMock::write_all>(self, buf, &mut ()) {
-                Evaluation::CallDefaultImpl(_) => IoFallback(self.clone()).write_all(buf),
+                Evaluation::CallDefaultImpl(_) => {
+                    IoDefaultImplDelegator(self.clone()).write_all(buf)
+                }
                 e => e.unwrap(self),
             }
         }
@@ -264,15 +284,15 @@ mod mock_io {
         // fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {}
     }
 
-    struct IoFallback(crate::Unimock);
+    struct IoDefaultImplDelegator(crate::Unimock);
 
-    impl std::io::Read for IoFallback {
+    impl std::io::Read for IoDefaultImplDelegator {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             self.0.read(buf)
         }
     }
 
-    impl std::io::Write for IoFallback {
+    impl std::io::Write for IoDefaultImplDelegator {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
             self.0.write(buf)
         }
