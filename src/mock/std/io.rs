@@ -4,14 +4,14 @@
 #[doc_cfg::doc_cfg(feature = "mock-std")]
 #[allow(non_snake_case)]
 pub mod ReadMock {
-    use crate::{output::Owned, MockFn};
+    use crate::{output::Owned, MockFn, PhantomMut};
 
     /// MockFn for [std::io::Read::read]
     #[allow(non_camel_case_types)]
     pub struct read;
 
     impl MockFn for read {
-        type Inputs<'i> = ();
+        type Inputs<'i> = PhantomMut<&'i [u8]>;
         type Mutation<'u> = [u8];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
@@ -30,7 +30,7 @@ pub mod ReadMock {
     pub struct read_vectored;
 
     impl MockFn for read_vectored {
-        type Inputs<'i> = ();
+        type Inputs<'i> = PhantomMut<std::io::IoSliceMut<'i>>;
         type Mutation<'u> = [std::io::IoSliceMut<'u>];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
@@ -51,7 +51,7 @@ pub mod ReadMock {
     pub struct read_to_end;
 
     impl MockFn for read_to_end {
-        type Inputs<'i> = ();
+        type Inputs<'i> = PhantomMut<&'i [u8]>;
         type Mutation<'u> = [u8];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
@@ -72,7 +72,7 @@ pub mod ReadMock {
     pub struct read_to_string;
 
     impl MockFn for read_to_string {
-        type Inputs<'i> = ();
+        type Inputs<'i> = PhantomMut<String>;
         type Mutation<'u> = String;
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
@@ -93,7 +93,7 @@ pub mod ReadMock {
     pub struct read_exact;
 
     impl MockFn for read_exact {
-        type Inputs<'i> = ();
+        type Inputs<'i> = PhantomMut<&'i [u8]>;
         type Mutation<'u> = [u8];
         type Response = Owned<std::io::Result<()>>;
         type Output<'u> = Self::Response;
@@ -202,31 +202,35 @@ pub mod WriteMock {
 #[cfg(feature = "mock-std")]
 mod mock_io {
     use super::*;
-    use crate::macro_api::Evaluation;
+    use crate::{macro_api::Evaluation, PhantomMut};
 
     #[allow(clippy::unused_io_amount)]
     impl std::io::Read for crate::Unimock {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read>(self, (), buf).unwrap(self)
+            crate::macro_api::eval::<ReadMock::read>(self, PhantomMut::new(), buf).unwrap(self)
         }
 
         fn read_vectored(
             &mut self,
             bufs: &mut [std::io::IoSliceMut<'_>],
         ) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read_vectored>(self, (), bufs).unwrap(self)
+            crate::macro_api::eval::<ReadMock::read_vectored>(self, PhantomMut::new(), bufs)
+                .unwrap(self)
         }
 
         fn read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read_to_end>(self, (), buf).unwrap(self)
+            crate::macro_api::eval::<ReadMock::read_to_end>(self, PhantomMut::new(), buf)
+                .unwrap(self)
         }
 
         fn read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read_to_string>(self, (), buf).unwrap(self)
+            crate::macro_api::eval::<ReadMock::read_to_string>(self, PhantomMut::new(), buf)
+                .unwrap(self)
         }
 
         fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
-            crate::macro_api::eval::<ReadMock::read_exact>(self, (), buf).unwrap(self)
+            crate::macro_api::eval::<ReadMock::read_exact>(self, PhantomMut::new(), buf)
+                .unwrap(self)
         }
     }
 

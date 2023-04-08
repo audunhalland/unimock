@@ -930,8 +930,8 @@ impl MockFnInfo {
     pub const fn new() -> Self {
         Self {
             path: TraitMethodPath {
-                trait_ident: "",
-                method_ident: "",
+                trait_ident: "?",
+                method_ident: "?",
             },
             has_default_impl: false,
         }
@@ -954,6 +954,19 @@ impl MockFnInfo {
             has_default_impl: true,
             ..self
         }
+    }
+}
+
+/// A type that indicates a mutated argument.
+///
+/// Unimock inputs cannot be mutated directly.
+/// To interact with a mutable reference argument, use [crate::build::DefineResponse::mutates].
+pub struct PhantomMut<T>(std::marker::PhantomData<T>);
+
+impl<T> PhantomMut<T> {
+    /// Construct a new mutated argument.
+    pub fn new() -> Self {
+        Self(std::marker::PhantomData)
     }
 }
 

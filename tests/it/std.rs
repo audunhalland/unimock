@@ -18,7 +18,7 @@ fn test_display() {
         Unimock::new(
             DisplayMock::fmt
                 .next_call(matching!())
-                .mutates(|f, ()| write!(f, "u"))
+                .mutates(|f, _| write!(f, "u"))
         )
         .to_string()
     );
@@ -40,7 +40,7 @@ fn test_debug() {
     let unimock = Unimock::new(
         DebugMock::fmt
             .next_call(matching!())
-            .mutates(|f, ()| write!(f, "u")),
+            .mutates(|f, _| write!(f, "u")),
     );
 
     assert_eq!("u", format!("{unimock:?}"));
@@ -51,10 +51,10 @@ fn test_read() {
     let mut reader = BufReader::new(Unimock::new((
         ReadMock::read
             .next_call(matching!())
-            .mutates(|mut f, ()| f.write(b"ok")),
+            .mutates(|mut f, _| f.write(b"ok")),
         ReadMock::read
             .next_call(matching!())
-            .mutates(|mut f, ()| f.write(b"\n")),
+            .mutates(|mut f, _| f.write(b"\n")),
     )));
 
     let mut line = String::new();
@@ -96,7 +96,7 @@ fn test_fmt_io_duplex_default_impl_implicit() {
     let unimock = Unimock::new((
         DisplayMock::fmt
             .next_call(matching!())
-            .mutates(|f, ()| write!(f, "hello {}", "unimock")),
+            .mutates(|f, _| write!(f, "hello {}", "unimock")),
         // NOTE: write! calls `write_all` which should get re-routed to `write`:
         WriteMock::write
             .next_call(matching!(eq!(b"hello ")))
@@ -116,7 +116,7 @@ fn test_fmt_io_duplex_default_impl_explicit() {
     let unimock = Unimock::new((
         DisplayMock::fmt
             .next_call(matching!())
-            .mutates(|f, ()| write!(f, "hello {}", "unimock")),
+            .mutates(|f, _| write!(f, "hello {}", "unimock")),
         WriteMock::write_all
             .next_call(matching!(eq!(b"hello ")))
             .default_implementation(),
