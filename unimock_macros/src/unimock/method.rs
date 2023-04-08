@@ -11,6 +11,7 @@ use super::{output, util};
 
 use crate::doc;
 use crate::doc::SynDoc;
+use crate::unimock::path_to_string;
 
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemFn,
@@ -156,13 +157,14 @@ impl<'t> MockMethod<'t> {
     pub fn mockfn_doc_attrs(&self, trait_path: &syn::Path) -> Vec<proc_macro2::TokenStream> {
         let ident = &self.method.sig.ident;
         let sig_string = doc::signature_documentation(&self.method.sig, doc::SkipReceiver(true));
-        let trait_path_string = trait_path.doc_string();
+        let trait_path_doc_string = trait_path.doc_string();
+        let trait_path_full_string = path_to_string(&trait_path);
 
         let doc_string = if self.non_generic_mock_entry_ident.is_some() {
-            format!("Generic mock interface for [`{trait_path_string}::{sig_string}`]({trait_path_string}::{ident}). Get a MockFn instance by calling `with_types()`.")
+            format!("Generic mock interface for [`{trait_path_doc_string}::{sig_string}`]({trait_path_full_string}::{ident}). Get a MockFn instance by calling `with_types()`.")
         } else {
             format!(
-                "MockFn for [`{trait_path_string}::{sig_string}`]({trait_path_string}::{ident})."
+                "MockFn for [`{trait_path_doc_string}::{sig_string}`]({trait_path_full_string}::{ident})."
             )
         };
 

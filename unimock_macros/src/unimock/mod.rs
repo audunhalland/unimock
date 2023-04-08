@@ -416,6 +416,7 @@ struct InputTypesTuple(Vec<syn::Type>);
 impl InputTypesTuple {
     fn new(mock_method: &MockMethod, attr: &Attr) -> Self {
         let prefix = &attr.prefix;
+        let input_lifetime = &attr.input_lifetime;
         Self(
             mock_method
                 .adapted_sig
@@ -430,14 +431,14 @@ impl InputTypesTuple {
                             (index, _, Some(mutated_arg)) if index == mutated_arg.index => {
                                 let mutated_ty = &mutated_arg.ty;
                                 Some(syn::parse_quote!(
-                                    #prefix::PhantomMut<#mutated_ty>
+                                    #prefix::PhantomMut<&#input_lifetime #mutated_ty>
                                 ))
                             }
                             _ => Some(pat_type.ty.as_ref().clone()),
                         }
                     }
                 })
-                .map(|ty| util::substitute_lifetimes(ty, &attr.input_lifetime))
+                .map(|ty| util::substitute_lifetimes(ty, input_lifetime))
                 .collect::<Vec<_>>(),
         )
     }
