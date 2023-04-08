@@ -964,9 +964,8 @@ impl MockFnInfo {
 /// To interact with a mutable reference argument, use [crate::build::DefineResponse::mutates].
 pub struct PhantomMut<T>(std::marker::PhantomData<T>);
 
-impl<T> PhantomMut<T> {
-    /// Construct a new mutated argument.
-    pub fn new() -> Self {
+impl<T> Default for PhantomMut<T> {
+    fn default() -> Self {
         Self(std::marker::PhantomData)
     }
 }

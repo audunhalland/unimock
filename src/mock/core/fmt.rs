@@ -29,7 +29,7 @@ pub mod DisplayMock {
 
 impl core::fmt::Display for Unimock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        crate::macro_api::eval::<DisplayMock::fmt>(self, PhantomMut::new(), f).unwrap(self)
+        crate::macro_api::eval::<DisplayMock::fmt>(self, PhantomMut::default(), f).unwrap(self)
     }
 }
 
@@ -60,6 +60,6 @@ pub mod DebugMock {
 
 impl core::fmt::Debug for Unimock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        crate::macro_api::eval::<DebugMock::fmt>(self, PhantomMut::new(), f).unwrap(self)
+        crate::macro_api::eval::<DebugMock::fmt>(self, PhantomMut::default(), f).unwrap(self)
     }
 }

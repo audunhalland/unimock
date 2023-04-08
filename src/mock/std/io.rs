@@ -212,14 +212,18 @@ mod mock_io {
     #[allow(clippy::unused_io_amount)]
     impl std::io::Read for crate::Unimock {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            crate::macro_api::eval::<ReadMock::read>(self, PhantomMut::new(), buf).unwrap(self)
+            crate::macro_api::eval::<ReadMock::read>(self, PhantomMut::default(), buf).unwrap(self)
         }
 
         fn read_vectored(
             &mut self,
             bufs: &mut [std::io::IoSliceMut<'_>],
         ) -> std::io::Result<usize> {
-            match crate::macro_api::eval::<ReadMock::read_vectored>(self, PhantomMut::new(), bufs) {
+            match crate::macro_api::eval::<ReadMock::read_vectored>(
+                self,
+                PhantomMut::default(),
+                bufs,
+            ) {
                 Evaluation::CallDefaultImpl(_) => {
                     IoDefaultImplDelegator(self.clone()).read_vectored(bufs)
                 }
@@ -228,7 +232,8 @@ mod mock_io {
         }
 
         fn read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
-            match crate::macro_api::eval::<ReadMock::read_to_end>(self, PhantomMut::new(), buf) {
+            match crate::macro_api::eval::<ReadMock::read_to_end>(self, PhantomMut::default(), buf)
+            {
                 Evaluation::CallDefaultImpl(_) => {
                     IoDefaultImplDelegator(self.clone()).read_to_end(buf)
                 }
@@ -237,7 +242,11 @@ mod mock_io {
         }
 
         fn read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
-            match crate::macro_api::eval::<ReadMock::read_to_string>(self, PhantomMut::new(), buf) {
+            match crate::macro_api::eval::<ReadMock::read_to_string>(
+                self,
+                PhantomMut::default(),
+                buf,
+            ) {
                 Evaluation::CallDefaultImpl(_) => {
                     IoDefaultImplDelegator(self.clone()).read_to_string(buf)
                 }
@@ -246,7 +255,7 @@ mod mock_io {
         }
 
         fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
-            match crate::macro_api::eval::<ReadMock::read_exact>(self, PhantomMut::new(), buf) {
+            match crate::macro_api::eval::<ReadMock::read_exact>(self, PhantomMut::default(), buf) {
                 Evaluation::CallDefaultImpl(_) => {
                     IoDefaultImplDelegator(self.clone()).read_exact(buf)
                 }
