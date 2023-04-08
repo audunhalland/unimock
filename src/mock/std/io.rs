@@ -12,7 +12,7 @@ pub mod ReadMock {
 
     impl MockFn for read {
         type Inputs<'i> = PhantomMut<&'i [u8]>;
-        type Mutation<'u> = [u8];
+        type Mutation<'m> = [u8];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
 
@@ -20,8 +20,9 @@ pub mod ReadMock {
             crate::MockFnInfo::new().path("Read", "read")
         }
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-            vec![None]
+        fn debug_inputs(f: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            use crate::macro_api::ProperDebug;
+            vec![(f.unimock_try_debug())]
         }
     }
 
@@ -30,8 +31,8 @@ pub mod ReadMock {
     pub struct read_vectored;
 
     impl MockFn for read_vectored {
-        type Inputs<'i> = PhantomMut<std::io::IoSliceMut<'i>>;
-        type Mutation<'u> = [std::io::IoSliceMut<'u>];
+        type Inputs<'i> = PhantomMut<&'i [std::io::IoSliceMut<'i>]>;
+        type Mutation<'m> = [std::io::IoSliceMut<'m>];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
 
@@ -41,8 +42,9 @@ pub mod ReadMock {
                 .default_impl()
         }
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-            vec![None]
+        fn debug_inputs(f: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            use crate::macro_api::ProperDebug;
+            vec![(f.unimock_try_debug())]
         }
     }
 
@@ -52,7 +54,7 @@ pub mod ReadMock {
 
     impl MockFn for read_to_end {
         type Inputs<'i> = PhantomMut<&'i [u8]>;
-        type Mutation<'u> = [u8];
+        type Mutation<'m> = [u8];
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
 
@@ -62,8 +64,9 @@ pub mod ReadMock {
                 .default_impl()
         }
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-            vec![None]
+        fn debug_inputs(f: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            use crate::macro_api::ProperDebug;
+            vec![(f.unimock_try_debug())]
         }
     }
 
@@ -73,7 +76,7 @@ pub mod ReadMock {
 
     impl MockFn for read_to_string {
         type Inputs<'i> = PhantomMut<String>;
-        type Mutation<'u> = String;
+        type Mutation<'m> = String;
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
 
@@ -83,8 +86,9 @@ pub mod ReadMock {
                 .default_impl()
         }
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-            vec![None]
+        fn debug_inputs(f: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            use crate::macro_api::ProperDebug;
+            vec![(f.unimock_try_debug())]
         }
     }
 
@@ -94,7 +98,7 @@ pub mod ReadMock {
 
     impl MockFn for read_exact {
         type Inputs<'i> = PhantomMut<&'i [u8]>;
-        type Mutation<'u> = [u8];
+        type Mutation<'m> = [u8];
         type Response = Owned<std::io::Result<()>>;
         type Output<'u> = Self::Response;
 
@@ -104,8 +108,9 @@ pub mod ReadMock {
                 .default_impl()
         }
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-            vec![None]
+        fn debug_inputs(f: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            use crate::macro_api::ProperDebug;
+            vec![(f.unimock_try_debug())]
         }
     }
 }
@@ -122,7 +127,7 @@ pub mod WriteMock {
 
     impl MockFn for write {
         type Inputs<'i> = &'i [u8];
-        type Mutation<'u> = ();
+        type Mutation<'m> = ();
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
 
@@ -143,7 +148,7 @@ pub mod WriteMock {
 
     impl MockFn for write_vectored {
         type Inputs<'i> = &'i [std::io::IoSlice<'i>];
-        type Mutation<'u> = ();
+        type Mutation<'m> = ();
         type Response = Owned<std::io::Result<usize>>;
         type Output<'u> = Self::Response;
 
@@ -164,7 +169,7 @@ pub mod WriteMock {
 
     impl MockFn for flush {
         type Inputs<'i> = ();
-        type Mutation<'u> = ();
+        type Mutation<'m> = ();
         type Response = Owned<std::io::Result<()>>;
         type Output<'u> = Self::Response;
 
@@ -183,7 +188,7 @@ pub mod WriteMock {
 
     impl MockFn for write_all {
         type Inputs<'i> = &'i [u8];
-        type Mutation<'u> = ();
+        type Mutation<'m> = ();
         type Response = Owned<std::io::Result<()>>;
         type Output<'u> = Self::Response;
 

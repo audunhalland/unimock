@@ -387,6 +387,7 @@ mod mismatch;
 mod state;
 
 use std::any::TypeId;
+use std::fmt::Debug;
 use std::sync::Arc;
 
 use assemble::MockAssembler;
@@ -967,6 +968,12 @@ impl<T> PhantomMut<T> {
     /// Construct a new mutated argument.
     pub fn new() -> Self {
         Self(std::marker::PhantomData)
+    }
+}
+
+impl<T> Debug for PhantomMut<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PhantomMut")
     }
 }
 

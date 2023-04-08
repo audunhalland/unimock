@@ -5,7 +5,7 @@ use crate::{PhantomMut, Unimock};
 /// Unimock setup module for [core::fmt::Display]
 #[allow(non_snake_case)]
 pub mod DisplayMock {
-    use crate::{output::Owned, MockFn, PhantomMut};
+    use crate::{macro_api::ProperDebug, output::Owned, MockFn, PhantomMut};
 
     /// MockFn for [core::fmt::Display::fmt]
     #[allow(non_camel_case_types)]
@@ -13,7 +13,7 @@ pub mod DisplayMock {
 
     impl MockFn for fmt {
         type Inputs<'i> = PhantomMut<core::fmt::Formatter<'i>>;
-        type Mutation<'u> = core::fmt::Formatter<'u>;
+        type Mutation<'m> = core::fmt::Formatter<'m>;
         type Response = Owned<std::fmt::Result>;
         type Output<'u> = Self::Response;
 
@@ -21,8 +21,8 @@ pub mod DisplayMock {
             crate::MockFnInfo::new().path("Display", "fmt")
         }
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-            vec![None]
+        fn debug_inputs(f: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![f.unimock_try_debug()]
         }
     }
 }
@@ -36,7 +36,7 @@ impl core::fmt::Display for Unimock {
 /// Unimock setup module for [core::fmt::Debug]
 #[allow(non_snake_case)]
 pub mod DebugMock {
-    use crate::{output::Owned, MockFn, PhantomMut};
+    use crate::{macro_api::ProperDebug, output::Owned, MockFn, PhantomMut};
 
     /// MockFn for [core::fmt::Debug::fmt]
     #[allow(non_camel_case_types)]
@@ -44,7 +44,7 @@ pub mod DebugMock {
 
     impl MockFn for fmt {
         type Inputs<'i> = PhantomMut<core::fmt::Formatter<'i>>;
-        type Mutation<'u> = core::fmt::Formatter<'u>;
+        type Mutation<'m> = core::fmt::Formatter<'m>;
         type Response = Owned<std::fmt::Result>;
         type Output<'u> = Self::Response;
 
@@ -52,8 +52,8 @@ pub mod DebugMock {
             crate::MockFnInfo::new().path("Debug", "fmt")
         }
 
-        fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-            vec![None]
+        fn debug_inputs(f: &Self::Inputs<'_>) -> Vec<Option<String>> {
+            vec![f.unimock_try_debug()]
         }
     }
 }
