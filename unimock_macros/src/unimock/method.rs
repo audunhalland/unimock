@@ -132,13 +132,16 @@ impl<'t> MockMethod<'t> {
     }
 
     pub fn mockfn_doc_attrs(&self, trait_path: &syn::Path) -> Vec<proc_macro2::TokenStream> {
+        let ident = &self.method.sig.ident;
         let sig_string = doc::signature_documentation(&self.method.sig, doc::SkipReceiver(true));
         let trait_path_string = trait_path.doc_string();
 
         let doc_string = if self.non_generic_mock_entry_ident.is_some() {
-            format!("Generic mock interface for `{trait_path_string}::{sig_string}`. Get a MockFn instance by calling `with_types()`.")
+            format!("Generic mock interface for [`{trait_path_string}::{sig_string}`]({trait_path_string}::{ident}). Get a MockFn instance by calling `with_types()`.")
         } else {
-            format!("MockFn for `{trait_path_string}::{sig_string}`.")
+            format!(
+                "MockFn for [`{trait_path_string}::{sig_string}`]({trait_path_string}::{ident})."
+            )
         };
 
         let doc_lit = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
