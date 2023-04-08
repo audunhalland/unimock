@@ -1,4 +1,5 @@
 #![cfg(feature = "mock-std")]
+#![allow(clippy::write_literal)]
 
 use std::io::{BufRead, BufReader, Write};
 
@@ -62,7 +63,6 @@ fn test_read() {
     assert_eq!("ok\n", line);
 }
 
-#[allow(clippy::write_literal)]
 #[test]
 fn test_write() {
     let mut unimock = Unimock::new((
@@ -78,7 +78,6 @@ fn test_write() {
     write!(&mut unimock, "hello {}", "world").unwrap();
 }
 
-#[allow(clippy::write_literal)]
 #[test]
 #[should_panic = "Write::write_all([119, 111, 114, 108, 100]): Ordered call (2) out of range"]
 fn test_write_fail() {

@@ -802,7 +802,6 @@ fn non_send_return() {
     assert_eq!(Rc::new(42), u.return_rc());
 }
 
-#[allow(clippy::write_literal)]
 mod default_body_delegation {
     use unimock::*;
 
