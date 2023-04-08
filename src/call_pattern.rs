@@ -106,6 +106,7 @@ pub(crate) enum DynResponder {
     MutationFunction(DymMutationFunctionResponder),
     Panic(String),
     Unmock,
+    CallDefaultImpl,
 }
 
 impl DynResponder {

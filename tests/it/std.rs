@@ -87,7 +87,7 @@ fn test_write_fail() {
 }
 
 #[test]
-fn test_fmt_io_multiplex_default_impl() {
+fn test_fmt_io_multiplex_default_impl_implicit() {
     let unimock = Unimock::new((
         mock::core::fmt::DisplayMock::fmt
             .next_call(matching!())
@@ -96,6 +96,31 @@ fn test_fmt_io_multiplex_default_impl() {
         mock::std::io::WriteMock::write
             .next_call(matching!(eq!(b"hello ")))
             .returns(Ok(6)),
+        mock::std::io::WriteMock::write
+            .next_call(matching!(eq!(b"unimock")))
+            .returns(Ok("uni".len())),
+        mock::std::io::WriteMock::write
+            .next_call(matching!(eq!(b"mock")))
+            .returns(Ok("mock".len())),
+    ));
+    write!(&mut unimock.clone(), "{unimock}").unwrap();
+}
+
+#[test]
+fn test_fmt_io_multiplex_default_impl_explicit() {
+    let unimock = Unimock::new((
+        mock::core::fmt::DisplayMock::fmt
+            .next_call(matching!())
+            .mutates(|f, ()| write!(f, "hello {}", "unimock")),
+        mock::std::io::WriteMock::write_all
+            .next_call(matching!(eq!(b"hello ")))
+            .calls_default_impl(),
+        mock::std::io::WriteMock::write
+            .next_call(matching!(eq!(b"hello ")))
+            .returns(Ok(6)),
+        mock::std::io::WriteMock::write_all
+            .next_call(matching!(eq!(b"unimock")))
+            .calls_default_impl(),
         mock::std::io::WriteMock::write
             .next_call(matching!(eq!(b"unimock")))
             .returns(Ok("uni".len())),

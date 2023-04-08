@@ -165,3 +165,14 @@ fn no_matcher_function() {
     let u = Unimock::new(SingleArgMock::method1.next_call(&|_| ()).returns(""));
     u.method1("");
 }
+
+#[test]
+#[should_panic = "SingleArg::method1 has not been set up with default implementation delegation."]
+fn no_default_impl() {
+    let u = Unimock::new(
+        SingleArgMock::method1
+            .next_call(matching!())
+            .calls_default_impl(),
+    );
+    u.method1("");
+}

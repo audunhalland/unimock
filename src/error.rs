@@ -122,7 +122,7 @@ impl std::fmt::Display for MockError {
             Self::NoDefaultImpl { info } => {
                 write!(
                     f,
-                    "{path} has not been set up with a default implementation fallback.",
+                    "{path} has not been set up with default implementation delegation.",
                     path = info.path
                 )
             }

@@ -310,6 +310,14 @@ macro_rules! define_response_common_impl {
                 self.quantify()
             }
 
+            /// Instruct this call pattern to invoke the method's default implementation.
+            ///
+            /// If the method has no default implementation, the method will panic when called.
+            pub fn calls_default_impl(mut self) -> Quantify<'p, F, O> {
+                self.builder.push_responder(DynResponder::CallDefaultImpl);
+                self.quantify()
+            }
+
             fn quantify(self) -> Quantify<'p, F, O> {
                 Quantify {
                     builder: self.builder,

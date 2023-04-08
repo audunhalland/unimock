@@ -100,6 +100,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                 msg: msg.clone(),
             }),
             DynResponder::Unmock => Ok(Evaluation::Unmocked(inputs)),
+            DynResponder::CallDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),
         },
         EvalResult::Unmock => Ok(Evaluation::Unmocked(inputs)),
         EvalResult::CallDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),
