@@ -1,7 +1,15 @@
 //! Mock APIs for `core::fmt` traits
 
+use unimock_macros::unimock;
+
 use crate::{PhantomMut, Unimock};
 
+#[unimock(prefix = crate, api = DisplayMock, emulate = core::fmt::Display)]
+pub trait Display {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result;
+}
+
+/*
 /// Unimock setup module for [core::fmt::Display]
 #[allow(non_snake_case)]
 pub mod DisplayMock {
@@ -32,6 +40,7 @@ impl core::fmt::Display for Unimock {
         crate::macro_api::eval::<DisplayMock::fmt>(self, PhantomMut::default(), f).unwrap(self)
     }
 }
+*/
 
 /// Unimock setup module for [core::fmt::Debug]
 #[allow(non_snake_case)]

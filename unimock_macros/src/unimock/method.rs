@@ -5,9 +5,9 @@ use syn::spanned::Spanned;
 use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
-use super::output;
 use super::util::{DotAwait, GenericParamsWithBounds, IsTypeGeneric};
 use super::Attr;
+use super::{output, util};
 
 use crate::doc;
 use crate::doc::SynDoc;
@@ -244,7 +244,10 @@ pub fn extract_methods<'s>(
                             mutated_arg = Some(MutatedArg {
                                 index,
                                 ident: pat_ident.ident.clone(),
-                                ty: type_ref.elem.as_ref().clone(),
+                                ty: util::substitute_lifetimes(
+                                    type_ref.elem.as_ref().clone(),
+                                    &syn::parse_quote!('m),
+                                ),
                             })
                         }
                     }
