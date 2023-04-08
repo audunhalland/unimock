@@ -158,7 +158,7 @@ impl<'t> MockMethod<'t> {
         let ident = &self.method.sig.ident;
         let sig_string = doc::signature_documentation(&self.method.sig, doc::SkipReceiver(true));
         let trait_path_doc_string = trait_path.doc_string();
-        let trait_path_full_string = path_to_string(&trait_path);
+        let trait_path_full_string = path_to_string(trait_path);
 
         let doc_string = if self.non_generic_mock_entry_ident.is_some() {
             format!("Generic mock interface for [`{trait_path_doc_string}::{sig_string}`]({trait_path_full_string}::{ident}). Get a MockFn instance by calling `with_types()`.")
