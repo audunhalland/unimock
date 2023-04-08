@@ -236,22 +236,18 @@ pub fn extract_methods<'s>(
 
             // The last `&mut` arg becomes the mutated arg
             for (index, fn_arg) in adapted_sig.inputs.iter().enumerate() {
-                match fn_arg {
-                    syn::FnArg::Typed(syn::PatType { pat, ty, .. }) => {
-                        match (pat.as_ref(), ty.as_ref()) {
-                            (syn::Pat::Ident(pat_ident), syn::Type::Reference(type_ref)) => {
-                                if type_ref.mutability.is_some() {
-                                    mutated_arg = Some(MutatedArg {
-                                        index,
-                                        ident: pat_ident.ident.clone(),
-                                        ty: type_ref.elem.as_ref().clone(),
-                                    })
-                                }
-                            }
-                            _ => {}
+                if let syn::FnArg::Typed(syn::PatType { pat, ty, .. }) = fn_arg {
+                    if let (syn::Pat::Ident(pat_ident), syn::Type::Reference(type_ref)) =
+                        (pat.as_ref(), ty.as_ref())
+                    {
+                        if type_ref.mutability.is_some() {
+                            mutated_arg = Some(MutatedArg {
+                                index,
+                                ident: pat_ident.ident.clone(),
+                                ty: type_ref.elem.as_ref().clone(),
+                            })
                         }
                     }
-                    _ => {}
                 }
             }
 
