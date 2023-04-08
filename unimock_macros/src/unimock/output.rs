@@ -1,3 +1,4 @@
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse_quote, visit_mut::VisitMut};
 
@@ -321,6 +322,7 @@ impl AssociatedInnerType {
     fn new_static(mut inner_type: syn::Type, borrow_info: &BorrowInfo) -> Self {
         if borrow_info.has_nonstatic_lifetime {
             rename_lifetimes(&mut inner_type, &mut |_| Some("'static"));
+            add_dyn_static_bound(&mut inner_type);
         }
 
         Self::Typed(inner_type)
@@ -353,6 +355,7 @@ impl AssociatedInnerType {
                             Some("'u")
                         }
                     });
+                    add_dyn_static_bound(&mut inner_type);
 
                     if needs_lifetime_gat {
                         Self::Typed(inner_type)
@@ -484,4 +487,59 @@ fn rename_lifetimes(
     }
 
     Rename { rename_fn }.visit_type_mut(ty);
+}
+
+fn add_dyn_static_bound(ty: &mut syn::Type) {
+    struct Visitor {
+        ref_depth: usize,
+        rewrote: std::collections::HashSet<usize>,
+    }
+
+    impl syn::visit_mut::VisitMut for Visitor {
+        fn visit_type_trait_object_mut(&mut self, i: &mut syn::TypeTraitObject) {
+            let found_static = i.bounds.iter().any(|bound| match bound {
+                syn::TypeParamBound::Lifetime(lt) => lt.ident == "static",
+                _ => false,
+            });
+
+            if !found_static {
+                i.bounds.push(syn::parse_quote!('static));
+                self.rewrote.insert(self.ref_depth);
+            }
+
+            syn::visit_mut::visit_type_trait_object_mut(self, i);
+        }
+
+        fn visit_type_reference_mut(&mut self, ty: &mut syn::TypeReference) {
+            self.ref_depth += 1;
+
+            let cur_depth = self.ref_depth;
+            syn::visit_mut::visit_type_reference_mut(self, ty);
+
+            if self.rewrote.remove(&cur_depth) {
+                match ty.elem.as_ref() {
+                    syn::Type::Paren(_) => {
+                        // already parenthesized
+                    }
+                    _ => {
+                        let mut tmp = Box::new(syn::Type::Verbatim(TokenStream::new()));
+                        std::mem::swap(&mut tmp, &mut ty.elem);
+
+                        ty.elem = Box::new(syn::Type::Paren(syn::TypeParen {
+                            paren_token: syn::token::Paren::default(),
+                            elem: tmp,
+                        }));
+                    }
+                }
+            }
+
+            self.ref_depth -= 1;
+        }
+    }
+
+    Visitor {
+        ref_depth: 0,
+        rewrote: Default::default(),
+    }
+    .visit_type_mut(ty)
 }

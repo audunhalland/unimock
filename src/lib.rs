@@ -393,8 +393,10 @@ use std::sync::Arc;
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
 use debug::TraitMethodPath;
+use macro_api::DefaultImplDelegator;
 use macro_api::Matching;
 
+use once_cell::sync::OnceCell;
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
@@ -648,6 +650,7 @@ enum FallbackMode {
 pub struct Unimock {
     original_instance: bool,
     shared_state: Arc<state::SharedState>,
+    default_impl_delegator_cell: OnceCell<Box<DefaultImplDelegator>>,
 }
 
 impl Unimock {
@@ -722,6 +725,7 @@ impl Unimock {
         Self {
             original_instance: true,
             shared_state: Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
+            default_impl_delegator_cell: Default::default(),
         }
     }
 
@@ -739,12 +743,33 @@ impl Clone for Unimock {
         Unimock {
             original_instance: false,
             shared_state: self.shared_state.clone(),
+            default_impl_delegator_cell: Default::default(),
         }
+    }
+}
+
+impl AsRef<DefaultImplDelegator> for Unimock {
+    fn as_ref(&self) -> &DefaultImplDelegator {
+        let delegator = self
+            .default_impl_delegator_cell
+            .get_or_init(|| Box::new(DefaultImplDelegator(self.clone())));
+        delegator.as_ref()
+    }
+}
+
+impl AsMut<DefaultImplDelegator> for Unimock {
+    fn as_mut(&mut self) -> &mut DefaultImplDelegator {
+        self.default_impl_delegator_cell
+            .get_or_init(|| Box::new(DefaultImplDelegator(self.clone())));
+        self.default_impl_delegator_cell.get_mut().unwrap()
     }
 }
 
 impl Drop for Unimock {
     fn drop(&mut self) {
+        // first potentially drop the directly owned "helper" Unimock instance
+        drop(self.default_impl_delegator_cell.take());
+
         // skip verification if not the original instance.
         if !self.original_instance {
             return;

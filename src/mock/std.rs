@@ -1,5 +1,24 @@
 //! Mock APIs for `std` traits
 
+/// Mock APIs for `std::error` traits
+#[doc_cfg::doc_cfg(feature = "mock-std")]
+pub mod error {
+    use crate::unimock;
+    use std::error::Error;
+
+    #[unimock(prefix=crate, api=ErrorMock, emulate=std::error::Error)]
+    pub trait Error {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {}
+
+        // deprecated:
+        // fn description(&self) -> &str {}
+        // fn cause(&self) -> Option<&dyn Error> {}
+
+        // Note: Unstable
+        // fn provide<'a>(&'a self, demand: &mut Demand<'a>) {}
+    }
+}
+
 /// Mock APIs for `std::io` traits
 #[doc_cfg::doc_cfg(feature = "mock-std")]
 pub mod io {

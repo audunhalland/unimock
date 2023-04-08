@@ -2,6 +2,13 @@ use unimock::*;
 
 use async_trait::async_trait;
 
+fn assert_send_sync<T: Send + Sync>() {}
+
+#[test]
+fn unimock_is_send_and_sync() {
+    assert_send_sync::<Unimock>();
+}
+
 #[test]
 fn noarg_works() {
     #[unimock(api=NoArgMock)]
@@ -404,7 +411,7 @@ mod custom_api_module {
 
     #[test]
     #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:412 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:419 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
         Unimock::new(
@@ -632,7 +639,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:608 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:615 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
@@ -861,5 +868,15 @@ mod mutated_arg {
         let mut arg1 = 21;
         assert_eq!(23, u.mutation2(2, &mut arg1, 21));
         assert_eq!(42, arg1);
+    }
+}
+
+mod borrow_dyn {
+    use unimock::*;
+
+    #[unimock(api = BorrowDynMock)]
+    pub trait BorrowDyn {
+        fn borrow_dyn(&self) -> &dyn BorrowDyn;
+        fn borrow_dyn_opt(&self) -> Option<&dyn BorrowDyn>;
     }
 }

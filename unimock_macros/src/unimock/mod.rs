@@ -124,10 +124,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             });
 
         Some(quote! {
-            struct DefaultImplDelegator(#prefix::Unimock);
-
             #(#impl_attributes)*
-            impl #generic_params #trait_path #generic_args for DefaultImplDelegator #where_clause {
+            impl #generic_params #trait_path #generic_args for #prefix::macro_api::DefaultImplDelegator #where_clause {
                 #(#non_default_methods)*
             }
         })
@@ -349,10 +347,43 @@ fn def_method_impl(
                 let fn_params =
                     method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
 
+                let delegator_path = quote! {
+                    #prefix::macro_api::DefaultImplDelegator
+                };
+
+                let delegator_constructor = match method_sig.receiver() {
+                    Some(syn::Receiver {
+                        reference: None, ..
+                    }) => quote! {
+                        #delegator_path::from(self.clone())
+                    },
+                    Some(syn::Receiver {
+                        reference: Some(_),
+                        mutability: None,
+                        ..
+                    }) => quote! {
+                        use ::core::convert::AsRef;
+                        use #delegator_path;
+                        <Self as AsRef<DefaultImplDelegator>>::as_ref(self)
+                    },
+                    Some(syn::Receiver {
+                        reference: Some(_),
+                        mutability: Some(_),
+                        ..
+                    }) => quote! {
+                        use ::core::convert::AsMut;
+                        use #delegator_path;
+                        <Self as AsMut<DefaultImplDelegator>>::as_mut(self)
+                    },
+                    _ => todo!("unhandled DefaultImplDelegator constructor"),
+                };
+
                 Some(quote! {
-                    #prefix::macro_api::Evaluation::CallDefaultImpl(#eval_pattern) => DefaultImplDelegator(self.clone())
-                        .#method_ident(#fn_params)
-                        #opt_dot_await,
+                    #prefix::macro_api::Evaluation::CallDefaultImpl(#eval_pattern) => {
+                        #delegator_constructor
+                            .#method_ident(#fn_params)
+                            #opt_dot_await
+                    },
                 })
             } else {
                 None

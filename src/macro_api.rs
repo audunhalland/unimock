@@ -173,6 +173,30 @@ where
     unimock.handle_error(eval::eval(&unimock.shared_state, inputs, mut_input))
 }
 
+/// The DefaultImplDelegator is a struct
+/// used for implementing only non-default methods of traits.
+///
+/// It is used as part of the infrastructure for supporting default implementation fallbacks in Unimock.
+pub struct DefaultImplDelegator(pub Unimock);
+
+impl From<Unimock> for DefaultImplDelegator {
+    fn from(value: Unimock) -> Self {
+        Self(value)
+    }
+}
+
+impl core::fmt::Display for DefaultImplDelegator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <Unimock as core::fmt::Display>::fmt(&self.0, f)
+    }
+}
+
+impl core::fmt::Debug for DefaultImplDelegator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <Unimock as core::fmt::Debug>::fmt(&self.0, f)
+    }
+}
+
 /// Trait for computing the proper [std::fmt::Debug] representation of a value.
 pub trait ProperDebug {
     /// Optionally format a debug representation.
