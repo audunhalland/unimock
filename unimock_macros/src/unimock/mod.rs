@@ -82,7 +82,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             }),
         ),
         MockApi::MockMod(module_ident) => {
-            let doc_string = format!("Unimock setup module for `{}`", trait_path.doc_string());
+            let path_string = path_to_string(&trait_path);
+            let doc_string = format!("Unimock setup module for [{path_string}].");
             let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
 
             let vis = &trait_info.input_trait.vis;
@@ -453,4 +454,15 @@ impl ToTokens for InputTypesTuple {
             });
         }
     }
+}
+
+fn path_to_string(path: &syn::Path) -> String {
+    let mut out = String::new();
+    for pair in path.segments.pairs() {
+        out.push_str(&pair.value().ident.to_string());
+        if let Some(sep) = pair.punct() {
+            out.push_str(&sep.doc_string());
+        }
+    }
+    out
 }
