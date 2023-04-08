@@ -6,7 +6,7 @@ use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
 use super::output;
-use super::util::{GenericParamsWithBounds, IsTypeGeneric};
+use super::util::{DotAwait, GenericParamsWithBounds, IsTypeGeneric};
 use super::Attr;
 
 use crate::doc;
@@ -45,6 +45,19 @@ impl<'t> MockMethod<'t> {
         }
     }
 
+    pub fn opt_dot_await(&self) -> Option<DotAwait> {
+        if self.method.sig.asyncness.is_some()
+            || matches!(
+                self.output_structure.wrapping,
+                output::OutputWrapping::ImplTraitFuture(_)
+            )
+        {
+            Some(DotAwait)
+        } else {
+            None
+        }
+    }
+
     pub fn mirrored_attrs(&self) -> impl Iterator<Item = &'_ syn::Attribute> {
         self.mirrored_attr_indexes
             .iter()
@@ -59,11 +72,7 @@ impl<'t> MockMethod<'t> {
     }
 
     pub fn self_reference(&self) -> SelfReference {
-        let receiver = self.method.sig.inputs.iter().find_map(|arg| match arg {
-            syn::FnArg::Receiver(receiver) => Some(receiver),
-            _ => None,
-        });
-        match receiver {
+        match self.method.sig.receiver() {
             Some(syn::Receiver {
                 reference: None, ..
             }) => SelfReference { create_ref: true },

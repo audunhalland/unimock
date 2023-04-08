@@ -22,6 +22,7 @@ pub enum Evaluation<'u, 'i, F: MockFn> {
 impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
     /// Unwrap the `Evaluated` variant, or panic.
     /// The unimock instance must be passed in order to register that an eventual panic happened.
+    #[track_caller]
     pub fn unwrap(self, unimock: &Unimock) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
         let error = match self {
             Self::Evaluated(output) => return output,

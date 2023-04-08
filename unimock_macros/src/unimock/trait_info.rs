@@ -10,6 +10,7 @@ pub struct TraitInfo<'t> {
     pub ident_lit: syn::LitStr,
     pub generic_params_with_bounds: GenericParamsWithBounds,
     pub methods: Vec<Option<method::MockMethod<'t>>>,
+    pub has_default_impls: bool,
     pub is_type_generic: IsTypeGeneric,
 }
 
@@ -30,6 +31,11 @@ impl<'t> TraitInfo<'t> {
 
         let methods = method::extract_methods(prefix, input_trait, is_type_generic, attr)?;
 
+        let has_default_impls = methods
+            .iter()
+            .filter_map(|opt| opt.as_ref())
+            .any(|method| method.method.default.is_some());
+
         let contains_async = methods.iter().filter_map(Option::as_ref).any(|method| {
             if method.method.sig.asyncness.is_some() {
                 return true;
@@ -43,31 +49,22 @@ impl<'t> TraitInfo<'t> {
         let ident_lit =
             syn::LitStr::new(&format!("{}", &input_trait.ident), input_trait.ident.span());
 
-        if let Some(emulate) = &attr.emulate {
-            Ok(Self {
-                input_trait,
-                output_trait: None,
-                trait_path: emulate.clone(),
-                ident_lit,
-                generic_params_with_bounds: GenericParamsWithBounds::new(generics, contains_async),
-                methods,
-                is_type_generic,
-            })
+        let (output_trait, trait_path) = if let Some(emulate) = &attr.emulate {
+            (None, emulate.clone())
         } else {
             let trait_ident = &input_trait.ident;
-            let trait_path = syn::parse_quote! {
-                #trait_ident
-            };
+            (Some(input_trait), syn::parse_quote! { #trait_ident })
+        };
 
-            Ok(Self {
-                input_trait,
-                output_trait: Some(input_trait),
-                trait_path,
-                ident_lit,
-                generic_params_with_bounds: GenericParamsWithBounds::new(generics, contains_async),
-                methods,
-                is_type_generic,
-            })
-        }
+        Ok(Self {
+            input_trait,
+            output_trait,
+            trait_path,
+            ident_lit,
+            generic_params_with_bounds: GenericParamsWithBounds::new(generics, contains_async),
+            methods,
+            has_default_impls,
+            is_type_generic,
+        })
     }
 }

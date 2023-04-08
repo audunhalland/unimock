@@ -801,3 +801,38 @@ fn non_send_return() {
     );
     assert_eq!(Rc::new(42), u.return_rc());
 }
+
+mod default_body_delegation {
+    use unimock::*;
+
+    #[unimock(api = DefaultBodyMock)]
+    trait DefaultBody {
+        fn core(&self, arg: i32) -> i32;
+
+        fn default_body(&self, arg: i32) -> i32 {
+            self.core(arg * 2)
+        }
+    }
+
+    #[test]
+    fn mock_default_body() {
+        assert_eq!(
+            777,
+            Unimock::new(
+                DefaultBodyMock::default_body
+                    .next_call(matching!(21))
+                    .returns(777)
+            )
+            .default_body(21)
+        );
+    }
+
+    #[test]
+    fn delegate_through_default_body() {
+        assert_eq!(
+            666,
+            Unimock::new(DefaultBodyMock::core.next_call(matching!(42)).returns(666))
+                .default_body(21)
+        );
+    }
+}

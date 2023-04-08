@@ -23,21 +23,21 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
 
     let prefix = &attr.prefix;
     let trait_path = &trait_info.trait_path;
-    let impl_attributes =
-        trait_info
-            .input_trait
-            .attrs
-            .iter()
-            .filter(|attribute| match attribute.style {
-                syn::AttrStyle::Outer => {
-                    if let Some(last_segment) = attribute.path().segments.last() {
-                        last_segment.ident == "async_trait"
-                    } else {
-                        false
-                    }
+    let impl_attributes = trait_info
+        .input_trait
+        .attrs
+        .iter()
+        .filter(|attribute| match attribute.style {
+            syn::AttrStyle::Outer => {
+                if let Some(last_segment) = attribute.path().segments.last() {
+                    last_segment.ident == "async_trait"
+                } else {
+                    false
                 }
-                syn::AttrStyle::Inner(_) => false,
-            });
+            }
+            syn::AttrStyle::Inner(_) => false,
+        })
+        .collect::<Vec<_>>();
 
     let mock_fn_defs: Vec<Option<MockFnDef>> = trait_info
         .methods
@@ -52,7 +52,15 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .methods
         .iter()
         .enumerate()
-        .map(|(index, method)| def_method_impl(index, method.as_ref(), &trait_info, &attr));
+        .map(|(index, method)| {
+            def_method_impl(
+                index,
+                method.as_ref(),
+                &trait_info,
+                &attr,
+                MethodImplKind::Mock,
+            )
+        });
 
     let where_clause = &trait_info.input_trait.generics.where_clause;
     let mock_fn_struct_items = mock_fn_defs
@@ -97,6 +105,35 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         ),
     };
 
+    let default_impl_delegator = if trait_info.has_default_impls {
+        let non_default_methods = trait_info
+            .methods
+            .iter()
+            .enumerate()
+            .filter_map(|(index, opt)| opt.as_ref().map(|method| (index, method)))
+            .filter(|(_, method)| method.method.default.is_none())
+            .map(|(index, method)| {
+                def_method_impl(
+                    index,
+                    Some(method),
+                    &trait_info,
+                    &attr,
+                    MethodImplKind::Delegate0,
+                )
+            });
+
+        Some(quote! {
+            struct DefaultImplDelegator(#prefix::Unimock);
+
+            #(#impl_attributes)*
+            impl #generic_params #trait_path #generic_args for DefaultImplDelegator #where_clause {
+                #(#non_default_methods)*
+            }
+        })
+    } else {
+        None
+    };
+
     let output_trait = trait_info.output_trait;
 
     Ok(quote! {
@@ -113,6 +150,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
                 #(#associated_futures)*
                 #(#method_impls)*
             }
+
+            #default_impl_delegator
         };
     })
 }
@@ -235,11 +274,17 @@ fn def_mock_fn(
     Some(mock_fn_def)
 }
 
+enum MethodImplKind {
+    Mock,
+    Delegate0,
+}
+
 fn def_method_impl(
     index: usize,
     method: Option<&method::MockMethod>,
     trait_info: &TraitInfo,
     attr: &Attr,
+    kind: MethodImplKind,
 ) -> proc_macro2::TokenStream {
     let method = match method {
         Some(method) => method,
@@ -264,37 +309,58 @@ fn def_method_impl(
         output::OutputWrapping::ImplTraitFuture(_)
     );
 
-    let unmock_arm = attr.get_unmock_fn(index).map(
-        |UnmockFn {
-             path: unmock_path,
-             params: unmock_params,
-         }| {
-            let inputs_destructuring = method.inputs_destructuring(Tupled(false));
-            let opt_dot_await = if method_sig.asyncness.is_some() || has_impl_trait_future {
-                Some(util::DotAwait)
+    let body = match kind {
+        MethodImplKind::Mock => {
+            let unmock_arm = attr.get_unmock_fn(index).map(
+                |UnmockFn {
+                     path: unmock_path,
+                     params: unmock_params,
+                 }| {
+                    let inputs_destructuring = method.inputs_destructuring(Tupled(false));
+                    let opt_dot_await = method.opt_dot_await();
+
+                    let unmock_expr = match unmock_params {
+                        None => quote! {
+                            #unmock_path(self, #inputs_destructuring) #opt_dot_await
+                        },
+                        Some(UnmockFnParams { params }) => quote! {
+                            #unmock_path(#params) #opt_dot_await
+                        },
+                    };
+
+                    quote! {
+                        #prefix::macro_api::Evaluation::Unmocked(#inputs_tupled) => #unmock_expr,
+                    }
+                },
+            );
+
+            let default_impl_delegate_arm = if method.method.default.is_some() {
+                let method_ident = &method_sig.ident;
+                let inputs_destructuring = method.inputs_destructuring(Tupled(false));
+                let opt_dot_await = method.opt_dot_await();
+                Some(quote! {
+                    #prefix::macro_api::Evaluation::CallDefaultImpl(#inputs_tupled) => DefaultImplDelegator(self.clone())
+                        .#method_ident(#inputs_destructuring)
+                        #opt_dot_await,
+                })
             } else {
                 None
             };
 
-            let unmock_expr = match unmock_params {
-                None => quote! {
-                    #unmock_path(self, #inputs_destructuring) #opt_dot_await
-                },
-                Some(UnmockFnParams { params }) => quote! {
-                    #unmock_path(#params) #opt_dot_await
-                },
-            };
-
-            quote! {
-                #prefix::macro_api::Evaluation::Unmocked(#inputs_tupled) => #unmock_expr,
+            quote_spanned! { span=>
+                match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()) {
+                    #unmock_arm
+                    #default_impl_delegate_arm
+                    e => e.unwrap(#self_ref)
+                }
             }
-        },
-    );
-
-    let body = quote_spanned! { span=>
-        match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()) {
-            #unmock_arm
-            e => e.unwrap(#self_ref)
+        }
+        MethodImplKind::Delegate0 => {
+            let ident = &method_sig.ident;
+            let inputs_destructuring = method.inputs_destructuring(Tupled(false));
+            quote! {
+                self.0.#ident(#inputs_destructuring)
+            }
         }
     };
 

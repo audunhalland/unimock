@@ -239,7 +239,7 @@ mod mock_io {
 
         fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
             match crate::macro_api::eval::<WriteMock::write_vectored>(self, bufs, &mut ()) {
-                Evaluation::CallDefaultImpl(_) => IoFallback(self).write_vectored(bufs),
+                Evaluation::CallDefaultImpl(_) => IoFallback(self.clone()).write_vectored(bufs),
                 eval => eval.unwrap(self),
             }
         }
@@ -250,8 +250,8 @@ mod mock_io {
 
         fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
             match crate::macro_api::eval::<WriteMock::write_all>(self, buf, &mut ()) {
-                Evaluation::CallDefaultImpl(_) => IoFallback(self).write_all(buf),
-                eval => eval.unwrap(self),
+                Evaluation::CallDefaultImpl(_) => IoFallback(self.clone()).write_all(buf),
+                e => e.unwrap(self),
             }
         }
 
@@ -260,15 +260,15 @@ mod mock_io {
         // fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {}
     }
 
-    struct IoFallback<'u>(&'u mut crate::Unimock);
+    struct IoFallback(crate::Unimock);
 
-    impl<'u> std::io::Read for IoFallback<'u> {
+    impl std::io::Read for IoFallback {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             self.0.read(buf)
         }
     }
 
-    impl<'u> std::io::Write for IoFallback<'u> {
+    impl std::io::Write for IoFallback {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
             self.0.write(buf)
         }
