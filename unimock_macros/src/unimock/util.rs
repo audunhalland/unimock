@@ -198,9 +198,7 @@ impl<'t> quote::ToTokens for TypedPhantomData<'t> {
     }
 }
 
-pub fn substitute_lifetimes(ty: &syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
-    let mut ty = ty.clone();
-
+pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
     struct LifetimeReplace<'s> {
         lifetime: &'s syn::Lifetime,
     }

@@ -24,10 +24,25 @@ pub struct MockMethod<'t> {
     pub ident_lit: syn::LitStr,
     pub has_default_impl: bool,
     pub output_structure: output::OutputStructure,
+    pub mutated_arg: Option<MutatedArg>,
     mirrored_attr_indexes: Vec<usize>,
 }
 
+pub struct MutatedArg {
+    pub index: usize,
+    pub ident: syn::Ident,
+    pub ty: syn::Type,
+}
+
 pub struct Tupled(pub bool);
+
+#[derive(Clone, Copy)]
+pub enum InputsSyntax {
+    FnPattern,
+    FnParams,
+    EvalPattern,
+    EvalParams,
+}
 
 impl<'t> MockMethod<'t> {
     pub fn span(&self) -> proc_macro2::Span {
@@ -64,10 +79,17 @@ impl<'t> MockMethod<'t> {
             .map(|index| &self.method.attrs[*index])
     }
 
-    pub fn inputs_destructuring(&self, tupled: Tupled) -> InputsDestructuring {
+    pub fn inputs_destructuring(
+        &self,
+        syntax: InputsSyntax,
+        tupled: Tupled,
+        attr: &'t Attr,
+    ) -> InputsDestructuring {
         InputsDestructuring {
             method: self,
+            syntax,
             tupled,
+            attr,
         }
     }
 
@@ -101,7 +123,7 @@ impl<'t> MockMethod<'t> {
             }
         };
 
-        let inputs = self.inputs_destructuring(Tupled(true));
+        let inputs = self.inputs_destructuring(InputsSyntax::FnPattern, Tupled(true), attr);
 
         quote! {
             fn debug_inputs(#inputs: &Self::Inputs<'_>) -> std::vec::Vec<core::option::Option<String>> {
@@ -210,6 +232,29 @@ pub fn extract_methods<'s>(
             let generic_params_with_bounds =
                 GenericParamsWithBounds::new(&adapted_sig.generics, false);
 
+            let mut mutated_arg = None;
+
+            // The last `&mut` arg becomes the mutated arg
+            for (index, fn_arg) in adapted_sig.inputs.iter().enumerate() {
+                match fn_arg {
+                    syn::FnArg::Typed(syn::PatType { pat, ty, .. }) => {
+                        match (pat.as_ref(), ty.as_ref()) {
+                            (syn::Pat::Ident(pat_ident), syn::Type::Reference(type_ref)) => {
+                                if type_ref.mutability.is_some() {
+                                    mutated_arg = Some(MutatedArg {
+                                        index,
+                                        ident: pat_ident.ident.clone(),
+                                        ty: type_ref.elem.as_ref().clone(),
+                                    })
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
             Ok(Some(MockMethod {
                 method,
                 adapted_sig,
@@ -234,6 +279,7 @@ pub fn extract_methods<'s>(
                 ),
                 has_default_impl: method.default.is_some(),
                 output_structure,
+                mutated_arg,
                 mirrored_attr_indexes,
             }))
         })
@@ -326,7 +372,9 @@ fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::Tok
 
 pub struct InputsDestructuring<'t> {
     method: &'t MockMethod<'t>,
+    syntax: InputsSyntax,
     tupled: Tupled,
+    attr: &'t Attr,
 }
 
 impl<'t> quote::ToTokens for InputsDestructuring<'t> {
@@ -334,7 +382,9 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
         if self.tupled.0 {
             let inner = InputsDestructuring {
                 method: self.method,
+                syntax: self.syntax,
                 tupled: Tupled(false),
+                attr: self.attr,
             };
 
             if self.method.non_receiver_arg_count == 1 {
@@ -353,9 +403,26 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
             let last_index = self.method.method.sig.inputs.len() - 1;
             for (index, pair) in self.method.method.sig.inputs.pairs().enumerate() {
                 if let syn::FnArg::Typed(pat_type) = pair.value() {
-                    match (index, pat_type.pat.as_ref()) {
-                        (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => {}
-                        (_, syn::Pat::Ident(pat_ident)) => {
+                    match (index, pat_type.pat.as_ref(), &self.method.mutated_arg) {
+                        (0, syn::Pat::Ident(pat_ident), _) if pat_ident.ident == "self" => {}
+                        (index, syn::Pat::Ident(pat_ident), Some(mutated_arg))
+                            if index == mutated_arg.index =>
+                        {
+                            match self.syntax {
+                                InputsSyntax::FnPattern | InputsSyntax::FnParams => {
+                                    pat_ident.to_tokens(tokens)
+                                }
+                                InputsSyntax::EvalParams => {
+                                    let prefix = &self.attr.prefix;
+                                    quote! {
+                                        #prefix::PhantomMut::default()
+                                    }
+                                    .to_tokens(tokens)
+                                }
+                                InputsSyntax::EvalPattern => quote! { _ }.to_tokens(tokens),
+                            }
+                        }
+                        (_, syn::Pat::Ident(pat_ident), _) => {
                             pat_ident.to_tokens(tokens);
                         }
                         _ => {

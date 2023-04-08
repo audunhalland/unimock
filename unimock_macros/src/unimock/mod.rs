@@ -8,7 +8,7 @@ mod trait_info;
 mod util;
 
 use crate::doc::SynDoc;
-use crate::unimock::method::Tupled;
+use crate::unimock::method::{InputsSyntax, Tupled};
 pub use attr::{Attr, MockApi};
 use trait_info::TraitInfo;
 
@@ -185,6 +185,13 @@ fn def_mock_fn(
     let input_lifetime = &attr.input_lifetime;
     let input_types_tuple = InputTypesTuple::new(method, attr);
 
+    let mutation = if let Some(mutated_arg) = &method.mutated_arg {
+        let ty = &mutated_arg.ty;
+        quote! { #ty }
+    } else {
+        quote! { () }
+    };
+
     let generic_params = util::Generics::params(trait_info, Some(method));
     let generic_args = util::Generics::args(trait_info, Some(method), InferImplTrait(false));
     let where_clause = &trait_info.input_trait.generics.where_clause;
@@ -218,7 +225,7 @@ fn def_mock_fn(
         #(#mirrored_attrs)*
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = #input_types_tuple;
-            type Mutation<'m> = ();
+            type Mutation<'m> = #mutation;
             type Response = #response_associated_type;
             type Output<'u> = #output_associated_type;
 
@@ -298,10 +305,6 @@ fn def_method_impl(
     let mock_fn_path = method.mock_fn_path(attr);
 
     let self_ref = method.self_reference();
-    let inputs_tupled = {
-        let destructuring = method.inputs_destructuring(Tupled(true));
-        quote! { #destructuring }
-    };
     let eval_generic_args = util::Generics::args(trait_info, Some(method), InferImplTrait(true));
 
     let has_impl_trait_future = matches!(
@@ -311,44 +314,60 @@ fn def_method_impl(
 
     let body = match kind {
         MethodImplKind::Mock => {
+            let opt_dot_await = method.opt_dot_await();
             let unmock_arm = attr.get_unmock_fn(index).map(
                 |UnmockFn {
                      path: unmock_path,
                      params: unmock_params,
                  }| {
-                    let inputs_destructuring = method.inputs_destructuring(Tupled(false));
-                    let opt_dot_await = method.opt_dot_await();
+                    let fn_params =
+                        method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
 
                     let unmock_expr = match unmock_params {
                         None => quote! {
-                            #unmock_path(self, #inputs_destructuring) #opt_dot_await
+                            #unmock_path(self, #fn_params) #opt_dot_await
                         },
                         Some(UnmockFnParams { params }) => quote! {
                             #unmock_path(#params) #opt_dot_await
                         },
                     };
 
+                    let eval_pattern =
+                        method.inputs_destructuring(InputsSyntax::EvalPattern, Tupled(true), attr);
+
                     quote! {
-                        #prefix::macro_api::Evaluation::Unmocked(#inputs_tupled) => #unmock_expr,
+                        #prefix::macro_api::Evaluation::Unmocked(#eval_pattern) => #unmock_expr,
                     }
                 },
             );
 
             let default_impl_delegate_arm = if method.method.default.is_some() {
                 let method_ident = &method_sig.ident;
-                let inputs_destructuring = method.inputs_destructuring(Tupled(false));
-                let opt_dot_await = method.opt_dot_await();
+                let eval_pattern =
+                    method.inputs_destructuring(InputsSyntax::EvalPattern, Tupled(true), attr);
+                let fn_params =
+                    method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
+
                 Some(quote! {
-                    #prefix::macro_api::Evaluation::CallDefaultImpl(#inputs_tupled) => DefaultImplDelegator(self.clone())
-                        .#method_ident(#inputs_destructuring)
+                    #prefix::macro_api::Evaluation::CallDefaultImpl(#eval_pattern) => DefaultImplDelegator(self.clone())
+                        .#method_ident(#fn_params)
                         #opt_dot_await,
                 })
             } else {
                 None
             };
 
+            let inputs_eval_params =
+                method.inputs_destructuring(InputsSyntax::EvalParams, Tupled(true), attr);
+            let mutated_param = if let Some(mutated_arg) = &method.mutated_arg {
+                let ident = &mutated_arg.ident;
+                quote! { #ident }
+            } else {
+                quote! { &mut () }
+            };
+
             quote_spanned! { span=>
-                match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_tupled, &mut ()) {
+                match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
                     #unmock_arm
                     #default_impl_delegate_arm
                     e => e.unwrap(#self_ref)
@@ -357,7 +376,8 @@ fn def_method_impl(
         }
         MethodImplKind::Delegate0 => {
             let ident = &method_sig.ident;
-            let inputs_destructuring = method.inputs_destructuring(Tupled(false));
+            let inputs_destructuring =
+                method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
             quote! {
                 self.0.#ident(#inputs_destructuring)
             }
@@ -394,6 +414,7 @@ struct InputTypesTuple(Vec<syn::Type>);
 
 impl InputTypesTuple {
     fn new(mock_method: &MockMethod, attr: &Attr) -> Self {
+        let prefix = &attr.prefix;
         Self(
             mock_method
                 .adapted_sig
@@ -402,10 +423,18 @@ impl InputTypesTuple {
                 .enumerate()
                 .filter_map(|(index, input)| match input {
                     syn::FnArg::Receiver(_) => None,
-                    syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
-                        (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => None,
-                        _ => Some(pat_type.ty.as_ref()),
-                    },
+                    syn::FnArg::Typed(pat_type) => {
+                        match (index, pat_type.pat.as_ref(), &mock_method.mutated_arg) {
+                            (0, syn::Pat::Ident(pat_ident), _) if pat_ident.ident == "self" => None,
+                            (index, _, Some(mutated_arg)) if index == mutated_arg.index => {
+                                let mutated_ty = &mutated_arg.ty;
+                                Some(syn::parse_quote!(
+                                    #prefix::PhantomMut<#mutated_ty>
+                                ))
+                            }
+                            _ => Some(pat_type.ty.as_ref().clone()),
+                        }
+                    }
                 })
                 .map(|ty| util::substitute_lifetimes(ty, &attr.input_lifetime))
                 .collect::<Vec<_>>(),

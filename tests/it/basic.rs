@@ -836,3 +836,30 @@ mod default_body_delegation {
         );
     }
 }
+
+mod mutated_arg {
+    use unimock::*;
+
+    #[unimock(api = MutMock)]
+    trait Mut {
+        fn mutation(&self, a: i32, b: &mut i32, c: i32) -> i32;
+
+        fn mutation2(&self, a: i32, b: &mut i32, c: i32) -> i32 {
+            self.mutation(a, b, c)
+        }
+    }
+
+    #[test]
+    fn can_mutate() {
+        let u = Unimock::new(MutMock::mutation.next_call(matching!(2, _, 21)).mutates(
+            |b, (a, _, c)| {
+                *b = a * c;
+                a + c
+            },
+        ));
+
+        let mut arg1 = 21;
+        assert_eq!(23, u.mutation2(2, &mut arg1, 21));
+        assert_eq!(42, arg1);
+    }
+}
