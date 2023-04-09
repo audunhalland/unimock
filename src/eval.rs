@@ -79,25 +79,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                 let fn_responder =
                     dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
                 let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                    (fn_responder.func)(inputs),
-                    &unimock.value_chain,
-                );
-                Ok(Evaluation::Evaluated(output))
-            }
-            DynResponder::MutationFunction(dyn_fn_responder) => {
-                let fn_responder =
-                    dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
-                let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                    (fn_responder.func)(mutation, inputs),
-                    &unimock.value_chain,
-                );
-                Ok(Evaluation::Evaluated(output))
-            }
-            DynResponder::AnswerFunction(dyn_fn_responder) => {
-                let answer_responder =
-                    dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
-                let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                    (answer_responder.func)(AnswerContext { unimock, mutation }, inputs),
+                    (fn_responder.func)(inputs, AnswerContext { unimock, mutation }),
                     &unimock.value_chain,
                 );
                 Ok(Evaluation::Evaluated(output))

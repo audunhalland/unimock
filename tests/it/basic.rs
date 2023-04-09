@@ -895,7 +895,7 @@ mod borrow_dyn {
         let u = Unimock::new((
             BorrowDynMock::borrow_dyn
                 .next_call(matching!())
-                .answers2(|ctx, ()| ctx.clone_self()),
+                .answers_ctx(|_, ctx| ctx.clone_instance()),
             BorrowDynMock::borrow_dyn_opt
                 .next_call(matching!())
                 .answers(|_| None::<&dyn BorrowDyn>),

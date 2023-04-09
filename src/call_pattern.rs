@@ -1,4 +1,4 @@
-use crate::build::AnswerContext;
+use crate::build;
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
 use crate::macro_api::MismatchReporter;
@@ -104,8 +104,6 @@ pub(crate) enum DynResponder {
     Cell(DynCellResponder),
     Borrow(DynBorrowResponder),
     Function(DynFunctionResponder),
-    MutationFunction(DynMutationFunctionResponder),
-    AnswerFunction(DynAnswerFunctionResponder),
     Panic(String),
     Unmock,
     CallDefaultImpl,
@@ -162,8 +160,6 @@ impl DynResponder {
 pub(crate) struct DynCellResponder(AnyBox);
 pub(crate) struct DynBorrowResponder(AnyBox);
 pub(crate) struct DynFunctionResponder(AnyBox);
-pub(crate) struct DynMutationFunctionResponder(AnyBox);
-pub(crate) struct DynAnswerFunctionResponder(AnyBox);
 
 pub trait DowncastResponder<F: MockFn> {
     type Downcasted;
@@ -195,22 +191,6 @@ impl<F: MockFn> DowncastResponder<F> for DynFunctionResponder {
     }
 }
 
-impl<F: MockFn> DowncastResponder<F> for DynMutationFunctionResponder {
-    type Downcasted = MutationFunctionResponder<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
-impl<F: MockFn> DowncastResponder<F> for DynAnswerFunctionResponder {
-    type Downcasted = AnswerFunctionResponder<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
 pub(crate) struct CellResponder<F: MockFn> {
     pub cell: Box<dyn Cell<<F::Response as Respond>::Type>>,
 }
@@ -221,25 +201,8 @@ pub(crate) struct BorrowResponder<F: MockFn> {
 
 pub(crate) struct FunctionResponder<F: MockFn> {
     #[allow(clippy::type_complexity)]
-    pub func: Box<dyn (for<'i> Fn(F::Inputs<'i>) -> <F::Response as Respond>::Type) + Send + Sync>,
-}
-
-pub(crate) struct MutationFunctionResponder<F: MockFn> {
-    #[allow(clippy::type_complexity)]
     pub func: Box<
-        dyn (for<'m, 'i> Fn(&mut F::Mutation<'m>, F::Inputs<'i>) -> <F::Response as Respond>::Type)
-            + Send
-            + Sync,
-    >,
-}
-
-pub(crate) struct AnswerFunctionResponder<F: MockFn> {
-    #[allow(clippy::type_complexity)]
-    pub func: Box<
-        dyn (for<'u, 'i, 'm> Fn(
-                AnswerContext<'u, '_, 'm, F>,
-                F::Inputs<'i>,
-            ) -> <F::Response as Respond>::Type)
+        dyn (Fn(F::Inputs<'_>, build::AnswerContext<'_, '_, '_, F>) -> <F::Response as Respond>::Type)
             + Send
             + Sync,
     >,
@@ -263,18 +226,6 @@ where
 impl<F: MockFn> FunctionResponder<F> {
     pub fn into_dyn_responder(self) -> DynResponder {
         DynResponder::Function(DynFunctionResponder(Box::new(self)))
-    }
-}
-
-impl<F: MockFn> MutationFunctionResponder<F> {
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::MutationFunction(DynMutationFunctionResponder(Box::new(self)))
-    }
-}
-
-impl<F: MockFn> AnswerFunctionResponder<F> {
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::AnswerFunction(DynAnswerFunctionResponder(Box::new(self)))
     }
 }
 

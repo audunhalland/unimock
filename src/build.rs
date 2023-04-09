@@ -223,7 +223,7 @@ macro_rules! define_response_common_impl {
             {
                 self.builder.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(|_| Default::default()),
+                        func: Box::new(|_, _| Default::default()),
                     }
                     .into_dyn_responder(),
                 );
@@ -233,12 +233,12 @@ macro_rules! define_response_common_impl {
             /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
             pub fn answers<C, R>(mut self, func: C) -> Quantify<'p, F, O>
             where
-                C: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
+                C: (Fn(F::Inputs<'_>) -> R) + Send + Sync + 'static,
                 R: IntoResponse<F::Response>,
             {
                 self.builder.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(move |inputs| func(inputs).into_response()),
+                        func: Box::new(move |inputs, _ctx| func(inputs).into_response()),
                     }
                     .into_dyn_responder(),
                 );
@@ -246,17 +246,16 @@ macro_rules! define_response_common_impl {
             }
 
             /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
-            pub fn answers2<C, R>(mut self, func: C) -> Quantify<'p, F, O>
+            ///
+            /// This variant passes an [AnswerContext] as the second parameter.
+            pub fn answers_ctx<C, R>(mut self, func: C) -> Quantify<'p, F, O>
             where
-                C: (for<'u, 'm1, 'i> Fn(AnswerContext<'u, '_, 'm1, F>, F::Inputs<'i>) -> R)
-                    + Send
-                    + Sync
-                    + 'static,
+                C: (Fn(F::Inputs<'_>, AnswerContext<'_, '_, '_, F>) -> R) + Send + Sync + 'static,
                 R: IntoResponse<F::Response>,
             {
                 self.builder.push_responder(
-                    AnswerFunctionResponder::<F> {
-                        func: Box::new(move |ctx, inputs| func(ctx, inputs).into_response()),
+                    FunctionResponder::<F> {
+                        func: Box::new(move |inputs, ctx| func(inputs, ctx).into_response()),
                     }
                     .into_dyn_responder(),
                 );
@@ -266,16 +265,13 @@ macro_rules! define_response_common_impl {
             /// Specify the response of the call pattern by invoking the given closure that supports mutating _one_ `&mut` parameter from the mocked signature.
             pub fn mutates<C, R>(mut self, func: C) -> Quantify<'p, F, O>
             where
-                C: (for<'m, 'i> Fn(&mut F::Mutation<'m>, F::Inputs<'i>) -> R)
-                    + Send
-                    + Sync
-                    + 'static,
+                C: (Fn(&mut F::Mutation<'_>, F::Inputs<'_>) -> R) + Send + Sync + 'static,
                 R: IntoResponse<F::Response>,
             {
                 self.builder.push_responder(
-                    MutationFunctionResponder::<F> {
-                        func: Box::new(move |inputs, mut_input| {
-                            func(inputs, mut_input).into_response()
+                    FunctionResponder::<F> {
+                        func: Box::new(move |inputs, ctx| {
+                            func(ctx.mutation, inputs).into_response()
                         }),
                     }
                     .into_dyn_responder(),
@@ -294,13 +290,13 @@ macro_rules! define_response_common_impl {
             pub fn answers_leaked_ref<C, R, T>(mut self, func: C) -> Quantify<'p, F, O>
             where
                 F: MockFn<Response = StaticRef<T>>,
-                C: (for<'i> Fn(F::Inputs<'i>) -> R) + Send + Sync + 'static,
+                C: (Fn(F::Inputs<'_>) -> R) + Send + Sync + 'static,
                 R: std::borrow::Borrow<T> + 'static,
                 T: 'static,
             {
                 self.builder.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(move |inputs| {
+                        func: Box::new(move |inputs, _| {
                             let value = func(inputs);
                             let leaked_ref = Box::leak(Box::new(value));
 
@@ -577,18 +573,17 @@ where
     }
 }
 
-/// AnswerContext
+/// AnswerContext represents known information in the current mocking context.
 pub struct AnswerContext<'u, 'm0, 'm1, F: MockFn> {
-    /// The unimock instance currently executing
     pub(crate) unimock: &'u Unimock,
 
-    /// The current mutation
+    /// The mutation of the currently executing mock function.
     pub mutation: &'m0 mut F::Mutation<'m1>,
 }
 
 impl<'u, 'm0, 'm1, F: MockFn> AnswerContext<'u, 'm0, 'm1, F> {
-    /// Construct a new unimock instance
-    pub fn clone_self(&self) -> Unimock {
+    /// Construct a new unimock instance as a clone of the one currently in the context.
+    pub fn clone_instance(&self) -> Unimock {
         self.unimock.clone()
     }
 }
