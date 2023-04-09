@@ -74,34 +74,44 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
     let generic_params = util::Generics::params(&trait_info, None);
     let generic_args = util::Generics::args(&trait_info, None, InferImplTrait(false));
 
-    let (opt_mock_interface_public, opt_mock_interface_private) = match &attr.mock_api {
+    let (opt_mock_interface_public, opt_mock_interface_private, impl_doc) = match &attr.mock_api {
         MockApi::Hidden => (
             None,
             Some(quote! {
                 #(#mock_fn_struct_items)*
             }),
+            None,
         ),
         MockApi::MockMod(module_ident) => {
             let path_string = path_to_string(trait_path);
-            let doc_string = format!("Unimock setup module for [{path_string}].");
-            let doc_lit_str = syn::LitStr::new(&doc_string, proc_macro2::Span::call_site());
+            let mod_doc_string = format!("Unimock setup module for [{path_string}].");
+            let mod_doc_lit_str = syn::LitStr::new(&mod_doc_string, proc_macro2::Span::call_site());
+
+            let impl_doc_string =
+                format!("Mocked implementation. Mock API is available at [{module_ident}].");
+            let impl_doc_lit_str =
+                syn::LitStr::new(&impl_doc_string, proc_macro2::Span::call_site());
 
             let vis = &trait_info.input_trait.vis;
             (
                 Some(quote! {
-                    #[doc = #doc_lit_str]
+                    #[doc = #mod_doc_lit_str]
                     #[allow(non_snake_case)]
                     #vis mod #module_ident {
                         #(#mock_fn_struct_items)*
                     }
                 }),
                 None,
+                Some(quote! {
+                    #[doc = #impl_doc_lit_str]
+                }),
             )
         }
         MockApi::Flattened(_) => (
             Some(quote! {
                 #(#mock_fn_struct_items)*
             }),
+            None,
             None,
         ),
     };
@@ -144,6 +154,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #opt_mock_interface_private
             #(#mock_fn_impl_details)*
 
+            #impl_doc
             #(#impl_attributes)*
             impl #generic_params #trait_path #generic_args for #prefix::Unimock #where_clause {
                 #(#associated_futures)*
