@@ -388,6 +388,8 @@ mod state;
 
 use std::any::TypeId;
 use std::fmt::Debug;
+use std::panic::RefUnwindSafe;
+use std::panic::UnwindSafe;
 use std::sync::Arc;
 
 use assemble::MockAssembler;
@@ -825,6 +827,9 @@ impl Drop for Unimock {
         panic_if_nonempty(&mock_errors);
     }
 }
+
+impl UnwindSafe for Unimock {}
+impl RefUnwindSafe for Unimock {}
 
 ///
 /// The main trait used for unimock configuration.

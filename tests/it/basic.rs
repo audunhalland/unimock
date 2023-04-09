@@ -1,12 +1,17 @@
-use unimock::*;
+use std::{
+    borrow::Cow,
+    panic::{RefUnwindSafe, UnwindSafe},
+    rc::Rc,
+};
 
 use async_trait::async_trait;
+use unimock::*;
 
-fn assert_send_sync<T: Send + Sync>() {}
+fn assert_implements_niceness<T: Send + Sync + UnwindSafe + RefUnwindSafe>() {}
 
 #[test]
-fn unimock_is_send_and_sync() {
-    assert_send_sync::<Unimock>();
+fn all_the_auto_trait_goodies() {
+    assert_implements_niceness::<Unimock>();
 }
 
 #[test]
@@ -411,7 +416,7 @@ mod custom_api_module {
 
     #[test]
     #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:419 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:424 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
         Unimock::new(
@@ -490,8 +495,6 @@ async fn test_async_trait() {
         .await
     );
 }
-
-use std::{borrow::Cow, rc::Rc};
 
 #[unimock(api=CowBasedMock)]
 trait CowBased {
@@ -639,7 +642,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:615 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:618 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());

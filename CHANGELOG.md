@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - macro keyword `emulate` renamed to `mirror`.
 ### Fixed
 - Generics involving `Self`.
+- Unimock now implements `UnwindSafe` and `RefUnwindSafe` by manual (safe) implementation.
 
 ## [0.4.12] - 2023-03-29
 ### Fixed
