@@ -22,9 +22,19 @@ pub mod error {
 /// Mock APIs for `std::io` traits
 #[doc_cfg::doc_cfg(feature = "mock-std")]
 pub mod io {
-    use std::io::{IoSlice, IoSliceMut, Result};
+    use std::io::{IoSlice, IoSliceMut, Result, SeekFrom};
 
     use unimock_macros::unimock;
+
+    #[unimock(prefix=crate, api=BufReadMock, mirror=std::io::BufRead)]
+    pub trait BufRead: Read {
+        fn fill_buf(&mut self) -> Result<&[u8]>;
+        fn consume(&mut self, amt: usize);
+        // unstable
+        // fn has_data_left(&mut self) -> Result<bool> {}
+        fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> Result<usize> {}
+        fn read_line(&mut self, buf: &mut String) -> Result<usize> {}
+    }
 
     #[unimock(prefix=crate, api=ReadMock, mirror=std::io::Read)]
     pub trait Read {

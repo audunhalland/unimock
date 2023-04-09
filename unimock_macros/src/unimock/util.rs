@@ -1,4 +1,4 @@
-use super::{method::MockMethod, trait_info::TraitInfo};
+use super::{method::MockMethod, trait_info::TraitInfo, Attr};
 
 use quote::*;
 
@@ -218,6 +218,30 @@ pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: &syn::Lifetime) -> syn:
     let mut replace = LifetimeReplace { lifetime };
     use syn::visit_mut::VisitMut;
     replace.visit_type_mut(&mut ty);
+
+    ty
+}
+
+pub fn self_type_to_unimock(mut ty: syn::Type, attr: &Attr) -> syn::Type {
+    struct SelfTypeToUnimock<'a> {
+        attr: &'a Attr,
+    }
+
+    impl<'a> syn::visit_mut::VisitMut for SelfTypeToUnimock<'a> {
+        fn visit_type_mut(&mut self, ty: &mut syn::Type) {
+            if let syn::Type::Path(type_path) = ty {
+                if type_path.path.is_ident("Self") {
+                    let prefix = &self.attr.prefix;
+                    type_path.path = syn::parse_quote!(#prefix::Unimock);
+                }
+            }
+            syn::visit_mut::visit_type_mut(self, ty);
+        }
+    }
+
+    let mut sttu = SelfTypeToUnimock { attr };
+    use syn::visit_mut::VisitMut;
+    sttu.visit_type_mut(&mut ty);
 
     ty
 }

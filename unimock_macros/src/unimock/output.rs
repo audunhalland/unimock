@@ -2,6 +2,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse_quote, visit_mut::VisitMut};
 
+use super::{util, Attr};
+
 pub struct OutputStructure {
     pub wrapping: OutputWrapping,
     pub ownership: OutputOwnership,
@@ -75,6 +77,7 @@ pub fn determine_output_structure(
     prefix: &syn::Path,
     item_trait: &syn::ItemTrait,
     sig: &syn::Signature,
+    attr: &Attr,
 ) -> OutputStructure {
     match &sig.output {
         syn::ReturnType::Default => OutputStructure {
@@ -106,10 +109,12 @@ pub fn determine_output_structure(
                     && is_self_segment(path.path.segments.first())
                     && (path.path.segments.len() == 2) =>
             {
-                determine_associated_future_structure(prefix, item_trait, sig, &path.path)
-                    .unwrap_or_else(|| determine_owned_or_mixed_output_structure(prefix, sig, ty))
+                determine_associated_future_structure(prefix, item_trait, sig, &path.path, attr)
+                    .unwrap_or_else(|| {
+                        determine_owned_or_mixed_output_structure(prefix, sig, ty, attr)
+                    })
             }
-            _ => determine_owned_or_mixed_output_structure(prefix, sig, ty),
+            _ => determine_owned_or_mixed_output_structure(prefix, sig, ty, attr),
         },
     }
 }
@@ -119,8 +124,11 @@ pub fn determine_owned_or_mixed_output_structure(
     prefix: &syn::Path,
     sig: &syn::Signature,
     ty: &syn::Type,
+    attr: &Attr,
 ) -> OutputStructure {
     let mut inner_ty = ty.clone();
+
+    inner_ty = util::self_type_to_unimock(inner_ty, attr);
 
     let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
 
@@ -206,6 +214,7 @@ fn determine_associated_future_structure(
     item_trait: &syn::ItemTrait,
     sig: &syn::Signature,
     path: &syn::Path,
+    attr: &Attr,
 ) -> Option<OutputStructure> {
     let assoc_ident = &path.segments[1].ident;
 
@@ -260,7 +269,7 @@ fn determine_associated_future_structure(
         .next()?;
 
     let mut future_output_structure =
-        determine_owned_or_mixed_output_structure(prefix, sig, &output_binding.ty);
+        determine_owned_or_mixed_output_structure(prefix, sig, &output_binding.ty, attr);
     future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty.clone());
 
     Some(future_output_structure)

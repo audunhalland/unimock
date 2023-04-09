@@ -276,3 +276,23 @@ mod generic_combo {
         async fn ret<U: 'static + Send>(&self, u: U, a: impl Any + Send + 'static) -> T;
     }
 }
+
+mod self_type {
+    use super::*;
+
+    pub struct Generic<T>(T);
+
+    #[unimock(api=SelfParamMock)]
+    trait SelfParam {
+        fn self_param(&self, p: Generic<Self>)
+        where
+            Self: Sized;
+    }
+
+    #[unimock(api=SelfReturnMock)]
+    trait SelfReturn {
+        fn self_return(&self) -> Generic<Self>
+        where
+            Self: Sized;
+    }
+}

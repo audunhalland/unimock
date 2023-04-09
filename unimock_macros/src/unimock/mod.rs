@@ -469,7 +469,11 @@ impl InputTypesTuple {
                         }
                     }
                 })
-                .map(|ty| util::substitute_lifetimes(ty, input_lifetime))
+                .map(|mut ty| {
+                    ty = util::substitute_lifetimes(ty, input_lifetime);
+                    ty = util::self_type_to_unimock(ty, attr);
+                    ty
+                })
                 .collect::<Vec<_>>(),
         )
     }
