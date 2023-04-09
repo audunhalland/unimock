@@ -385,6 +385,7 @@ mod eval;
 mod fn_mocker;
 mod mismatch;
 mod state;
+mod teardown;
 
 use std::any::TypeId;
 use std::fmt::Debug;
@@ -650,7 +651,6 @@ enum FallbackMode {
 /// Therefore, Unimock should always be cloned before sending off to another thread.
 ///
 pub struct Unimock {
-    original_instance: bool,
     shared_state: Arc<state::SharedState>,
 
     // A value chain for "dumping" owned return values that
@@ -658,6 +658,9 @@ pub struct Unimock {
     value_chain: value_chain::ValueChain,
 
     default_impl_delegator_cell: OnceCell<Box<DefaultImplDelegator>>,
+
+    original_instance: bool,
+    torn_down: bool,
 }
 
 impl Unimock {
@@ -730,10 +733,11 @@ impl Unimock {
         };
 
         Self {
-            original_instance: true,
             shared_state: Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
             value_chain: Default::default(),
             default_impl_delegator_cell: Default::default(),
+            original_instance: true,
+            torn_down: false,
         }
     }
 
@@ -749,10 +753,11 @@ impl Unimock {
 impl Clone for Unimock {
     fn clone(&self) -> Unimock {
         Unimock {
-            original_instance: false,
             shared_state: self.shared_state.clone(),
             value_chain: Default::default(),
             default_impl_delegator_cell: Default::default(),
+            original_instance: false,
+            torn_down: false,
         }
     }
 }
@@ -774,62 +779,55 @@ impl AsMut<DefaultImplDelegator> for Unimock {
     }
 }
 
+impl UnwindSafe for Unimock {}
+impl RefUnwindSafe for Unimock {}
+
 impl Drop for Unimock {
     fn drop(&mut self) {
-        // first potentially drop the directly owned "helper" Unimock instance
-        drop(self.default_impl_delegator_cell.take());
-
-        // drop value chain, in case it has Unimock instances in it.
-        // doing that lowers the risk of hitting `cannot verify calls`.
-        drop(std::mem::take(&mut self.value_chain));
-
-        // skip verification if not the original instance.
-        if !self.original_instance {
+        if self.torn_down {
             return;
         }
 
-        // skip verification if already panicking in the original thread.
-        if std::thread::panicking() {
-            return;
-        }
-
-        let strong_count = Arc::strong_count(&self.shared_state);
-
-        if strong_count > 1 {
-            panic!("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.");
-        }
-
-        if std::thread::current().id() != self.shared_state.original_thread {
-            panic!("Original Unimock instance destroyed on a different thread than the one it was created on. To solve this, clone the object before sending it to the other thread.");
-        }
-
-        #[track_caller]
-        fn panic_if_nonempty(errors: &[error::MockError]) {
-            if errors.is_empty() {
-                return;
-            }
-
+        if let Err(errors) = teardown::teardown(self) {
             let error_strings = errors.iter().map(|err| err.to_string()).collect::<Vec<_>>();
             panic!("{}", error_strings.join("\n"));
         }
-
-        {
-            // if already panicked, it must be in another thread. Forward that panic to the original thread.
-            // (if original is even still in the original thread.. But panic as close to the test "root" as possible)
-            let panic_reasons = self.shared_state.clone_panic_reasons();
-            panic_if_nonempty(&panic_reasons);
-        }
-
-        let mut mock_errors = Vec::new();
-        for (_, fn_mocker) in self.shared_state.fn_mockers.iter() {
-            fn_mocker.verify(&mut mock_errors);
-        }
-        panic_if_nonempty(&mock_errors);
     }
 }
 
-impl UnwindSafe for Unimock {}
-impl RefUnwindSafe for Unimock {}
+/// This implementation of `Termination` may be used for returning a Unimock instance as the result of a test:
+///
+/// ```rust
+/// # use unimock::*;
+/// #[test]
+/// fn test() -> Unimock {
+///     Unimock::new(())
+/// }
+/// ```
+///
+/// This enables a more functional test style, instead of relying on panic-in-drop.
+///
+/// Calling `report` is the only way to stop unimock panicking on failed verifications, so _use with care_.
+///
+/// # Mocking
+/// The `"mock-std"` feature also enables mocking of this trait through [mock::std::process::TerminationMock].
+/// This trait mock is partial by default: Unless explicitly mocked, it behaves as specified above.
+#[doc_cfg::doc_cfg(feature = "mock-std")]
+impl std::process::Termination for Unimock {
+    fn report(mut self) -> std::process::ExitCode {
+        #[cfg(feature = "mock-std")]
+        {
+            match macro_api::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ())
+            {
+                macro_api::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
+                e => e.unwrap(&self),
+            }
+        }
+
+        #[cfg(not(feature = "mock-std"))]
+        teardown::teardown_report(&mut self)
+    }
+}
 
 ///
 /// The main trait used for unimock configuration.
@@ -965,6 +963,7 @@ pub trait MockFn: Sized + 'static {
 pub struct MockFnInfo {
     path: TraitMethodPath,
     has_default_impl: bool,
+    pub(crate) partial_by_default: bool,
 }
 
 impl MockFnInfo {
@@ -976,6 +975,7 @@ impl MockFnInfo {
                 method_ident: "?",
             },
             has_default_impl: false,
+            partial_by_default: false,
         }
     }
 

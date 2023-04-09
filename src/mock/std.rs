@@ -68,3 +68,37 @@ pub mod io {
         // fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {}
     }
 }
+
+/// Mock APIs for `std::process` traits
+#[doc_cfg::doc_cfg(feature = "mock-std")]
+pub mod process {
+    /// Unimock setup module for [std::io::BufRead].
+    #[allow(non_snake_case)]
+    pub mod TerminationMock {
+        use crate::{output::Owned, MockFn};
+
+        #[allow(non_camel_case_types)]
+        /// MockFn for [`Termination(amt: usize) -> ExitCode`](std::process::Termination::report).
+        ///
+        /// Note: This mock is partial by default.
+        /// i.e. unless explicitly mocked, it reports Unimock's real errors and status for use in tests.
+        pub struct report;
+
+        impl MockFn for report {
+            type Inputs<'i> = ();
+            type Mutation<'m> = ();
+            type Response = Owned<std::process::ExitCode>;
+            type Output<'u> = Self::Response;
+
+            fn info() -> crate::MockFnInfo {
+                let mut info = crate::MockFnInfo::new().path("Termination", "report");
+                info.partial_by_default = true;
+                info
+            }
+
+            fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
+                vec![]
+            }
+        }
+    }
+}

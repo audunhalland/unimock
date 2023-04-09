@@ -910,3 +910,8 @@ mod borrow_dyn {
         assert!(u3.is_none());
     }
 }
+
+#[test]
+fn termination_ok() -> Unimock {
+    Unimock::new(())
+}

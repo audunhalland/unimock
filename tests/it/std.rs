@@ -135,3 +135,44 @@ fn test_fmt_io_duplex_default_impl_explicit() {
     ));
     write!(&mut unimock.clone(), "{unimock}").unwrap();
 }
+
+mod termination {
+    use std::process::{ExitCode, Termination};
+
+    use unimock::{mock::std::process::TerminationMock, *};
+
+    #[unimock(api=NonsenseMock)]
+    trait Nonsense {
+        fn nonsense(&self);
+    }
+
+    #[test]
+    fn unmocked_termination_ok() {
+        let exit_code = Unimock::new(()).report();
+        assert_eq!("ExitCode(unix_exit_status(0))", format!("{exit_code:?}"));
+    }
+
+    #[test]
+    fn unmocked_termination_fail() {
+        let exit_code =
+            Unimock::new(NonsenseMock::nonsense.next_call(matching!(_)).returns(())).report();
+        assert_eq!("ExitCode(unix_exit_status(1))", format!("{exit_code:?}"));
+    }
+
+    #[test]
+    fn mocked_termination() {
+        let u = Unimock::new(
+            TerminationMock::report
+                .next_call(matching!())
+                .returns(ExitCode::FAILURE)
+                .once()
+                .then()
+                .returns(ExitCode::SUCCESS),
+        );
+        assert_eq!(
+            "ExitCode(unix_exit_status(1))",
+            format!("{:?}", u.clone().report())
+        );
+        assert_eq!("ExitCode(unix_exit_status(0))", format!("{:?}", u.report()));
+    }
+}

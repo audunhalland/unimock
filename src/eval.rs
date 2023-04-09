@@ -114,16 +114,16 @@ impl<'u, 's> DynCtx<'u, 's> {
     ) -> MockResult<EvalResult<'u>> {
         let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
             None => {
-                if self.mock_fn.info.has_default_impl {
-                    return Ok(EvalResult::CallDefaultImpl);
+                return if self.mock_fn.info.has_default_impl {
+                    Ok(EvalResult::CallDefaultImpl)
+                } else if self.mock_fn.info.partial_by_default {
+                    Ok(EvalResult::Unmock)
                 } else {
                     match self.shared_state.fallback_mode {
-                        FallbackMode::Error => {
-                            return Err(MockError::NoMockImplementation {
-                                fn_call: self.fn_call(),
-                            })
-                        }
-                        FallbackMode::Unmock => return Ok(EvalResult::Unmock),
+                        FallbackMode::Error => Err(MockError::NoMockImplementation {
+                            fn_call: self.fn_call(),
+                        }),
+                        FallbackMode::Unmock => Ok(EvalResult::Unmock),
                     }
                 }
             }
