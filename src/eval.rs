@@ -1,7 +1,7 @@
+use crate::build::AnswerContext;
 use crate::call_pattern::{
     CallPattern, DowncastResponder, DynResponder, PatIndex, PatternError, PatternResult,
 };
-use crate::debug;
 use crate::error::{self};
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
@@ -10,6 +10,7 @@ use crate::mismatch::Mismatches;
 use crate::output::Output;
 use crate::state::SharedState;
 use crate::DynMockFn;
+use crate::{debug, Unimock};
 use crate::{FallbackMode, MockFn};
 
 enum EvalResult<'u> {
@@ -25,13 +26,13 @@ struct EvalResponder<'u> {
 }
 
 pub(crate) fn eval<'u, 'i, F: MockFn>(
-    shared_state: &'u SharedState,
+    unimock: &'u Unimock,
     inputs: F::Inputs<'i>,
     mutation: &mut F::Mutation<'_>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
         mock_fn: DynMockFn::new::<F>(),
-        shared_state,
+        shared_state: &unimock.shared_state,
         input_debugger: &|| F::debug_inputs(&inputs),
     };
 
@@ -45,7 +46,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                 Some(response) => {
                     let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
                         *response,
-                        &shared_state.value_chain,
+                        &unimock.value_chain,
                     );
 
                     Ok(Evaluation::Evaluated(output))
@@ -79,7 +80,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
                 let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
                     (fn_responder.func)(inputs),
-                    &shared_state.value_chain,
+                    &unimock.value_chain,
                 );
                 Ok(Evaluation::Evaluated(output))
             }
@@ -88,7 +89,16 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
                 let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
                     (fn_responder.func)(mutation, inputs),
-                    &shared_state.value_chain,
+                    &unimock.value_chain,
+                );
+                Ok(Evaluation::Evaluated(output))
+            }
+            DynResponder::AnswerFunction(dyn_fn_responder) => {
+                let answer_responder =
+                    dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
+                let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
+                    (answer_responder.func)(AnswerContext { unimock, mutation }, inputs),
+                    &unimock.value_chain,
                 );
                 Ok(Evaluation::Evaluated(output))
             }

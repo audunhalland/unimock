@@ -872,11 +872,38 @@ mod mutated_arg {
 }
 
 mod borrow_dyn {
+    use std::borrow::Borrow;
+
     use unimock::*;
 
+    // Note: The current architecture forces `Send + Sync` bounds for this trait
+    // when returned through `Mixed` function like `-> Option<&dyn T>`.
     #[unimock(api = BorrowDynMock)]
-    pub trait BorrowDyn {
+    pub trait BorrowDyn: Send + Sync {
         fn borrow_dyn(&self) -> &dyn BorrowDyn;
         fn borrow_dyn_opt(&self) -> Option<&dyn BorrowDyn>;
+    }
+
+    impl Borrow<dyn BorrowDyn + 'static> for Unimock {
+        fn borrow(&self) -> &(dyn BorrowDyn + 'static) {
+            self
+        }
+    }
+
+    #[test]
+    fn return_reference_to_unimock() {
+        let u = Unimock::new((
+            BorrowDynMock::borrow_dyn
+                .next_call(matching!())
+                .answers2(|ctx, ()| ctx.clone_self()),
+            BorrowDynMock::borrow_dyn_opt
+                .next_call(matching!())
+                .answers(|_| None::<&dyn BorrowDyn>),
+        ));
+
+        let u2 = u.borrow_dyn();
+        let u3 = u2.borrow_dyn_opt();
+
+        assert!(u3.is_none());
     }
 }

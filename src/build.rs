@@ -245,6 +245,24 @@ macro_rules! define_response_common_impl {
                 self.quantify()
             }
 
+            /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
+            pub fn answers2<C, R>(mut self, func: C) -> Quantify<'p, F, O>
+            where
+                C: (for<'u, 'm1, 'i> Fn(AnswerContext<'u, '_, 'm1, F>, F::Inputs<'i>) -> R)
+                    + Send
+                    + Sync
+                    + 'static,
+                R: IntoResponse<F::Response>,
+            {
+                self.builder.push_responder(
+                    AnswerFunctionResponder::<F> {
+                        func: Box::new(move |ctx, inputs| func(ctx, inputs).into_response()),
+                    }
+                    .into_dyn_responder(),
+                );
+                self.quantify()
+            }
+
             /// Specify the response of the call pattern by invoking the given closure that supports mutating _one_ `&mut` parameter from the mocked signature.
             pub fn mutates<C, R>(mut self, func: C) -> Quantify<'p, F, O>
             where
@@ -556,5 +574,21 @@ where
             dyn_mock_fn: DynMockFn::new::<F>(),
             builder: self.builder.into_owned(),
         })
+    }
+}
+
+/// AnswerContext
+pub struct AnswerContext<'u, 'm0, 'm1, F: MockFn> {
+    /// The unimock instance currently executing
+    pub(crate) unimock: &'u Unimock,
+
+    /// The current mutation
+    pub mutation: &'m0 mut F::Mutation<'m1>,
+}
+
+impl<'u, 'm0, 'm1, F: MockFn> AnswerContext<'u, 'm0, 'm1, F> {
+    /// Construct a new unimock instance
+    pub fn clone_self(&self) -> Unimock {
+        self.unimock.clone()
     }
 }

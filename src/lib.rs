@@ -614,6 +614,7 @@ pub use unimock_macros::unimock;
 /// ```
 ///
 pub use unimock_macros::matching;
+use value_chain::ValueChain;
 
 #[derive(Clone, Copy)]
 enum FallbackMode {
@@ -650,6 +651,11 @@ enum FallbackMode {
 pub struct Unimock {
     original_instance: bool,
     shared_state: Arc<state::SharedState>,
+
+    // A value chain for "dumping" owned return values that
+    // a function signature needs to *borrow* instead.
+    value_chain: ValueChain,
+
     default_impl_delegator_cell: OnceCell<Box<DefaultImplDelegator>>,
 }
 
@@ -725,6 +731,7 @@ impl Unimock {
         Self {
             original_instance: true,
             shared_state: Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
+            value_chain: Default::default(),
             default_impl_delegator_cell: Default::default(),
         }
     }
@@ -743,6 +750,7 @@ impl Clone for Unimock {
         Unimock {
             original_instance: false,
             shared_state: self.shared_state.clone(),
+            value_chain: Default::default(),
             default_impl_delegator_cell: Default::default(),
         }
     }
@@ -769,6 +777,10 @@ impl Drop for Unimock {
     fn drop(&mut self) {
         // first potentially drop the directly owned "helper" Unimock instance
         drop(self.default_impl_delegator_cell.take());
+
+        // drop value chain, in case it has Unimock instances in it.
+        // doing that lowers the risk of hitting `cannot verify calls`.
+        drop(std::mem::take(&mut self.value_chain));
 
         // skip verification if not the original instance.
         if !self.original_instance {

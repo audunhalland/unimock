@@ -170,7 +170,7 @@ pub fn eval<'u, 'i, F>(
 where
     F: MockFn + 'static,
 {
-    unimock.handle_error(eval::eval(&unimock.shared_state, inputs, mut_input))
+    unimock.handle_error(eval::eval(unimock, inputs, mut_input))
 }
 
 /// The DefaultImplDelegator is a struct
