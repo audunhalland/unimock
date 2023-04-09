@@ -35,6 +35,17 @@ pub mod io {
         fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {}
     }
 
+    #[unimock(prefix=crate, api=SeekMock, mirror=std::io::Seek)]
+    pub trait Seek {
+        fn seek(&mut self, pos: SeekFrom) -> Result<u64>;
+
+        fn rewind(&mut self) -> Result<()> {}
+        fn stream_position(&mut self) -> Result<u64> {}
+
+        // unstable:
+        // fn stream_len(&mut self) -> Result<u64> {}
+    }
+
     #[unimock(prefix=crate, api=WriteMock, mirror=std::io::Write)]
     pub trait Write {
         fn write(&mut self, buf: &[u8]) -> Result<usize>;
