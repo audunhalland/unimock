@@ -7,7 +7,7 @@ pub struct Attr {
     /// Module to put the MockFn in
     pub mock_api: MockApi,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
-    pub emulate: Option<syn::Path>,
+    pub mirror: Option<syn::Path>,
     pub input_lifetime: syn::Lifetime,
     pub debug: bool,
 }
@@ -46,7 +46,7 @@ impl syn::parse::Parse for Attr {
         let mut mock_api = MockApi::Hidden;
         let mut unmocks = None;
         let mut debug = false;
-        let mut emulate = None;
+        let mut mirror = None;
 
         while !input.is_empty() {
             let keyword: syn::Ident = input.parse()?;
@@ -87,9 +87,9 @@ impl syn::parse::Parse for Attr {
                 "debug" => {
                     debug = input.parse::<syn::LitBool>()?.value;
                 }
-                "emulate" => {
+                "mirror" => {
                     let path: syn::Path = input.parse()?;
-                    emulate = Some(path);
+                    mirror = Some(path);
                 }
                 _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
             };
@@ -105,7 +105,7 @@ impl syn::parse::Parse for Attr {
             prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
             mock_api,
             unmocks,
-            emulate,
+            mirror,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
             debug,
         })

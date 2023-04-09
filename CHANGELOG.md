@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `macro_api::Evalution` is now `#[non_exhaustive]`.
 - `macro_api::Evalution::Skipped` is not called `Unmocked`.
 - `MockFn::NAME` replaced by `fn info() -> MockFnInfo`.
+- macro keyword `emulate` renamed to `mirror`.
 
 ## [0.4.12] - 2023-03-29
 ### Fixed

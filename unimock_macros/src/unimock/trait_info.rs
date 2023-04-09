@@ -49,8 +49,8 @@ impl<'t> TraitInfo<'t> {
         let ident_lit =
             syn::LitStr::new(&format!("{}", &input_trait.ident), input_trait.ident.span());
 
-        let (output_trait, trait_path) = if let Some(emulate) = &attr.emulate {
-            (None, emulate.clone())
+        let (output_trait, trait_path) = if let Some(mirror) = &attr.mirror {
+            (None, mirror.clone())
         } else {
             let trait_ident = &input_trait.ident;
             (Some(input_trait), syn::parse_quote! { #trait_ident })

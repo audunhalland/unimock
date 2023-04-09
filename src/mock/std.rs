@@ -6,7 +6,7 @@ pub mod error {
     use crate::unimock;
     use std::error::Error;
 
-    #[unimock(prefix=crate, api=ErrorMock, emulate=std::error::Error)]
+    #[unimock(prefix=crate, api=ErrorMock, mirror=std::error::Error)]
     pub trait Error {
         fn source(&self) -> Option<&(dyn Error + 'static)> {}
 
@@ -26,7 +26,7 @@ pub mod io {
 
     use unimock_macros::unimock;
 
-    #[unimock(prefix=crate, api=ReadMock, emulate=std::io::Read)]
+    #[unimock(prefix=crate, api=ReadMock, mirror=std::io::Read)]
     pub trait Read {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
         fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {}
@@ -35,7 +35,7 @@ pub mod io {
         fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {}
     }
 
-    #[unimock(prefix=crate, api=WriteMock, emulate=std::io::Write)]
+    #[unimock(prefix=crate, api=WriteMock, mirror=std::io::Write)]
     pub trait Write {
         fn write(&mut self, buf: &[u8]) -> Result<usize>;
         fn flush(&mut self) -> Result<()>;
