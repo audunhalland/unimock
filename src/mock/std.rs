@@ -72,13 +72,13 @@ pub mod io {
 /// Mock APIs for `std::process` traits
 #[doc_cfg::doc_cfg(feature = "mock-std")]
 pub mod process {
-    /// Unimock setup module for [std::io::BufRead].
+    /// Unimock mock API for [std::process::Termination].
     #[allow(non_snake_case)]
     pub mod TerminationMock {
         use crate::{output::Owned, MockFn};
 
         #[allow(non_camel_case_types)]
-        /// MockFn for [`Termination(amt: usize) -> ExitCode`](std::process::Termination::report).
+        /// MockFn for [`Termination::report() -> ExitCode`](std::process::Termination::report).
         ///
         /// Note: This mock is partial by default.
         /// i.e. unless explicitly mocked, it reports Unimock's real errors and status for use in tests.

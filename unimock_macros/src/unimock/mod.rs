@@ -84,7 +84,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         ),
         MockApi::MockMod(module_ident) => {
             let path_string = path_to_string(trait_path);
-            let mod_doc_string = format!("Unimock setup module for [{path_string}].");
+            let mod_doc_string = format!("Unimock mock API for [{path_string}].");
             let mod_doc_lit_str = syn::LitStr::new(&mod_doc_string, proc_macro2::Span::call_site());
 
             let impl_doc_string =
