@@ -614,7 +614,6 @@ pub use unimock_macros::unimock;
 /// ```
 ///
 pub use unimock_macros::matching;
-use value_chain::ValueChain;
 
 #[derive(Clone, Copy)]
 enum FallbackMode {
@@ -654,7 +653,7 @@ pub struct Unimock {
 
     // A value chain for "dumping" owned return values that
     // a function signature needs to *borrow* instead.
-    value_chain: ValueChain,
+    value_chain: value_chain::ValueChain,
 
     default_impl_delegator_cell: OnceCell<Box<DefaultImplDelegator>>,
 }
