@@ -368,7 +368,7 @@ pub mod output;
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
 
-/// Mock APIs for various crates
+/// Mock APIs for various crates.
 pub mod mock;
 
 #[doc(hidden)]
