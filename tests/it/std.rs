@@ -141,6 +141,11 @@ mod termination {
 
     use unimock::{mock::std::process::TerminationMock, *};
 
+    #[test]
+    fn termination_ok() -> Unimock {
+        Unimock::new(())
+    }
+
     #[unimock(api=NonsenseMock)]
     trait Nonsense {
         fn nonsense(&self);
