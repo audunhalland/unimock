@@ -395,18 +395,14 @@ fn def_method_impl(
                         mutability: None,
                         ..
                     }) => quote! {
-                        use ::core::convert::AsRef;
-                        use #delegator_path;
-                        <Self as AsRef<DefaultImplDelegator>>::as_ref(self)
+                        #prefix::macro_api::as_ref::<Self, #delegator_path>(self)
                     },
                     Some(syn::Receiver {
                         reference: Some(_),
                         mutability: Some(_),
                         ..
                     }) => quote! {
-                        use ::core::convert::AsMut;
-                        use #delegator_path;
-                        <Self as AsMut<DefaultImplDelegator>>::as_mut(self)
+                        #prefix::macro_api::as_mut::<Self, #delegator_path>(self)
                     },
                     _ => todo!("unhandled DefaultImplDelegator constructor"),
                 };
@@ -443,8 +439,35 @@ fn def_method_impl(
             let ident = &method_sig.ident;
             let inputs_destructuring =
                 method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
+            let unimock_accessor = match method_sig.receiver() {
+                Some(syn::Receiver {
+                    reference: None,
+                    ty,
+                    ..
+                }) => match ty.as_ref() {
+                    syn::Type::Path(path) if path.path.is_ident("Self") => {
+                        quote! { #prefix::Unimock::from(self) }
+                    }
+                    _ => panic!("BUG: Incompatible receiver for default delegator"),
+                },
+                Some(syn::Receiver {
+                    reference: Some(_),
+                    mutability: None,
+                    ..
+                }) => {
+                    quote! { #prefix::macro_api::as_ref::<Self, #prefix::Unimock>(self) }
+                }
+                Some(syn::Receiver {
+                    reference: Some(_),
+                    mutability: Some(_),
+                    ..
+                }) => {
+                    quote! { #prefix::macro_api::as_mut::<Self, #prefix::Unimock>(self) }
+                }
+                _ => panic!("BUG: Incompatible receiver for default delegator"),
+            };
             quote! {
-                self.0.#ident(#inputs_destructuring)
+                #unimock_accessor.#ident(#inputs_destructuring)
             }
         }
     };

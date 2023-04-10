@@ -177,23 +177,37 @@ where
 /// used for implementing only non-default methods of traits.
 ///
 /// It is used as part of the infrastructure for supporting default implementation fallbacks in Unimock.
-pub struct DefaultImplDelegator(pub Unimock);
+pub struct DefaultImplDelegator {
+    pub(crate) unimock: Unimock,
+}
 
 impl From<Unimock> for DefaultImplDelegator {
-    fn from(value: Unimock) -> Self {
-        Self(value)
+    fn from(unimock: Unimock) -> Self {
+        Self { unimock }
+    }
+}
+
+impl AsRef<Unimock> for DefaultImplDelegator {
+    fn as_ref(&self) -> &Unimock {
+        &self.unimock
+    }
+}
+
+impl AsMut<Unimock> for DefaultImplDelegator {
+    fn as_mut(&mut self) -> &mut Unimock {
+        &mut self.unimock
     }
 }
 
 impl core::fmt::Display for DefaultImplDelegator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <Unimock as core::fmt::Display>::fmt(&self.0, f)
+        <Unimock as core::fmt::Display>::fmt(&self.unimock, f)
     }
 }
 
 impl core::fmt::Debug for DefaultImplDelegator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <Unimock as core::fmt::Debug>::fmt(&self.0, f)
+        <Unimock as core::fmt::Debug>::fmt(&self.unimock, f)
     }
 }
 
@@ -203,7 +217,7 @@ pub trait ProperDebug {
     fn unimock_try_debug(&self) -> Option<String>;
 }
 
-/// Fallback trait (using autoref specialization) for returning `"?"` when the implementing value does not implement [std::fmt::Debug].
+/// Fallback trait (using autoref specialization) for returning [None] when the implementing value does not implement [std::fmt::Debug].
 pub trait NoDebug {
     /// Optionally format a debug representation.
     fn unimock_try_debug(&self) -> Option<String>;
@@ -225,6 +239,7 @@ impl<T> NoDebug for &T {
 }
 
 /// Convert any type implementing `AsRef<str>` to a `&str`.
+#[inline]
 pub fn as_str_ref<T>(input: &T) -> &str
 where
     T: AsRef<str>,
@@ -233,9 +248,28 @@ where
 }
 
 /// Convert any type implementing `AsRef<[I]>` to a `&[I]`.
+#[inline]
 pub fn as_slice<T, I>(input: &T) -> &[I]
 where
     T: AsRef<[I]>,
 {
     input.as_ref()
+}
+
+/// Shorthand for converting any `T: AsRef<U>` to `&U`
+#[inline]
+pub fn as_ref<T, U>(input: &T) -> &U
+where
+    T: AsRef<U>,
+{
+    <T as AsRef<U>>::as_ref(input)
+}
+
+/// Shorthand for converting any `T: AsMut<U>` to `&mut U`
+#[inline]
+pub fn as_mut<T, U>(input: &mut T) -> &mut U
+where
+    T: AsMut<U>,
+{
+    <T as AsMut<U>>::as_mut(input)
 }

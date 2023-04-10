@@ -767,7 +767,7 @@ impl AsRef<DefaultImplDelegator> for Unimock {
     fn as_ref(&self) -> &DefaultImplDelegator {
         let delegator = self
             .default_impl_delegator_cell
-            .get_or_init(|| Box::new(DefaultImplDelegator(self.clone())));
+            .get_or_init(|| Box::new(DefaultImplDelegator::from(self.clone())));
         delegator.as_ref()
     }
 }
@@ -775,8 +775,14 @@ impl AsRef<DefaultImplDelegator> for Unimock {
 impl AsMut<DefaultImplDelegator> for Unimock {
     fn as_mut(&mut self) -> &mut DefaultImplDelegator {
         self.default_impl_delegator_cell
-            .get_or_init(|| Box::new(DefaultImplDelegator(self.clone())));
+            .get_or_init(|| Box::new(DefaultImplDelegator::from(self.clone())));
         self.default_impl_delegator_cell.get_mut().unwrap()
+    }
+}
+
+impl From<DefaultImplDelegator> for Unimock {
+    fn from(value: DefaultImplDelegator) -> Self {
+        value.unimock
     }
 }
 
