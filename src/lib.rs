@@ -1062,23 +1062,9 @@ impl<T> Debug for PhantomMut<T> {
 /// assert_eq!(6, mocked.foo(0) + mocked.bar(0) + mocked.baz(0));
 /// ```
 #[must_use]
-pub trait Clause: clause::ClauseSealed {}
-
-impl<T: clause::ClauseSealed> Clause for T {}
-
-#[derive(Clone)]
-pub(crate) struct DynMockFn {
-    type_id: TypeId,
-    info: MockFnInfo,
-}
-
-impl DynMockFn {
-    pub fn new<F: crate::MockFn>() -> Self {
-        Self {
-            type_id: TypeId::of::<F>(),
-            info: F::info(),
-        }
-    }
+pub trait Clause {
+    #[doc(hidden)]
+    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String>;
 }
 
 // Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods

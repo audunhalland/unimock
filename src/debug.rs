@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
-use crate::{call_pattern::PatIndex, DynMockFn};
+use crate::{call_pattern::PatIndex, fn_mocker::DynMockFn};
 
 #[derive(Clone)]
 pub(crate) struct FnActualCall {
-    pub mock_fn: crate::DynMockFn,
+    pub mock_fn: DynMockFn,
     pub inputs_debug: Vec<Option<String>>,
 }
 
@@ -78,7 +78,7 @@ impl std::fmt::Display for CallPatternDebug {
 
 #[derive(Clone)]
 struct CallPatternDebugInner {
-    mock_fn: crate::DynMockFn,
+    mock_fn: DynMockFn,
     location: CallPatternLocation,
 }
 

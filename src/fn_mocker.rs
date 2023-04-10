@@ -3,6 +3,21 @@ use crate::debug;
 use crate::error::MockError;
 use crate::*;
 
+#[derive(Clone)]
+pub struct DynMockFn {
+    pub type_id: TypeId,
+    pub info: MockFnInfo,
+}
+
+impl DynMockFn {
+    pub fn new<F: crate::MockFn>() -> Self {
+        Self {
+            type_id: TypeId::of::<F>(),
+            info: F::info(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub(crate) enum PatternMatchMode {
     /// Each new call starts at the first call pattern, tries to

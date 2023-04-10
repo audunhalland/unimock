@@ -1,89 +1,103 @@
 use crate::call_pattern::*;
-use crate::clause::{self, ClauseSealed, TerminalClause};
-use crate::fn_mocker::PatternMatchMode;
+use crate::clause::{self};
+use crate::fn_mocker::{DynMockFn, PatternMatchMode};
 use crate::output::{IntoCloneResponder, IntoOnceResponder, IntoResponse, Respond, StaticRef};
 use crate::property::*;
+use crate::Clause;
 use crate::*;
 
 use std::marker::PhantomData;
-use std::panic;
 
-pub(crate) struct DynCallPatternBuilder {
-    pub pattern_match_mode: PatternMatchMode,
-    pub input_matcher: DynInputMatcher,
-    pub responders: Vec<DynCallOrderResponder>,
-    pub count_expectation: counter::CallCountExpectation,
-    pub current_response_index: usize,
-}
+pub(crate) mod dyn_builder {
+    use crate::{
+        call_pattern::{DynCallOrderResponder, DynInputMatcher, DynResponder},
+        counter,
+        fn_mocker::PatternMatchMode,
+    };
 
-impl DynCallPatternBuilder {
-    pub fn new(pattern_match_mode: PatternMatchMode, input_matcher: DynInputMatcher) -> Self {
-        Self {
-            pattern_match_mode,
-            input_matcher,
-            responders: vec![],
-            count_expectation: Default::default(),
-            current_response_index: 0,
+    // note: appears in public trait signatures
+    pub struct DynCallPatternBuilder {
+        pub(crate) pattern_match_mode: PatternMatchMode,
+        pub(crate) input_matcher: DynInputMatcher,
+        pub(crate) responders: Vec<DynCallOrderResponder>,
+        pub(crate) count_expectation: counter::CallCountExpectation,
+        pub(crate) current_response_index: usize,
+    }
+
+    impl DynCallPatternBuilder {
+        pub(crate) fn new(
+            pattern_match_mode: PatternMatchMode,
+            input_matcher: DynInputMatcher,
+        ) -> Self {
+            Self {
+                pattern_match_mode,
+                input_matcher,
+                responders: vec![],
+                count_expectation: Default::default(),
+                current_response_index: 0,
+            }
+        }
+    }
+
+    pub(crate) enum DynBuilderWrapper<'p> {
+        Borrowed(&'p mut DynCallPatternBuilder),
+        Owned(DynCallPatternBuilder),
+        Stolen,
+    }
+
+    impl<'p> DynBuilderWrapper<'p> {
+        pub(super) fn steal(&mut self) -> DynBuilderWrapper<'p> {
+            let mut stolen = DynBuilderWrapper::Stolen;
+            std::mem::swap(self, &mut stolen);
+            stolen
+        }
+
+        pub fn inner(&self) -> &DynCallPatternBuilder {
+            match self {
+                Self::Borrowed(builder) => builder,
+                Self::Owned(builder) => builder,
+                Self::Stolen => panic!("builder stolen"),
+            }
+        }
+
+        pub fn inner_mut(&mut self) -> &mut DynCallPatternBuilder {
+            match self {
+                Self::Borrowed(builder) => builder,
+                Self::Owned(builder) => builder,
+                Self::Stolen => panic!("builder stolen"),
+            }
+        }
+
+        pub fn push_responder(&mut self, responder: DynResponder) {
+            let dyn_builder = self.inner_mut();
+            dyn_builder.responders.push(DynCallOrderResponder {
+                response_index: dyn_builder.current_response_index,
+                responder,
+            })
+        }
+
+        /// Note: must be called after `push_responder`
+        pub fn quantify(&mut self, times: usize, exactness: counter::Exactness) {
+            let mut builder = self.inner_mut();
+
+            builder.count_expectation.add_to_minimum(times, exactness);
+            builder.current_response_index += times;
+        }
+
+        pub fn into_owned(self) -> DynCallPatternBuilder {
+            match self {
+                Self::Owned(owned) => owned,
+                _ => panic!("Tried to turn a non-owned pattern builder into owned"),
+            }
         }
     }
 }
 
-pub(crate) enum BuilderWrapper<'p> {
-    Borrowed(&'p mut DynCallPatternBuilder),
-    Owned(DynCallPatternBuilder),
-    Stolen,
-}
-
-impl<'p> BuilderWrapper<'p> {
-    fn steal(&mut self) -> BuilderWrapper<'p> {
-        let mut stolen = BuilderWrapper::Stolen;
-        std::mem::swap(self, &mut stolen);
-        stolen
-    }
-
-    pub fn inner(&self) -> &DynCallPatternBuilder {
-        match self {
-            Self::Borrowed(builder) => builder,
-            Self::Owned(builder) => builder,
-            Self::Stolen => panic!("builder stolen"),
-        }
-    }
-
-    fn inner_mut(&mut self) -> &mut DynCallPatternBuilder {
-        match self {
-            Self::Borrowed(builder) => builder,
-            Self::Owned(builder) => builder,
-            Self::Stolen => panic!("builder stolen"),
-        }
-    }
-
-    fn push_responder(&mut self, responder: DynResponder) {
-        let dyn_builder = self.inner_mut();
-        dyn_builder.responders.push(DynCallOrderResponder {
-            response_index: dyn_builder.current_response_index,
-            responder,
-        })
-    }
-
-    /// Note: must be called after `push_responder`
-    fn quantify(&mut self, times: usize, exactness: counter::Exactness) {
-        let mut builder = self.inner_mut();
-
-        builder.count_expectation.add_to_minimum(times, exactness);
-        builder.current_response_index += times;
-    }
-
-    fn into_owned(self) -> DynCallPatternBuilder {
-        match self {
-            Self::Owned(owned) => owned,
-            _ => panic!("Tried to turn a non-owned pattern builder into owned"),
-        }
-    }
-}
+use dyn_builder::*;
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
 pub struct Each<F: MockFn> {
-    patterns: Vec<DynCallPatternBuilder>,
+    patterns: Vec<dyn_builder::DynCallPatternBuilder>,
     mock_fn: PhantomData<F>,
 }
 
@@ -100,13 +114,13 @@ where
         &'e mut self,
         matching_fn: &dyn Fn(&mut Matching<F>),
     ) -> DefineMultipleResponses<'e, F, InAnyOrder> {
-        self.patterns.push(DynCallPatternBuilder::new(
+        self.patterns.push(dyn_builder::DynCallPatternBuilder::new(
             PatternMatchMode::InAnyOrder,
             DynInputMatcher::from_matching_fn(matching_fn),
         ));
 
         DefineMultipleResponses {
-            builder: BuilderWrapper::Borrowed(self.patterns.last_mut().unwrap()),
+            wrapper: dyn_builder::DynBuilderWrapper::Borrowed(self.patterns.last_mut().unwrap()),
             mock_fn: PhantomData,
             ordering: InAnyOrder,
         }
@@ -120,20 +134,17 @@ where
     }
 }
 
-impl<F> ClauseSealed for Each<F>
+impl<F> Clause for Each<F>
 where
     F: MockFn,
 {
-    fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
+    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String> {
         if self.patterns.is_empty() {
             return Err("Stub contained no call patterns".to_string());
         }
 
         for builder in self.patterns.into_iter() {
-            sink.put_terminal(TerminalClause {
-                dyn_mock_fn: DynMockFn::new::<F>(),
-                builder,
-            })?;
+            sink.push(DynMockFn::new::<F>(), builder)?;
         }
 
         Ok(())
@@ -142,7 +153,7 @@ where
 
 /// A matched call pattern, ready for defining a single response.
 pub struct DefineResponse<'p, F: MockFn, O: Ordering> {
-    builder: BuilderWrapper<'p>,
+    wrapper: DynBuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
     ordering: O,
 }
@@ -163,7 +174,7 @@ where
         T: IntoOnceResponder<F::Response>,
     {
         QuantifyReturnValue {
-            builder: self.builder,
+            wrapper: self.wrapper,
             return_value: Some(value),
             mock_fn: self.mock_fn,
             ordering: self.ordering,
@@ -173,7 +184,7 @@ where
 
 /// A matched call pattern, ready for defining multiple response, requiring return values to implement [Clone].
 pub struct DefineMultipleResponses<'p, F: MockFn, O: Ordering> {
-    builder: BuilderWrapper<'p>,
+    wrapper: DynBuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
     ordering: O,
 }
@@ -187,7 +198,7 @@ where
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
     pub fn returns<V: IntoCloneResponder<F::Response>>(mut self, value: V) -> Quantify<'p, F, O> {
-        self.builder
+        self.wrapper
             .push_responder(value.into_clone_responder::<F>().0);
         self.quantify()
     }
@@ -207,7 +218,7 @@ macro_rules! define_response_common_impl {
                 ordering: O,
             ) -> Self {
                 Self {
-                    builder: BuilderWrapper::Owned(DynCallPatternBuilder::new(
+                    wrapper: DynBuilderWrapper::Owned(DynCallPatternBuilder::new(
                         pattern_match_mode,
                         input_matcher,
                     )),
@@ -221,7 +232,7 @@ macro_rules! define_response_common_impl {
             where
                 <F::Response as Respond>::Type: Default,
             {
-                self.builder.push_responder(
+                self.wrapper.push_responder(
                     FunctionResponder::<F> {
                         func: Box::new(|_, _| Default::default()),
                     }
@@ -236,7 +247,7 @@ macro_rules! define_response_common_impl {
                 C: (Fn(F::Inputs<'_>) -> R) + Send + Sync + 'static,
                 R: IntoResponse<F::Response>,
             {
-                self.builder.push_responder(
+                self.wrapper.push_responder(
                     FunctionResponder::<F> {
                         func: Box::new(move |inputs, _ctx| func(inputs).into_response()),
                     }
@@ -253,7 +264,7 @@ macro_rules! define_response_common_impl {
                 C: (Fn(F::Inputs<'_>, AnswerContext<'_, '_, '_, F>) -> R) + Send + Sync + 'static,
                 R: IntoResponse<F::Response>,
             {
-                self.builder.push_responder(
+                self.wrapper.push_responder(
                     FunctionResponder::<F> {
                         func: Box::new(move |inputs, ctx| func(inputs, ctx).into_response()),
                     }
@@ -268,7 +279,7 @@ macro_rules! define_response_common_impl {
                 C: (Fn(&mut F::Mutation<'_>, F::Inputs<'_>) -> R) + Send + Sync + 'static,
                 R: IntoResponse<F::Response>,
             {
-                self.builder.push_responder(
+                self.wrapper.push_responder(
                     FunctionResponder::<F> {
                         func: Box::new(move |inputs, ctx| {
                             func(ctx.mutation, inputs).into_response()
@@ -294,7 +305,7 @@ macro_rules! define_response_common_impl {
                 R: std::borrow::Borrow<T> + 'static,
                 T: 'static,
             {
-                self.builder.push_responder(
+                self.wrapper.push_responder(
                     FunctionResponder::<F> {
                         func: Box::new(move |inputs, _| {
                             let value = func(inputs);
@@ -311,7 +322,7 @@ macro_rules! define_response_common_impl {
             /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
             pub fn panics(mut self, message: impl Into<String>) -> Quantify<'p, F, O> {
                 let message = message.into();
-                self.builder.push_responder(DynResponder::Panic(message));
+                self.wrapper.push_responder(DynResponder::Panic(message));
                 self.quantify()
             }
 
@@ -320,7 +331,7 @@ macro_rules! define_response_common_impl {
             /// For this to work, the mocked trait must be configured with an `unmock_with=[..]` parameter.
             /// If unimock doesn't find a way to unmock the function, this will panic when the function is called.
             pub fn unmocked(mut self) -> Quantify<'p, F, O> {
-                self.builder.push_responder(DynResponder::Unmock);
+                self.wrapper.push_responder(DynResponder::Unmock);
                 self.quantify()
             }
 
@@ -328,13 +339,13 @@ macro_rules! define_response_common_impl {
             ///
             /// If the method has no default implementation, the method will panic when called.
             pub fn default_implementation(mut self) -> Quantify<'p, F, O> {
-                self.builder.push_responder(DynResponder::CallDefaultImpl);
+                self.wrapper.push_responder(DynResponder::CallDefaultImpl);
                 self.quantify()
             }
 
             fn quantify(self) -> Quantify<'p, F, O> {
                 Quantify {
-                    builder: self.builder,
+                    wrapper: self.wrapper,
                     mock_fn: PhantomData,
                     ordering: self.ordering,
                 }
@@ -352,7 +363,7 @@ where
     F: MockFn,
     T: IntoOnceResponder<F::Response>,
 {
-    pub(crate) builder: BuilderWrapper<'p>,
+    pub(crate) wrapper: DynBuilderWrapper<'p>,
     return_value: Option<T>,
     mock_fn: PhantomData<F>,
     ordering: O,
@@ -368,16 +379,16 @@ where
     ///
     /// This is the only quantifier that works together with return values that don't implement [Clone].
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.builder.push_responder(
+        self.wrapper.push_responder(
             self.return_value
                 .take()
                 .unwrap()
                 .into_once_responder::<F>()
                 .0,
         );
-        self.builder.quantify(1, counter::Exactness::Exact);
+        self.wrapper.quantify(1, counter::Exactness::Exact);
         QuantifiedResponse {
-            builder: self.builder.steal(),
+            wrapper: self.wrapper.steal(),
             mock_fn: PhantomData,
             ordering: self.ordering,
             _repetition: Exact,
@@ -389,16 +400,16 @@ where
     where
         T: IntoCloneResponder<F::Response>,
     {
-        self.builder.push_responder(
+        self.wrapper.push_responder(
             self.return_value
                 .take()
                 .unwrap()
                 .into_clone_responder::<F>()
                 .0,
         );
-        self.builder.quantify(times, counter::Exactness::Exact);
+        self.wrapper.quantify(times, counter::Exactness::Exact);
         QuantifiedResponse {
-            builder: self.builder.steal(),
+            wrapper: self.wrapper.steal(),
             mock_fn: PhantomData,
             ordering: self.ordering,
             _repetition: Exact,
@@ -414,16 +425,16 @@ where
         T: IntoCloneResponder<F::Response>,
         O: Ordering<Kind = InAnyOrder>,
     {
-        self.builder.push_responder(
+        self.wrapper.push_responder(
             self.return_value
                 .take()
                 .unwrap()
                 .into_clone_responder::<F>()
                 .0,
         );
-        self.builder.quantify(times, counter::Exactness::AtLeast);
+        self.wrapper.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
-            builder: self.builder.steal(),
+            wrapper: self.wrapper.steal(),
             mock_fn: PhantomData,
             ordering: self.ordering,
             _repetition: AtLeast,
@@ -431,13 +442,13 @@ where
     }
 }
 
-impl<'p, F, T, O> ClauseSealed for QuantifyReturnValue<'p, F, T, O>
+impl<'p, F, T, O> Clause for QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
     T: IntoOnceResponder<F::Response>,
     O: Copy + Ordering,
 {
-    fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
+    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String> {
         self.once().deconstruct(sink)
     }
 }
@@ -454,7 +465,7 @@ where
 {
     fn drop(&mut self) {
         if let Some(return_value) = self.return_value.take() {
-            self.builder
+            self.wrapper
                 .push_responder(return_value.into_once_responder::<F>().0);
         }
     }
@@ -462,7 +473,7 @@ where
 
 /// Builder for defining how a call pattern gets verified with regards to quantification/counting.
 pub struct Quantify<'p, F: MockFn, O> {
-    pub(crate) builder: BuilderWrapper<'p>,
+    pub(crate) wrapper: DynBuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
     ordering: O,
 }
@@ -474,21 +485,21 @@ where
 {
     /// Expect this call pattern to be matched exactly once.
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.builder.quantify(1, counter::Exactness::Exact);
+        self.wrapper.quantify(1, counter::Exactness::Exact);
         self.into_exact()
     }
 
     /// Expect this call pattern to be matched exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.builder.quantify(times, counter::Exactness::Exact);
+        self.wrapper.quantify(times, counter::Exactness::Exact);
         self.into_exact()
     }
 
     /// Expect this call pattern to be matched at least the specified number of times.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast> {
-        self.builder.quantify(times, counter::Exactness::AtLeast);
+        self.wrapper.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
-            builder: self.builder,
+            wrapper: self.wrapper,
             mock_fn: PhantomData,
             ordering: self.ordering,
             _repetition: AtLeast,
@@ -497,7 +508,7 @@ where
 
     fn into_exact(self) -> QuantifiedResponse<'p, F, O, Exact> {
         QuantifiedResponse {
-            builder: self.builder,
+            wrapper: self.wrapper,
             mock_fn: PhantomData,
             ordering: self.ordering,
             _repetition: Exact,
@@ -505,26 +516,23 @@ where
     }
 }
 
-impl<'p, F, O> ClauseSealed for Quantify<'p, F, O>
+impl<'p, F, O> Clause for Quantify<'p, F, O>
 where
     F: MockFn,
     O: Ordering,
 {
-    fn deconstruct(mut self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
-        if self.builder.inner().pattern_match_mode == PatternMatchMode::InOrder {
-            self.builder.quantify(1, counter::Exactness::Exact);
+    fn deconstruct(mut self, sink: &mut dyn clause::term::Sink) -> Result<(), String> {
+        if self.wrapper.inner().pattern_match_mode == PatternMatchMode::InOrder {
+            self.wrapper.quantify(1, counter::Exactness::Exact);
         }
 
-        sink.put_terminal(TerminalClause {
-            dyn_mock_fn: DynMockFn::new::<F>(),
-            builder: self.builder.into_owned(),
-        })
+        sink.push(DynMockFn::new::<F>(), self.wrapper.into_owned())
     }
 }
 
 /// An exactly quantified response, i.e. the number of times it is expected to respond is an exact number.
 pub struct QuantifiedResponse<'p, F: MockFn, O, R> {
-    builder: BuilderWrapper<'p>,
+    wrapper: DynBuilderWrapper<'p>,
     mock_fn: PhantomData<F>,
     ordering: O,
     _repetition: R,
@@ -546,30 +554,27 @@ where
         // The reason it is AtLeastPlusOne is the additive nature.
         // We do not want to add anything to the number now, because it could be added to later in Quantify.
         // We just want to express that when using `then`, it should be matched at least one time, if not `then` would be unnecessary.
-        self.builder
+        self.wrapper
             .inner_mut()
             .count_expectation
             .add_to_minimum(0, counter::Exactness::AtLeastPlusOne);
 
         DefineMultipleResponses {
-            builder: self.builder,
+            wrapper: self.wrapper,
             mock_fn: PhantomData,
             ordering: self.ordering,
         }
     }
 }
 
-impl<'p, F, O, R> ClauseSealed for QuantifiedResponse<'p, F, O, R>
+impl<'p, F, O, R> Clause for QuantifiedResponse<'p, F, O, R>
 where
     F: MockFn,
     O: Ordering,
     R: Repetition,
 {
-    fn deconstruct(self, sink: &mut dyn clause::TerminalSink) -> Result<(), String> {
-        sink.put_terminal(TerminalClause {
-            dyn_mock_fn: DynMockFn::new::<F>(),
-            builder: self.builder.into_owned(),
-        })
+    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String> {
+        sink.push(DynMockFn::new::<F>(), self.wrapper.into_owned())
     }
 }
 

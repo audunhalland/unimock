@@ -4,12 +4,11 @@ use crate::call_pattern::{
 };
 use crate::error::{self};
 use crate::error::{MockError, MockResult};
-use crate::fn_mocker::{FnMocker, PatternMatchMode};
+use crate::fn_mocker::{DynMockFn, FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, MismatchReporter};
 use crate::mismatch::Mismatches;
 use crate::output::Output;
 use crate::state::SharedState;
-use crate::DynMockFn;
 use crate::{debug, Unimock};
 use crate::{FallbackMode, MockFn};
 

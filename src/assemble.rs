@@ -1,7 +1,7 @@
+use crate::build::dyn_builder::DynCallPatternBuilder;
 use crate::call_pattern::CallPattern;
 use crate::clause;
-use crate::clause::TerminalClause;
-use crate::fn_mocker::{FnMocker, PatternMatchMode};
+use crate::fn_mocker::{DynMockFn, FnMocker, PatternMatchMode};
 use crate::Clause;
 
 use std::any::TypeId;
@@ -33,13 +33,17 @@ impl MockAssembler {
     }
 }
 
-impl clause::TerminalSink for MockAssembler {
-    fn put_terminal(&mut self, terminal: TerminalClause) -> Result<(), String> {
-        let pattern_match_mode = terminal.builder.pattern_match_mode;
-        let dyn_mock_fn = terminal.dyn_mock_fn.clone();
-        let mock_type_id = terminal.dyn_mock_fn.type_id;
+impl clause::term::Sink for MockAssembler {
+    fn push(
+        &mut self,
+        dyn_mock_fn: DynMockFn,
+        builder: DynCallPatternBuilder,
+    ) -> Result<(), String> {
+        let pattern_match_mode = builder.pattern_match_mode;
+        let dyn_mock_fn = dyn_mock_fn.clone();
+        let mock_type_id = dyn_mock_fn.type_id;
 
-        let call_pattern = self.new_call_pattern(terminal);
+        let call_pattern = self.new_call_pattern(builder);
 
         match self.fn_mockers.entry(mock_type_id) {
             Entry::Occupied(mut entry) => {
@@ -70,9 +74,7 @@ impl clause::TerminalSink for MockAssembler {
 }
 
 impl MockAssembler {
-    fn new_call_pattern(&mut self, terminal: TerminalClause) -> CallPattern {
-        let builder = terminal.builder;
-
+    fn new_call_pattern(&mut self, builder: DynCallPatternBuilder) -> CallPattern {
         let mut ordered_call_index_range: std::ops::Range<usize> = Default::default();
 
         if builder.pattern_match_mode == PatternMatchMode::InOrder {

@@ -1,32 +1,27 @@
-use crate::build::DynCallPatternBuilder;
 use crate::*;
 
-/// Supertrait of Clause that makes that trait sealed
-pub trait ClauseSealed: Sized {
-    fn deconstruct(self, sink: &mut dyn TerminalSink) -> Result<(), String>;
+pub(crate) mod term {
+    use crate::{build::dyn_builder::DynCallPatternBuilder, fn_mocker::DynMockFn};
+
+    pub trait Sink {
+        fn push(
+            &mut self,
+            dyn_mock_fn: DynMockFn,
+            builder: DynCallPatternBuilder,
+        ) -> Result<(), String>;
+    }
 }
 
-pub trait TerminalSink {
-    fn put_terminal(&mut self, terminal: TerminalClause) -> Result<(), String>;
-}
-
-/// Public yet hidden terminal clause
-#[doc(hidden)]
-pub struct TerminalClause {
-    pub(crate) dyn_mock_fn: DynMockFn,
-    pub(crate) builder: DynCallPatternBuilder,
-}
-
-impl ClauseSealed for () {
-    fn deconstruct(self, _: &mut dyn TerminalSink) -> Result<(), String> {
+impl Clause for () {
+    fn deconstruct(self, _: &mut dyn term::Sink) -> Result<(), String> {
         Ok(())
     }
 }
 
 macro_rules! tuple_nonterminal_impl {
     ([$($t:ident),+], [$($index:tt),+]) => {
-        impl<$($t: ClauseSealed),+> ClauseSealed for ($($t,)+) {
-            fn deconstruct(self, sink: &mut dyn TerminalSink) -> Result<(), String> {
+        impl<$($t: Clause),+> Clause for ($($t,)+) {
+            fn deconstruct(self, sink: &mut dyn term::Sink) -> Result<(), String> {
                 $(self.$index.deconstruct(sink)?;)+
                 Ok(())
             }
