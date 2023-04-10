@@ -165,12 +165,12 @@ impl MismatchReporter {
 pub fn eval<'u, 'i, F>(
     unimock: &'u Unimock,
     inputs: F::Inputs<'i>,
-    mut_input: &mut F::Mutation<'_>,
+    mutation: &mut F::Mutation<'_>,
 ) -> Evaluation<'u, 'i, F>
 where
     F: MockFn + 'static,
 {
-    unimock.handle_error(eval::eval(unimock, inputs, mut_input))
+    unimock.handle_error(eval::eval(unimock, inputs, mutation))
 }
 
 /// The DefaultImplDelegator is a struct
