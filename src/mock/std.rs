@@ -1,7 +1,7 @@
 //! Mock APIs for `std` traits
 
 /// Mock APIs for `std::error` traits
-#[doc_cfg::doc_cfg(feature = "mock-std")]
+#[doc_cfg::doc_cfg(feature = "std")]
 pub mod error {
     use crate::unimock;
     use std::error::Error;
@@ -20,7 +20,7 @@ pub mod error {
 }
 
 /// Mock APIs for `std::io` traits
-#[doc_cfg::doc_cfg(feature = "mock-std")]
+#[doc_cfg::doc_cfg(feature = "std")]
 pub mod io {
     use std::io::{IoSlice, IoSliceMut, Result, SeekFrom};
 
@@ -70,7 +70,7 @@ pub mod io {
 }
 
 /// Mock APIs for `std::process` traits
-#[doc_cfg::doc_cfg(feature = "mock-std")]
+#[doc_cfg::doc_cfg(feature = "std")]
 pub mod process {
     /// Unimock mock API for [std::process::Termination].
     #[allow(non_snake_case)]

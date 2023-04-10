@@ -5,6 +5,8 @@ use crate::call_pattern::{
 use crate::error::{self};
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
+use crate::lib::String;
+use crate::lib::Vec;
 use crate::macro_api::{Evaluation, MismatchReporter};
 use crate::mismatch::Mismatches;
 use crate::output::Output;

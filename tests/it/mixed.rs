@@ -1,3 +1,4 @@
+use unimock::lib::{vec, ToString, Vec};
 use unimock::*;
 
 mod clone {
@@ -103,6 +104,7 @@ fn in_result_clone_acrobatics() {
     assert_eq!(Err(clone::Nope), u.err_no_clone());
 }
 
+#[cfg(feature = "std")]
 #[test]
 #[should_panic(
     expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/mixed.rs:113 to match exactly 1 call, but it actually matched 2 calls."

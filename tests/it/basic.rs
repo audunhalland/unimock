@@ -1,10 +1,6 @@
-use std::{
-    borrow::Cow,
-    panic::{RefUnwindSafe, UnwindSafe},
-    rc::Rc,
-};
+use core::panic::{RefUnwindSafe, UnwindSafe};
 
-use async_trait::async_trait;
+use unimock::lib::{format, String, ToString};
 use unimock::*;
 
 fn assert_implements_niceness<T: Send + Sync + UnwindSafe + RefUnwindSafe>() {}
@@ -87,6 +83,7 @@ fn owned_output_works() {
     );
 }
 
+#[cfg(feature = "std")]
 mod exotic_self_types {
     use super::*;
     use std::rc::Rc;
@@ -293,6 +290,7 @@ mod no_debug {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     #[should_panic(expected = "VeryPrimitive::primitive(?, \"\"): No matching call patterns.")]
     fn should_format_non_debug_input_with_a_question_mark() {
@@ -414,6 +412,7 @@ mod custom_api_module {
         fn func(&self) -> &MyType;
     }
 
+    #[cfg(feature = "std")]
     #[test]
     #[should_panic(
         expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:424 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
@@ -430,6 +429,7 @@ mod custom_api_module {
 
 mod flattened_module {
     mod basic {
+        use unimock::lib::String;
         use unimock::*;
 
         #[unimock(api=[Foo, Bar])]
@@ -446,6 +446,7 @@ mod flattened_module {
     }
 
     mod generics {
+        use unimock::lib::String;
         use unimock::*;
 
         #[unimock(api=[Foo, Bar])]
@@ -472,50 +473,61 @@ mod flattened_module {
     }
 }
 
-#[unimock(api=AsyncMock)]
-#[async_trait]
-trait Async {
-    async fn func(&self, arg: i32) -> String;
-}
+#[cfg(feature = "std")]
+mod async_trait {
+    use unimock::*;
 
-#[tokio::test]
-async fn test_async_trait() {
-    async fn takes_async(a: &impl Async, arg: i32) -> String {
-        a.func(arg).await
+    #[unimock(api=AsyncMock)]
+    #[::async_trait::async_trait]
+    trait Async {
+        async fn func(&self, arg: i32) -> String;
     }
 
-    assert_eq!(
-        "42",
-        takes_async(
-            &Unimock::new(AsyncMock::func.stub(|each| {
-                each.call(matching!(_)).returns("42");
-            })),
-            21
-        )
-        .await
-    );
+    #[tokio::test]
+    async fn test_async_trait() {
+        async fn takes_async(a: &impl Async, arg: i32) -> String {
+            a.func(arg).await
+        }
+
+        assert_eq!(
+            "42",
+            takes_async(
+                &Unimock::new(AsyncMock::func.stub(|each| {
+                    each.call(matching!(_)).returns("42");
+                })),
+                21
+            )
+            .await
+        );
+    }
 }
 
-#[unimock(api=CowBasedMock)]
-trait CowBased {
-    fn func(&self, arg: Cow<'static, str>) -> Cow<'static, str>;
-}
+#[cfg(feature = "std")]
+mod cow {
+    use std::borrow::Cow;
+    use unimock::*;
 
-#[test]
-fn test_cow() {
-    fn takes(t: &impl CowBased, arg: Cow<'static, str>) -> Cow<'static, str> {
-        t.func(arg)
+    #[unimock(api=CowBasedMock)]
+    trait CowBased {
+        fn func(&self, arg: Cow<'static, str>) -> Cow<'static, str>;
     }
 
-    assert_eq!(
-        "output",
-        takes(
-            &Unimock::new(CowBasedMock::func.stub(|each| {
-                each.call(matching! {("input") | ("foo")}).returns("output");
-            })),
-            "input".into()
+    #[test]
+    fn test_cow() {
+        fn takes(t: &impl CowBased, arg: Cow<'static, str>) -> Cow<'static, str> {
+            t.func(arg)
+        }
+
+        assert_eq!(
+            "output",
+            takes(
+                &Unimock::new(CowBasedMock::func.stub(|each| {
+                    each.call(matching! {("input") | ("foo")}).returns("output");
+                })),
+                "input".into()
+            )
         )
-    )
+    }
 }
 
 #[test]
@@ -529,7 +541,7 @@ fn newtype() {
         }
     }
 
-    impl std::convert::AsRef<str> for MyString {
+    impl core::convert::AsRef<str> for MyString {
         fn as_ref(&self) -> &str {
             self.0.as_str()
         }
@@ -554,7 +566,9 @@ fn newtype() {
 
 #[test]
 fn borrow_intricate_lifetimes() {
-    pub struct I<'s>(std::marker::PhantomData<&'s ()>);
+    use unimock::lib::{Box, String};
+
+    pub struct I<'s>(core::marker::PhantomData<&'s ()>);
     pub struct O<'s>(&'s String);
 
     #[unimock(api = IntricateMock)]
@@ -563,7 +577,7 @@ fn borrow_intricate_lifetimes() {
     }
 
     fn takes_intricate(i: &impl Intricate) {
-        i.foo(&I(std::marker::PhantomData));
+        i.foo(&I(core::marker::PhantomData));
     }
 
     let u = Unimock::new(
@@ -640,6 +654,7 @@ mod responders_in_series {
         assert_eq!(3, a.series());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     #[should_panic(
         expected = "Series::series: Expected Series::series() at tests/it/basic.rs:618 to match at least 4 calls, but it actually matched 2 calls."
@@ -672,11 +687,12 @@ fn borrow_static_should_work_with_returns_static() {
     );
 }
 
+#[cfg(feature = "std")]
 mod async_argument_borrowing {
     use super::*;
 
     #[unimock(api=BorrowParamMock)]
-    #[async_trait]
+    #[::async_trait::async_trait]
     trait BorrowParam {
         async fn borrow_param<'a>(&self, arg: &'a str) -> &'a str;
     }
@@ -720,8 +736,9 @@ mod lifetime_constrained_output_type {
         fn borrow_sync_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
     }
 
+    #[cfg(feature = "std")]
     #[unimock]
-    #[async_trait]
+    #[::async_trait::async_trait]
     trait BorrowAsync {
         async fn borrow_async_elided(&self) -> Borrowing1<'_>;
         async fn borrow_async_explicit<'a>(&'a self) -> Borrowing1<'a>;
@@ -743,7 +760,7 @@ mod lifetime_constrained_output_type {
 }
 
 mod slice_matching {
-    use std::vec;
+    use unimock::lib::{vec, String, Vec};
 
     use super::*;
 
@@ -780,7 +797,7 @@ fn eval_name_clash() {
         fn tralala(&self, eval: i32);
     }
 
-    fn unmock(_: &impl std::any::Any, _: i32) {}
+    fn unmock(_: &impl core::any::Any, _: i32) {}
 }
 
 #[test]
@@ -798,18 +815,20 @@ fn fn_cfg_attrs() {
 }
 
 #[test]
-fn non_send_return() {
+fn non_sync_return() {
+    use core::cell::Cell;
+
     #[unimock(api = NonSendMock)]
     trait NonSend {
-        fn return_rc(&self) -> Rc<i32>;
+        fn return_cell(&self) -> Cell<i32>;
     }
 
     let u = Unimock::new(
-        NonSendMock::return_rc
+        NonSendMock::return_cell
             .next_call(matching!())
-            .answers(|_| Rc::new(42)),
+            .answers(|_| Cell::new(42)),
     );
-    assert_eq!(Rc::new(42), u.return_rc());
+    assert_eq!(Cell::new(42), u.return_cell());
 }
 
 mod default_body_delegation {
@@ -875,7 +894,7 @@ mod mutated_arg {
 }
 
 mod borrow_dyn {
-    use std::borrow::Borrow;
+    use core::borrow::Borrow;
 
     use unimock::*;
 

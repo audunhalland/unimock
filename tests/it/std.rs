@@ -1,4 +1,4 @@
-#![cfg(feature = "mock-std")]
+#![cfg(feature = "std")]
 #![allow(clippy::write_literal)]
 
 use std::io::{BufRead, BufReader, Write};

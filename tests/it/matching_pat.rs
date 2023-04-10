@@ -1,3 +1,4 @@
+use unimock::lib::{String, ToString};
 use unimock::*;
 
 /// Regression test for compile error:

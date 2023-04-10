@@ -1,15 +1,15 @@
 use crate::build::dyn_builder::DynCallPatternBuilder;
 use crate::call_pattern::CallPattern;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
+use crate::lib::{format, vec, String};
+use crate::lib::{BTreeMap, Entry};
 use crate::Clause;
 use crate::{clause, MockFnInfo};
 
-use std::any::TypeId;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use core::any::TypeId;
 
 pub(crate) struct MockAssembler {
-    fn_mockers: HashMap<TypeId, FnMocker>,
+    fn_mockers: BTreeMap<TypeId, FnMocker>,
     current_call_index: usize,
 }
 
@@ -23,12 +23,12 @@ impl MockAssembler {
 
     fn new() -> Self {
         Self {
-            fn_mockers: HashMap::new(),
+            fn_mockers: BTreeMap::new(),
             current_call_index: 0,
         }
     }
 
-    pub fn finish(self) -> HashMap<TypeId, FnMocker> {
+    pub fn finish(self) -> BTreeMap<TypeId, FnMocker> {
         self.fn_mockers
     }
 }
@@ -70,7 +70,7 @@ impl clause::term::Sink for MockAssembler {
 
 impl MockAssembler {
     fn new_call_pattern(&mut self, builder: DynCallPatternBuilder) -> CallPattern {
-        let mut ordered_call_index_range: std::ops::Range<usize> = Default::default();
+        let mut ordered_call_index_range: core::ops::Range<usize> = Default::default();
 
         if builder.pattern_match_mode == PatternMatchMode::InOrder {
             let exact_calls = builder

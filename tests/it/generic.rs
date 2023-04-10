@@ -1,6 +1,7 @@
+use unimock::lib::{String, ToString};
 use unimock::*;
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 mod output {
     use super::*;
@@ -112,6 +113,7 @@ mod combined {
     }
 }
 
+#[cfg(feature = "std")]
 mod async_generic {
     use super::*;
 
@@ -216,7 +218,7 @@ mod method_generics {
 
 mod impl_trait {
     use super::*;
-    use std::any::Any;
+    use core::any::Any;
 
     #[unimock(api=G1)]
     trait ImplTrait1 {
@@ -259,7 +261,7 @@ mod impl_trait {
 }
 
 mod generic_combo {
-    use std::any::Any;
+    use core::any::Any;
 
     use super::*;
 
@@ -270,6 +272,7 @@ mod generic_combo {
             U: 'static;
     }
 
+    #[cfg(feature = "std")]
     #[unimock(api=MockAsyncCombo)]
     #[async_trait::async_trait]
     trait AsyncTraitGenerics<T: 'static + Send> {

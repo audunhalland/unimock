@@ -1,6 +1,7 @@
 use crate::call_pattern::PatIndex;
 use crate::debug;
 use crate::error::MockError;
+use crate::lib::Vec;
 use crate::*;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]

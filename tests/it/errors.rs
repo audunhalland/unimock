@@ -1,3 +1,5 @@
+#![cfg(feature = "std")]
+
 use unimock::*;
 
 #[unimock(api=SingleArgMock)]

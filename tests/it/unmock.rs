@@ -1,7 +1,7 @@
+use unimock::lib::{format, String, ToString};
 use unimock::*;
 
-use async_trait::async_trait;
-use std::any::Any;
+use core::any::Any;
 
 mod unmock_simple {
     use super::*;
@@ -100,10 +100,11 @@ fn unmock_recursion() {
     );
 }
 
+#[cfg(feature = "std")]
 #[tokio::test]
 async fn unmock_async() {
     #[unimock(api=AsyncFactorialMock, unmock_with=[my_factorial])]
-    #[async_trait]
+    #[::async_trait::async_trait]
     trait AsyncFactorial {
         async fn factorial(&self, input: u32) -> u32;
     }
@@ -157,5 +158,5 @@ mod unmock_without_api_should_not_have_shadowing_problems_wrt_unmock_fns {
         fn foo(&self);
     }
 
-    fn foo(_: &impl std::any::Any) {}
+    fn foo(_: &impl core::any::Any) {}
 }

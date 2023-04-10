@@ -1,6 +1,9 @@
+use crate::lib::String;
 use crate::*;
 
 pub(crate) mod term {
+    use crate::lib::String;
+
     use crate::{build::dyn_builder::DynCallPatternBuilder, MockFnInfo};
 
     pub trait Sink {

@@ -1,5 +1,6 @@
 use crate::call_pattern::InputIndex;
-use crate::debug::{self};
+use crate::debug;
+use crate::lib::{vec, Box, String, Vec};
 use crate::mismatch::{Mismatch, MismatchKind};
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, *};
@@ -36,7 +37,7 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
 
 /// A builder for argument matchers.
 pub struct Matching<F: MockFn> {
-    pub(crate) mock_fn: std::marker::PhantomData<F>,
+    pub(crate) mock_fn: core::marker::PhantomData<F>,
     pub(crate) matching_fn: Option<MatchingFn<F>>,
     pub(crate) matcher_debug: Option<debug::InputMatcherDebug>,
 }
@@ -47,7 +48,7 @@ where
 {
     pub(crate) fn new() -> Self {
         Self {
-            mock_fn: std::marker::PhantomData,
+            mock_fn: core::marker::PhantomData,
             matching_fn: None,
             matcher_debug: None,
         }
@@ -92,7 +93,7 @@ impl MismatchReporter {
     pub(crate) fn new_enabled() -> Self {
         Self {
             enabled: true,
-            mismatches: vec![],
+            mismatches: crate::lib::vec![],
         }
     }
 
@@ -200,13 +201,13 @@ impl AsMut<Unimock> for DefaultImplDelegator {
 }
 
 impl core::fmt::Display for DefaultImplDelegator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         <Unimock as core::fmt::Display>::fmt(&self.unimock, f)
     }
 }
 
 impl core::fmt::Debug for DefaultImplDelegator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         <Unimock as core::fmt::Debug>::fmt(&self.unimock, f)
     }
 }
@@ -226,9 +227,9 @@ pub trait NoDebug {
 // Autoref specialization:
 // https://github.com/dtolnay/case-studies/blob/master/autoref-specialization/README.md
 
-impl<T: std::fmt::Debug> ProperDebug for T {
+impl<T: core::fmt::Debug> ProperDebug for T {
     fn unimock_try_debug(&self) -> Option<String> {
-        Some(format!("{self:?}"))
+        Some(crate::lib::format!("{self:?}"))
     }
 }
 

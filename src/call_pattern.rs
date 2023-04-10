@@ -1,3 +1,7 @@
+use crate::lib::{Box, String, Vec};
+use core::any::Any;
+use spin::Mutex;
+
 use crate::build;
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
@@ -5,17 +9,14 @@ use crate::macro_api::MismatchReporter;
 use crate::output::Respond;
 use crate::*;
 
-use std::any::Any;
-use std::sync::Mutex;
-
 #[derive(Clone, Copy)]
 pub(crate) struct PatIndex(pub usize);
 
 #[derive(Clone, Copy)]
 pub(crate) struct InputIndex(pub usize);
 
-impl std::fmt::Display for PatIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for PatIndex {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "#{}", self.0)
     }
 }
@@ -36,7 +37,7 @@ fn downcast_box<T: 'static>(any_box: &AnyBox) -> PatternResult<&T> {
 pub(crate) struct CallPattern {
     pub input_matcher: DynInputMatcher,
     pub responders: Vec<DynCallOrderResponder>,
-    pub ordered_call_index_range: std::ops::Range<usize>,
+    pub ordered_call_index_range: core::ops::Range<usize>,
     pub call_counter: counter::CallCounter,
 }
 
@@ -117,7 +118,7 @@ impl DynResponder {
         let response = Mutex::new(Some(response));
         CellResponder::<F> {
             cell: Box::new(FactoryCell::new(move || {
-                let mut lock = response.lock().unwrap();
+                let mut lock = response.lock();
                 lock.take()
             })),
         }
@@ -248,6 +249,8 @@ fn find_responder_by_call_index(
 
 #[cfg(test)]
 mod tests {
+    use crate::lib::{vec, ToString};
+
     use super::*;
 
     #[test]

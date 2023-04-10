@@ -358,6 +358,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![cfg_attr(feature = "unstable-doc-cfg", feature(doc_cfg))]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 
 /// Types used for building and defining mock behaviour.
 pub mod build;
@@ -387,11 +391,10 @@ mod mismatch;
 mod state;
 mod teardown;
 
-use std::any::TypeId;
-use std::fmt::Debug;
-use std::panic::RefUnwindSafe;
-use std::panic::UnwindSafe;
-use std::sync::Arc;
+use core::any::TypeId;
+use core::fmt::Debug;
+use core::panic::RefUnwindSafe;
+use core::panic::UnwindSafe;
 
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
@@ -619,6 +622,8 @@ pub use unimock_macros::unimock;
 ///
 pub use unimock_macros::matching;
 
+use crate::error::MockError;
+
 #[derive(Clone, Copy)]
 enum FallbackMode {
     Error,
@@ -652,13 +657,13 @@ enum FallbackMode {
 /// Therefore, Unimock should always be cloned before sending off to another thread.
 ///
 pub struct Unimock {
-    shared_state: Arc<state::SharedState>,
+    shared_state: lib::Arc<state::SharedState>,
 
     // A value chain for "dumping" owned return values that
     // a function signature needs to *borrow* instead.
     value_chain: value_chain::ValueChain,
 
-    default_impl_delegator_cell: OnceCell<Box<DefaultImplDelegator>>,
+    default_impl_delegator_cell: OnceCell<lib::Box<DefaultImplDelegator>>,
 
     original_instance: bool,
     torn_down: bool,
@@ -725,7 +730,7 @@ impl Unimock {
 
     #[track_caller]
     fn from_assembler(
-        assembler_result: Result<MockAssembler, String>,
+        assembler_result: Result<MockAssembler, lib::String>,
         fallback_mode: FallbackMode,
     ) -> Self {
         let fn_mockers = match assembler_result {
@@ -734,7 +739,7 @@ impl Unimock {
         };
 
         Self {
-            shared_state: Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
+            shared_state: lib::Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
             value_chain: Default::default(),
             default_impl_delegator_cell: Default::default(),
             original_instance: true,
@@ -767,7 +772,7 @@ impl AsRef<DefaultImplDelegator> for Unimock {
     fn as_ref(&self) -> &DefaultImplDelegator {
         let delegator = self
             .default_impl_delegator_cell
-            .get_or_init(|| Box::new(DefaultImplDelegator::from(self.clone())));
+            .get_or_init(|| lib::Box::new(DefaultImplDelegator::from(self.clone())));
         delegator.as_ref()
     }
 }
@@ -775,7 +780,7 @@ impl AsRef<DefaultImplDelegator> for Unimock {
 impl AsMut<DefaultImplDelegator> for Unimock {
     fn as_mut(&mut self) -> &mut DefaultImplDelegator {
         self.default_impl_delegator_cell
-            .get_or_init(|| Box::new(DefaultImplDelegator::from(self.clone())));
+            .get_or_init(|| lib::Box::new(DefaultImplDelegator::from(self.clone())));
         self.default_impl_delegator_cell.get_mut().unwrap()
     }
 }
@@ -796,7 +801,10 @@ impl Drop for Unimock {
         }
 
         if let Err(errors) = teardown::teardown(self) {
-            let error_strings = errors.iter().map(|err| err.to_string()).collect::<Vec<_>>();
+            let error_strings = errors
+                .iter()
+                .map(|err| <MockError as lib::ToString>::to_string(err))
+                .collect::<lib::Vec<_>>();
             panic!("{}", error_strings.join("\n"));
         }
     }
@@ -817,22 +825,15 @@ impl Drop for Unimock {
 /// Calling `report` is the only way to stop unimock panicking on failed verifications, so _use with care_.
 ///
 /// # Mocking
-/// The `"mock-std"` feature also enables mocking of this trait through [mock::std::process::TerminationMock].
+/// The `"std"` feature also enables mocking of this trait through [mock::std::process::TerminationMock].
 /// This trait mock is partial by default: Unless explicitly mocked, it behaves as specified above.
-#[doc_cfg::doc_cfg(feature = "mock-std")]
+#[doc_cfg::doc_cfg(feature = "std")]
 impl std::process::Termination for Unimock {
     fn report(mut self) -> std::process::ExitCode {
-        #[cfg(feature = "mock-std")]
-        {
-            match macro_api::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ())
-            {
-                macro_api::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
-                e => e.unwrap(&self),
-            }
+        match macro_api::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ()) {
+            macro_api::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
+            e => e.unwrap(&self),
         }
-
-        #[cfg(not(feature = "mock-std"))]
-        teardown::teardown_report(&mut self)
     }
 }
 
@@ -895,8 +896,8 @@ pub trait MockFn: Sized + 'static {
 
     /// Compute some debug representation of the inputs.
     #[allow(unused)]
-    fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
-        vec![]
+    fn debug_inputs(inputs: &Self::Inputs<'_>) -> lib::Vec<Option<lib::String>> {
+        lib::vec![]
     }
 
     /// Create a stubbing clause by grouping calls.
@@ -1016,16 +1017,16 @@ impl MockFnInfo {
 ///
 /// Unimock inputs cannot be mutated directly.
 /// To interact with a mutable reference argument, use [crate::build::DefineResponse::mutates].
-pub struct PhantomMut<T>(std::marker::PhantomData<T>);
+pub struct PhantomMut<T>(core::marker::PhantomData<T>);
 
 impl<T> Default for PhantomMut<T> {
     fn default() -> Self {
-        Self(std::marker::PhantomData)
+        Self(core::marker::PhantomData)
     }
 }
 
 impl<T> Debug for PhantomMut<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "PhantomMut")
     }
 }
@@ -1070,9 +1071,39 @@ impl<T> Debug for PhantomMut<T> {
 #[must_use]
 pub trait Clause {
     #[doc(hidden)]
-    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String>;
+    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), lib::String>;
 }
 
 // Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods
 #[doc(hidden)]
 pub struct Responder(call_pattern::DynResponder);
+
+/// Standard library abstractions.
+#[doc_cfg::doc_cfg(feature = "std")]
+pub mod lib {
+    pub use ::std::boxed::Box;
+    pub use ::std::collections::btree_map::Entry;
+    pub use ::std::collections::BTreeMap;
+    pub use ::std::collections::BTreeSet;
+    pub use ::std::format;
+    pub use ::std::string::String;
+    pub use ::std::string::ToString;
+    pub use ::std::sync::Arc;
+    pub use ::std::vec;
+    pub use ::std::vec::Vec;
+}
+
+/// Standard library abstractions.
+#[doc_cfg::doc_cfg(not(feature = "std"))]
+pub mod lib {
+    pub use ::alloc::boxed::Box;
+    pub use ::alloc::collections::btree_map::Entry;
+    pub use ::alloc::collections::BTreeMap;
+    pub use ::alloc::collections::BTreeSet;
+    pub use ::alloc::format;
+    pub use ::alloc::string::String;
+    pub use ::alloc::string::ToString;
+    pub use ::alloc::sync::Arc;
+    pub use ::alloc::vec;
+    pub use ::alloc::vec::Vec;
+}

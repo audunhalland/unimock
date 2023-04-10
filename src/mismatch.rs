@@ -1,5 +1,6 @@
-use std::{collections::HashSet, fmt::Display};
+use core::fmt::Display;
 
+use crate::lib::{vec, BTreeSet, String, Vec};
 use crate::{
     call_pattern::{InputIndex, PatIndex},
     macro_api::MismatchReporter,
@@ -22,7 +23,7 @@ impl Mismatches {
     }
 
     fn has_unique_pat_index(&self) -> bool {
-        let mut pat_indexes = HashSet::new();
+        let mut pat_indexes = BTreeSet::new();
         for (pat_index, _, _) in &self.mismatches {
             pat_indexes.insert(pat_index.0);
         }
@@ -32,7 +33,7 @@ impl Mismatches {
 }
 
 impl Display for Mismatches {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if !self.mismatches.is_empty() {
             writeln!(f)?;
         }
@@ -137,7 +138,7 @@ impl MismatchMsg {
 }
 
 impl Display for MismatchMsg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let initial_msg = match self.mismatch_kind {
             MismatchKind::Pattern => "Pattern mismatch for ",
             MismatchKind::Eq => "Equality mismatch for ",
@@ -183,13 +184,13 @@ impl<'s> Diff<'s> {
 
 impl<'s> Display for Diff<'s> {
     #[cfg(feature = "pretty-print")]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let comparison = pretty_assertions::StrComparison::new(self.actual, self.expected);
         write!(f, "{comparison}")
     }
 
     #[cfg(not(feature = "pretty-print"))]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "  actual: {}", self.actual)?;
         write!(f, "expected: {}", self.expected)?;
         Ok(())

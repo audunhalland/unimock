@@ -1,50 +1,54 @@
+use core::any::TypeId;
+use core::sync::atomic::AtomicUsize;
+use spin::Mutex;
+
 use crate::debug;
 use crate::error;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
+use crate::lib::{BTreeMap, String, Vec};
 use crate::FallbackMode;
-
-use std::any::TypeId;
-use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Mutex;
-use std::thread::ThreadId;
 
 pub(crate) struct SharedState {
     pub fallback_mode: FallbackMode,
-    pub fn_mockers: HashMap<TypeId, FnMocker>,
-    pub original_thread: ThreadId,
+    pub fn_mockers: BTreeMap<TypeId, FnMocker>,
+
+    #[cfg(feature = "std")]
+    pub original_thread: std::thread::ThreadId,
 
     next_ordered_call_index: AtomicUsize,
     panic_reasons: Mutex<Vec<error::MockError>>,
 }
 
 impl SharedState {
-    pub fn new(fn_mockers: HashMap<TypeId, FnMocker>, fallback_mode: FallbackMode) -> Self {
+    pub fn new(fn_mockers: BTreeMap<TypeId, FnMocker>, fallback_mode: FallbackMode) -> Self {
         Self {
             fallback_mode,
             fn_mockers,
+
+            #[cfg(feature = "std")]
             original_thread: std::thread::current().id(),
+
             next_ordered_call_index: AtomicUsize::new(0),
-            panic_reasons: Mutex::new(vec![]),
+            panic_reasons: Mutex::new(crate::lib::vec![]),
         }
     }
 
     pub fn bump_ordered_call_index(&self) -> usize {
         self.next_ordered_call_index
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            .fetch_add(1, core::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn prepare_panic(&self, error: error::MockError) -> String {
-        let msg = format!("{error}");
+        let msg = crate::lib::format!("{error}");
 
-        let mut panic_reasons = self.panic_reasons.lock().unwrap();
+        let mut panic_reasons = self.panic_reasons.lock();
         panic_reasons.push(error);
 
         msg
     }
 
     pub fn clone_panic_reasons(&self) -> Vec<error::MockError> {
-        self.panic_reasons.lock().unwrap().clone()
+        self.panic_reasons.lock().clone()
     }
 
     pub fn find_ordered_expected_call_pattern_debug(

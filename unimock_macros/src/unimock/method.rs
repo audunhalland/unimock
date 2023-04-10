@@ -116,7 +116,7 @@ impl<'t> MockMethod<'t> {
             let inputs_try_debug_exprs = self.inputs_try_debug_exprs();
             quote! {
                 use #prefix::macro_api::{ProperDebug, NoDebug};
-                vec![#(#inputs_try_debug_exprs),*]
+                #prefix::lib::vec![#(#inputs_try_debug_exprs),*]
             }
         } else {
             return None;
@@ -125,7 +125,7 @@ impl<'t> MockMethod<'t> {
         let inputs = self.inputs_destructuring(InputsSyntax::FnPattern, Tupled(true), attr);
 
         Some(quote! {
-            fn debug_inputs(#inputs: &Self::Inputs<'_>) -> std::vec::Vec<core::option::Option<String>> {
+            fn debug_inputs(#inputs: &Self::Inputs<'_>) -> #prefix::lib::Vec<::core::option::Option<#prefix::lib::String>> {
                 #body
             }
         })

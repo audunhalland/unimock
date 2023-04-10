@@ -1,6 +1,7 @@
-use std::any::Any;
-
+use core::any::Any;
 use once_cell::sync::OnceCell;
+
+use crate::lib::Box;
 
 /// A collection that can store values, but never remove them until dropped.
 ///

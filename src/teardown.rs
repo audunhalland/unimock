@@ -1,7 +1,7 @@
-use std::sync::Arc;
-
+use crate::lib::{Arc, Vec};
 use crate::{error::MockError, Unimock};
 
+#[cfg(feature = "std")]
 pub(crate) fn teardown_report(unimock: &mut Unimock) -> std::process::ExitCode {
     match teardown(unimock) {
         Ok(()) => std::process::ExitCode::SUCCESS,
@@ -22,7 +22,7 @@ pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
 
     // drop value chain, in case it has Unimock instances in it.
     // doing that lowers the risk of hitting `cannot verify calls`.
-    drop(std::mem::take(&mut unimock.value_chain));
+    drop(core::mem::take(&mut unimock.value_chain));
 
     // skip verification if not the original instance.
     if !unimock.original_instance {
@@ -30,6 +30,7 @@ pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
     }
 
     // skip verification if already panicking in the original thread.
+    #[cfg(feature = "std")]
     if std::thread::panicking() {
         return Ok(());
     }
@@ -40,6 +41,7 @@ pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
         panic!("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.");
     }
 
+    #[cfg(feature = "std")]
     if std::thread::current().id() != unimock.shared_state.original_thread {
         panic!("Original Unimock instance destroyed on a different thread than the one it was created on. To solve this, clone the object before sending it to the other thread.");
     }

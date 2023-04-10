@@ -1,5 +1,7 @@
+use core::borrow::Borrow;
+
+use crate::lib::Box;
 use crate::{call_pattern::DynResponder, value_chain::ValueChain, MockFn, Responder};
-use std::borrow::Borrow;
 
 /// Trait for responding to function calls.
 pub trait Respond {
@@ -50,20 +52,20 @@ pub enum SignatureError {
 }
 
 #[doc(hidden)]
-pub struct Owned<T>(std::marker::PhantomData<T>);
+pub struct Owned<T>(core::marker::PhantomData<T>);
 
 // This type describes a function response that is a reference borrowed from `Self`.
 #[doc(hidden)]
-pub struct Borrowed<T: ?Sized + 'static>(std::marker::PhantomData<T>);
+pub struct Borrowed<T: ?Sized + 'static>(core::marker::PhantomData<T>);
 
 #[doc(hidden)]
-pub struct StaticRef<T: ?Sized>(std::marker::PhantomData<T>);
+pub struct StaticRef<T: ?Sized>(core::marker::PhantomData<T>);
 
 // This type describes a function response that is a mix of owned and borrowed data.
 //
 // The typical example is `Option<&T>`.
 #[doc(hidden)]
-pub struct Mixed<T>(std::marker::PhantomData<T>);
+pub struct Mixed<T>(core::marker::PhantomData<T>);
 
 type BoxBorrow<T> = Box<dyn Borrow<T> + Send + Sync>;
 
@@ -283,6 +285,8 @@ mod mixed_option {
 }
 
 mod mixed_vec {
+    use crate::lib::Vec;
+
     use super::*;
 
     type Mix<T> = Mixed<Vec<&'static T>>;

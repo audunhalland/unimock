@@ -1,14 +1,17 @@
+use core::marker::PhantomData;
+
 use crate::call_pattern::*;
 use crate::clause::{self};
 use crate::fn_mocker::PatternMatchMode;
+use crate::lib::vec;
 use crate::output::{IntoCloneResponder, IntoOnceResponder, IntoResponse, Respond, StaticRef};
 use crate::property::*;
 use crate::Clause;
 use crate::*;
 
-use std::marker::PhantomData;
-
 pub(crate) mod dyn_builder {
+    use crate::lib::{vec, Vec};
+
     use crate::{
         call_pattern::{DynCallOrderResponder, DynInputMatcher, DynResponder},
         counter,
@@ -48,7 +51,7 @@ pub(crate) mod dyn_builder {
     impl<'p> DynBuilderWrapper<'p> {
         pub(super) fn steal(&mut self) -> DynBuilderWrapper<'p> {
             let mut stolen = DynBuilderWrapper::Stolen;
-            std::mem::swap(self, &mut stolen);
+            core::mem::swap(self, &mut stolen);
             stolen
         }
 
@@ -93,6 +96,7 @@ pub(crate) mod dyn_builder {
     }
 }
 
+use crate::lib::{String, ToString, Vec};
 use dyn_builder::*;
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
@@ -234,7 +238,7 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(|_, _| Default::default()),
+                        func: crate::lib::Box::new(|_, _| Default::default()),
                     }
                     .into_dyn_responder(),
                 );
@@ -249,7 +253,9 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(move |inputs, _ctx| func(inputs).into_response()),
+                        func: crate::lib::Box::new(move |inputs, _ctx| {
+                            func(inputs).into_response()
+                        }),
                     }
                     .into_dyn_responder(),
                 );
@@ -266,7 +272,9 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(move |inputs, ctx| func(inputs, ctx).into_response()),
+                        func: crate::lib::Box::new(move |inputs, ctx| {
+                            func(inputs, ctx).into_response()
+                        }),
                     }
                     .into_dyn_responder(),
                 );
@@ -281,7 +289,7 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: Box::new(move |inputs, ctx| {
+                        func: crate::lib::Box::new(move |inputs, ctx| {
                             func(ctx.mutation, inputs).into_response()
                         }),
                     }
@@ -302,16 +310,17 @@ macro_rules! define_response_common_impl {
             where
                 F: MockFn<Response = StaticRef<T>>,
                 C: (Fn(F::Inputs<'_>) -> R) + Send + Sync + 'static,
-                R: std::borrow::Borrow<T> + 'static,
+                R: core::borrow::Borrow<T> + 'static,
                 T: 'static,
             {
+                use crate::lib::Box;
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
                         func: Box::new(move |inputs, _| {
                             let value = func(inputs);
                             let leaked_ref = Box::leak(Box::new(value));
 
-                            <R as std::borrow::Borrow<T>>::borrow(leaked_ref)
+                            <R as core::borrow::Borrow<T>>::borrow(leaked_ref)
                         }),
                     }
                     .into_dyn_responder(),

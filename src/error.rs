@@ -1,3 +1,4 @@
+use crate::lib::String;
 use crate::{debug, mismatch::Mismatches, MockFnInfo};
 
 pub(crate) type MockResult<T> = Result<T, MockError>;
@@ -55,8 +56,8 @@ pub(crate) enum MockError {
     },
 }
 
-impl std::fmt::Display for MockError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for MockError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Downcast { fn_call, pattern } => {
                 write!(f, "{fn_call}: Fatal: Failed to downcast in {pattern}.")
@@ -138,8 +139,8 @@ impl std::fmt::Display for MockError {
 #[derive(Clone)]
 pub struct CallOrder(pub usize);
 
-impl std::fmt::Display for CallOrder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for CallOrder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0 + 1)
     }
 }

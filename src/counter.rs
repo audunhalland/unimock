@@ -1,7 +1,8 @@
 use crate::error::MockError;
+use crate::lib::{format, Vec};
 use crate::{debug, MockFnInfo};
 
-use std::{fmt::Display, sync::atomic::AtomicUsize};
+use core::{fmt::Display, sync::atomic::AtomicUsize};
 
 pub(crate) struct CallCounter {
     actual_count: AtomicUsize,
@@ -11,7 +12,7 @@ pub(crate) struct CallCounter {
 impl CallCounter {
     pub fn fetch_add(&self) -> usize {
         self.actual_count
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            .fetch_add(1, core::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn verify(
@@ -21,7 +22,7 @@ impl CallCounter {
         errors: &mut Vec<MockError>,
     ) -> NCalls {
         let path = &info.path;
-        let actual_calls = NCalls(self.actual_count.load(std::sync::atomic::Ordering::SeqCst));
+        let actual_calls = NCalls(self.actual_count.load(core::sync::atomic::Ordering::SeqCst));
         let lower_bound = self.expectation.lower_bound();
 
         match self.expectation.exactness {
@@ -96,7 +97,7 @@ pub(crate) enum Exactness {
 pub(crate) struct NCalls(pub usize);
 
 impl Display for NCalls {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self.0 {
             0 => write!(f, "no calls"),
             1 => write!(f, "1 call"),
