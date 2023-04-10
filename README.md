@@ -102,7 +102,26 @@ There are different constraints acting on return values based on how the clause 
 * `each_call` is tailored for calls that are expected to happen more than once, thus requiring [Clone] on return values.
 * `next_call` is used for [verifying exact call sequences](#verifying-exact-sequence-of-calls), otherwise works similar to `some_call`.
 
+### Mutating inputs
+Many traits uses the argument mutation pattern, where there are one or more `&mut` parameters.
 
+Due to [various limitations](https://github.com/rust-lang/rust/issues/100013) in Rust's type system, Unimock needs to use a little workaround to get this working correctly.
+Unimock supports mutating _one parameter_, and it's not handled as part of the method's regular `Inputs`, but instead represented as a separate `Mutation` type.
+If a method contains more than one `&mut` parameter (besides `&mut self`), the _last one_ is currently automatically selected as the mutation.
+
+To access the `&mut` mutation, the `.mutates` combinator is used, as demonstrated in this [Display](core::fmt::Display) mock:
+
+```rust
+let mocked = Unimock::new(
+    mock::core::fmt::DisplayMock::fmt
+        .next_call(matching!(_))
+        .mutates(|f, _| write!(f, "mutation!"))
+);
+
+assert_eq!("mutation!", format!("{mocked}"));
+```
+
+Note that the `.mutates` closure also specifies the return value, in this case [core::fmt::Result].
 
 ## Combining setup clauses
 `Unimock::new()` accepts as argument anything that implements [Clause].
@@ -209,6 +228,7 @@ All clauses constructed by `next_call` are expected to be evaluated in the exact
 Order-sensitive clauses and order-insensitive clauses (like [`some_call`](MockFn::some_call)) do not interfere with each other.
 However, these kinds of clauses cannot be combined _for the same MockFn_ in a single Unimock value.
 
+
 ## Application architecture
 
 Writing larger, testable applications with unimock requires some degree of architectural discipline.
@@ -269,11 +289,27 @@ See the documentation of [`new_partial`](https://docs.rs/unimock/latest/unimock/
 
 Although this can be implemented with unimock directly, it works best with a higher-level macro like [`entrait`](https://docs.rs/entrait).
 
-### Misc
+### `no_std`
+Unimock can be used in a `no_std` environment. The `"std"` feature is enabled by default, and can be removed to enable `no_std`.
+
+The `no_std` environment depends on [alloc](https://doc.rust-lang.org/alloc/) and requires a global allocator.
+
+
+## Mock APIs for central crates
+Unimock works well when the trait being abstracted over is defined in the same code base as the once that contains the test.
+The Rust Orphan Rule ensures that a Unimock user cannot define a mock implementation for a trait that is upstream to their project.
+
+For this reason, Unimock has started to move in a direction where it itself defines mock APIs for central crates.
+
+These mock APIs can be found in [mock].
+
+
+## Misc
 
 #### What kinds of things can be mocked with unimock?
 * Traits with any number of methods
 * Traits with generic parameters, although these cannot be lifetime constrained (i.e. need to satisfy `T: 'static`).
+* Traits with associated types, using `#[unimock(type T = Foo;)]` syntax.
 * Methods with any self receiver (`self`, `&self`, `&mut self` or arbitrary (e.g. `self: Rc<Self>`)).
 * Methods that take reference inputs.
 * Methods returning references to self.
@@ -287,12 +323,11 @@ Although this can be implemented with unimock directly, it works best with a hig
 * Methods that return a future that is an associated type. Requires nightly.
 
 #### What kinds of traits or methods cannot be mocked?
-* Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
 * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
 * Methods receiving `&mut` arguments other than `&mut self`.
     It _might_ work, but is currently unsupported due to stricter lifetime constraints that is harder to express via generics.
 
-### Selecting a name for the mock `api`
+#### Selecting a name for the mock `api`
 Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
     unimock tries to avoid autogenerating any new identifiers that might accidentally create undesired namespace collisions.
 To avoid user confusion through conjuring up new identifier names out of thin air, the name of the mocking API therefore has to be user-supplied.
@@ -305,6 +340,26 @@ _The suggested naming convention is using the name of the trait (e.g. `Trait`) p
 
 This will make it easier to discover the API, as it shares a common prefix with the name of the trait.
 
+#### Methods with default implementations
+Methods with default implementations use _delegation by default_.
+This means that if a default-implementation-method gets called without having been mentioned in a clause, unimock delegates to its default implementation instead of inducing a panic.
+Quite often, a typical default implementation will itself delegate back to a _required_ method.
+
+This means that you have control over which part of the trait API you want to mock, the high level or the low level part.
+
+#### Associated types
+Associated types in traits may be specified using the `type` keyword in the unimock macro:
+
+```rust
+#[unimock(api = TraitMock, type A = i32; type B = String;)]
+trait Trait {
+    type A;
+    type B;
+}
+```
+
+Working with associated types in a mock environment like Unimock has its limitations.
+The nature of associated types is that there is one type per implementation, and there is only one mock implementation, so the type must be chosen carefully.
 
 
 ## Project goals

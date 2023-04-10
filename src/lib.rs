@@ -100,10 +100,10 @@
 //! Many traits uses the argument mutation pattern, where there are one or more `&mut` parameters.
 //!
 //! Due to [various limitations](https://github.com/rust-lang/rust/issues/100013) in Rust's type system, Unimock needs to use a little workaround to get this working correctly.
-//! Unimock supports mutating _one parameter_, and it's not handled as part of the method's regular [Inputs](MockFn::Inputs), but instead represented as a separate [Mutation](MockFn::Mutation) type.
+//! Unimock supports mutating _one parameter_, and it's not handled as part of the method's regular [`Inputs`](crate::MockFn::Inputs), but instead represented as a separate [`Mutation`](crate::MockFn::Mutation) type.
 //! If a method contains more than one `&mut` parameter (besides `&mut self`), the _last one_ is currently automatically selected as the mutation.
 //!
-//! To access the `&mut` mutation, the [.mutates](crate::build::DefineResponse::mutates) combinator is used, as demonstrated in this [Display](core::fmt::Display) mock:
+//! To access the `&mut` mutation, the [`.mutates`](crate::build::DefineResponse::mutates) combinator is used, as demonstrated in this [Display](core::fmt::Display) mock:
 //!
 //! ```rust
 //! # use unimock::*;
