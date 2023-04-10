@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use crate::lib::Box;
+use crate::private::lib::Box;
 use crate::{call_pattern::DynResponder, value_chain::ValueChain, MockFn, Responder};
 
 /// Trait for responding to function calls.
@@ -285,7 +285,7 @@ mod mixed_option {
 }
 
 mod mixed_vec {
-    use crate::lib::Vec;
+    use crate::private::lib::Vec;
 
     use super::*;
 

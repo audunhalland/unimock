@@ -155,7 +155,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
 
         Some(quote! {
             #(#impl_attributes)*
-            impl #generic_params #trait_path #generic_args for #prefix::macro_api::DefaultImplDelegator #where_clause {
+            impl #generic_params #trait_path #generic_args for #prefix::private::DefaultImplDelegator #where_clause {
                 #(#attr_associated_types)*
                 #(#non_default_methods)*
             }
@@ -368,7 +368,7 @@ fn def_method_impl(
                         method.inputs_destructuring(InputsSyntax::EvalPattern, Tupled(true), attr);
 
                     quote! {
-                        #prefix::macro_api::Evaluation::Unmocked(#eval_pattern) => #unmock_expr,
+                        #prefix::private::Evaluation::Unmocked(#eval_pattern) => #unmock_expr,
                     }
                 },
             );
@@ -381,7 +381,7 @@ fn def_method_impl(
                     method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
 
                 let delegator_path = quote! {
-                    #prefix::macro_api::DefaultImplDelegator
+                    #prefix::private::DefaultImplDelegator
                 };
 
                 let delegator_constructor = match method_sig.receiver() {
@@ -395,20 +395,20 @@ fn def_method_impl(
                         mutability: None,
                         ..
                     }) => quote! {
-                        #prefix::macro_api::as_ref::<Self, #delegator_path>(self)
+                        #prefix::private::as_ref::<Self, #delegator_path>(self)
                     },
                     Some(syn::Receiver {
                         reference: Some(_),
                         mutability: Some(_),
                         ..
                     }) => quote! {
-                        #prefix::macro_api::as_mut::<Self, #delegator_path>(self)
+                        #prefix::private::as_mut::<Self, #delegator_path>(self)
                     },
                     _ => todo!("unhandled DefaultImplDelegator constructor"),
                 };
 
                 Some(quote! {
-                    #prefix::macro_api::Evaluation::CallDefaultImpl(#eval_pattern) => {
+                    #prefix::private::Evaluation::CallDefaultImpl(#eval_pattern) => {
                         #delegator_constructor
                             .#method_ident(#fn_params)
                             #opt_dot_await
@@ -428,7 +428,7 @@ fn def_method_impl(
             };
 
             quote_spanned! { span=>
-                match #prefix::macro_api::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
+                match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
                     #unmock_arm
                     #default_impl_delegate_arm
                     e => e.unwrap(#self_ref)
@@ -455,14 +455,14 @@ fn def_method_impl(
                     mutability: None,
                     ..
                 }) => {
-                    quote! { #prefix::macro_api::as_ref::<Self, #prefix::Unimock>(self) }
+                    quote! { #prefix::private::as_ref::<Self, #prefix::Unimock>(self) }
                 }
                 Some(syn::Receiver {
                     reference: Some(_),
                     mutability: Some(_),
                     ..
                 }) => {
-                    quote! { #prefix::macro_api::as_mut::<Self, #prefix::Unimock>(self) }
+                    quote! { #prefix::private::as_mut::<Self, #prefix::Unimock>(self) }
                 }
                 _ => panic!("BUG: Incompatible receiver for default delegator"),
             };

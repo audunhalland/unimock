@@ -3,14 +3,14 @@ use core::marker::PhantomData;
 use crate::call_pattern::*;
 use crate::clause::{self};
 use crate::fn_mocker::PatternMatchMode;
-use crate::lib::vec;
 use crate::output::{IntoCloneResponder, IntoOnceResponder, IntoResponse, Respond, StaticRef};
+use crate::private::lib::vec;
 use crate::property::*;
 use crate::Clause;
 use crate::*;
 
 pub(crate) mod dyn_builder {
-    use crate::lib::{vec, Vec};
+    use crate::private::lib::{vec, Vec};
 
     use crate::{
         call_pattern::{DynCallOrderResponder, DynInputMatcher, DynResponder},
@@ -96,7 +96,7 @@ pub(crate) mod dyn_builder {
     }
 }
 
-use crate::lib::{String, ToString, Vec};
+use crate::private::lib::{String, ToString, Vec};
 use dyn_builder::*;
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
@@ -238,7 +238,7 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: crate::lib::Box::new(|_, _| Default::default()),
+                        func: crate::private::lib::Box::new(|_, _| Default::default()),
                     }
                     .into_dyn_responder(),
                 );
@@ -253,7 +253,7 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: crate::lib::Box::new(move |inputs, _ctx| {
+                        func: crate::private::lib::Box::new(move |inputs, _ctx| {
                             func(inputs).into_response()
                         }),
                     }
@@ -272,7 +272,7 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: crate::lib::Box::new(move |inputs, ctx| {
+                        func: crate::private::lib::Box::new(move |inputs, ctx| {
                             func(inputs, ctx).into_response()
                         }),
                     }
@@ -289,7 +289,7 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
-                        func: crate::lib::Box::new(move |inputs, ctx| {
+                        func: crate::private::lib::Box::new(move |inputs, ctx| {
                             func(ctx.mutation, inputs).into_response()
                         }),
                     }
@@ -313,7 +313,7 @@ macro_rules! define_response_common_impl {
                 R: core::borrow::Borrow<T> + 'static,
                 T: 'static,
             {
-                use crate::lib::Box;
+                use crate::private::lib::Box;
                 self.wrapper.push_responder(
                     FunctionResponder::<F> {
                         func: Box::new(move |inputs, _| {

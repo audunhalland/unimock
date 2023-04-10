@@ -115,8 +115,8 @@ impl<'t> MockMethod<'t> {
         let body = if first_param.is_some() {
             let inputs_try_debug_exprs = self.inputs_try_debug_exprs();
             quote! {
-                use #prefix::macro_api::{ProperDebug, NoDebug};
-                #prefix::lib::vec![#(#inputs_try_debug_exprs),*]
+                use #prefix::private::{ProperDebug, NoDebug};
+                #prefix::private::lib::vec![#(#inputs_try_debug_exprs),*]
             }
         } else {
             return None;
@@ -125,7 +125,7 @@ impl<'t> MockMethod<'t> {
         let inputs = self.inputs_destructuring(InputsSyntax::FnPattern, Tupled(true), attr);
 
         Some(quote! {
-            fn debug_inputs(#inputs: &Self::Inputs<'_>) -> #prefix::lib::Vec<::core::option::Option<#prefix::lib::String>> {
+            fn debug_inputs(#inputs: &Self::Inputs<'_>) -> #prefix::private::lib::Vec<::core::option::Option<#prefix::private::lib::String>> {
                 #body
             }
         })

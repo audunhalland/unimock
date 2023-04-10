@@ -5,7 +5,7 @@ use spin::Mutex;
 use crate::debug;
 use crate::error;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::lib::{BTreeMap, Vec};
+use crate::private::lib::{vec, BTreeMap, Vec};
 use crate::FallbackMode;
 
 pub(crate) struct SharedState {
@@ -29,7 +29,7 @@ impl SharedState {
             original_thread: std::thread::current().id(),
 
             next_ordered_call_index: AtomicUsize::new(0),
-            panic_reasons: Mutex::new(crate::lib::vec![]),
+            panic_reasons: Mutex::new(vec![]),
         }
     }
 

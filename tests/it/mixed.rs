@@ -1,4 +1,4 @@
-use unimock::lib::{vec, ToString, Vec};
+use unimock::private::lib::{vec, ToString, Vec};
 use unimock::*;
 
 mod clone {

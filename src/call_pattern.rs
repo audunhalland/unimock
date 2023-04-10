@@ -1,12 +1,12 @@
-use crate::lib::{Box, String, Vec};
+use crate::private::lib::{Box, String, Vec};
 use core::any::Any;
 use spin::Mutex;
 
 use crate::build;
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
-use crate::macro_api::MismatchReporter;
 use crate::output::Respond;
+use crate::private::MismatchReporter;
 use crate::*;
 
 #[derive(Clone, Copy)]
@@ -249,7 +249,7 @@ fn find_responder_by_call_index(
 
 #[cfg(test)]
 mod tests {
-    use crate::lib::{vec, ToString};
+    use crate::private::lib::{vec, ToString};
 
     use super::*;
 

@@ -1,4 +1,4 @@
-use crate::lib::String;
+use crate::private::lib::String;
 use crate::{debug, mismatch::Mismatches, MockFnInfo};
 
 pub(crate) type MockResult<T> = Result<T, MockError>;

@@ -1,4 +1,4 @@
-use unimock::lib::{String, ToString};
+use unimock::private::lib::{String, ToString};
 use unimock::*;
 
 /// Regression test for compile error:

@@ -365,8 +365,6 @@ extern crate alloc;
 
 /// Types used for building and defining mock behaviour.
 pub mod build;
-/// APIs used by macros, not intended to be used directly.
-pub mod macro_api;
 /// Function outputs.
 pub mod output;
 /// Traits and types used for describing the properties of various mock types.
@@ -374,6 +372,10 @@ pub mod property;
 
 /// Mock APIs for various crates.
 pub mod mock;
+
+/// APIs used by macros, etc
+#[doc(hidden)]
+pub mod private;
 
 #[doc(hidden)]
 pub mod value_chain;
@@ -396,13 +398,12 @@ use core::fmt::Debug;
 use core::panic::RefUnwindSafe;
 use core::panic::UnwindSafe;
 
+use once_cell::sync::OnceCell;
+
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
 use debug::TraitMethodPath;
-use macro_api::DefaultImplDelegator;
-use macro_api::Matching;
-
-use once_cell::sync::OnceCell;
+use private::{DefaultImplDelegator, Matching};
 
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
@@ -529,12 +530,12 @@ pub use unimock_macros::unimock;
 /// }
 ///
 /// fn one_str() {
-///     fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::one>)) {}
+///     fn args(_: &dyn Fn(&mut private::Matching<Mock::one>)) {}
 ///     args(matching!("a"));
 /// }
 ///
 /// fn three_strs() {
-///     fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::three>)) {}
+///     fn args(_: &dyn Fn(&mut private::Matching<Mock::three>)) {}
 ///     args(matching!("a", _, "c" | "C"));
 ///     args(matching!(("a", "b", "c") | ("d", "e", "f" | "F")));
 ///     args(matching!(("a", b, "c") if b.contains("foo")));
@@ -574,7 +575,7 @@ pub use unimock_macros::unimock;
 ///     );
 /// }
 ///
-/// fn args(_: &dyn Fn(&mut macro_api::Matching<Mock::interesting_args>)) {}
+/// fn args(_: &dyn Fn(&mut private::Matching<Mock::interesting_args>)) {}
 ///
 /// args(matching! {("a", _, "c", _) | (_, "b", _, 42)});
 ///
@@ -586,7 +587,7 @@ pub use unimock_macros::unimock;
 /// }
 /// ```
 ///
-/// Internally it works by calling [macro_api::as_str_ref] on inputs matched by a string literal.
+/// Internally it works by calling [private::as_str_ref] on inputs matched by a string literal.
 ///
 /// # Matching using `Eq`
 ///
@@ -658,13 +659,13 @@ enum FallbackMode {
 /// Therefore, Unimock should always be cloned before sending off to another thread.
 ///
 pub struct Unimock {
-    shared_state: lib::Arc<state::SharedState>,
+    shared_state: private::lib::Arc<state::SharedState>,
 
     // A value chain for "dumping" owned return values that
     // a function signature needs to *borrow* instead.
     value_chain: value_chain::ValueChain,
 
-    default_impl_delegator_cell: OnceCell<lib::Box<DefaultImplDelegator>>,
+    default_impl_delegator_cell: OnceCell<private::lib::Box<DefaultImplDelegator>>,
 
     original_instance: bool,
     torn_down: bool,
@@ -740,7 +741,7 @@ impl Unimock {
 
     #[track_caller]
     fn from_assembler(
-        assembler_result: Result<MockAssembler, lib::String>,
+        assembler_result: Result<MockAssembler, private::lib::String>,
         fallback_mode: FallbackMode,
     ) -> Self {
         let fn_mockers = match assembler_result {
@@ -749,7 +750,10 @@ impl Unimock {
         };
 
         Self {
-            shared_state: lib::Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
+            shared_state: private::lib::Arc::new(state::SharedState::new(
+                fn_mockers,
+                fallback_mode,
+            )),
             value_chain: Default::default(),
             default_impl_delegator_cell: Default::default(),
             original_instance: true,
@@ -767,13 +771,13 @@ impl Unimock {
         }
     }
 
-    fn prepare_panic(&self, error: error::MockError) -> lib::String {
+    fn prepare_panic(&self, error: error::MockError) -> private::lib::String {
         #[cfg(not(feature = "std"))]
         {
             *self.panicked.lock() = true;
         }
 
-        let msg = crate::lib::format!("{error}");
+        let msg = private::lib::format!("{error}");
 
         let mut panic_reasons = self.shared_state.panic_reasons.lock();
         panic_reasons.push(error);
@@ -800,7 +804,7 @@ impl AsRef<DefaultImplDelegator> for Unimock {
     fn as_ref(&self) -> &DefaultImplDelegator {
         let delegator = self
             .default_impl_delegator_cell
-            .get_or_init(|| lib::Box::new(DefaultImplDelegator::from(self.clone())));
+            .get_or_init(|| private::lib::Box::new(DefaultImplDelegator::from(self.clone())));
         delegator.as_ref()
     }
 }
@@ -808,7 +812,7 @@ impl AsRef<DefaultImplDelegator> for Unimock {
 impl AsMut<DefaultImplDelegator> for Unimock {
     fn as_mut(&mut self) -> &mut DefaultImplDelegator {
         self.default_impl_delegator_cell
-            .get_or_init(|| lib::Box::new(DefaultImplDelegator::from(self.clone())));
+            .get_or_init(|| private::lib::Box::new(DefaultImplDelegator::from(self.clone())));
         self.default_impl_delegator_cell.get_mut().unwrap()
     }
 }
@@ -831,8 +835,8 @@ impl Drop for Unimock {
         if let Err(errors) = teardown::teardown(self) {
             let error_strings = errors
                 .iter()
-                .map(|err| <MockError as lib::ToString>::to_string(err))
-                .collect::<lib::Vec<_>>();
+                .map(|err| <MockError as private::lib::ToString>::to_string(err))
+                .collect::<private::lib::Vec<_>>();
             panic!("{}", error_strings.join("\n"));
         }
     }
@@ -858,8 +862,8 @@ impl Drop for Unimock {
 #[doc_cfg::doc_cfg(feature = "std")]
 impl std::process::Termination for Unimock {
     fn report(mut self) -> std::process::ExitCode {
-        match macro_api::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ()) {
-            macro_api::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
+        match private::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ()) {
+            private::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
             e => e.unwrap(&self),
         }
     }
@@ -924,8 +928,8 @@ pub trait MockFn: Sized + 'static {
 
     /// Compute some debug representation of the inputs.
     #[allow(unused)]
-    fn debug_inputs(inputs: &Self::Inputs<'_>) -> lib::Vec<Option<lib::String>> {
-        lib::vec![]
+    fn debug_inputs(inputs: &Self::Inputs<'_>) -> private::lib::Vec<Option<private::lib::String>> {
+        private::lib::vec![]
     }
 
     /// Create a stubbing clause by grouping calls.
@@ -1099,39 +1103,9 @@ impl<T> Debug for PhantomMut<T> {
 #[must_use]
 pub trait Clause {
     #[doc(hidden)]
-    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), lib::String>;
+    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), private::lib::String>;
 }
 
 // Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods
 #[doc(hidden)]
 pub struct Responder(call_pattern::DynResponder);
-
-/// Standard library abstractions.
-#[doc_cfg::doc_cfg(feature = "std")]
-pub mod lib {
-    pub use ::std::boxed::Box;
-    pub use ::std::collections::btree_map::Entry;
-    pub use ::std::collections::BTreeMap;
-    pub use ::std::collections::BTreeSet;
-    pub use ::std::format;
-    pub use ::std::string::String;
-    pub use ::std::string::ToString;
-    pub use ::std::sync::Arc;
-    pub use ::std::vec;
-    pub use ::std::vec::Vec;
-}
-
-/// Standard library abstractions.
-#[doc_cfg::doc_cfg(not(feature = "std"))]
-pub mod lib {
-    pub use ::alloc::boxed::Box;
-    pub use ::alloc::collections::btree_map::Entry;
-    pub use ::alloc::collections::BTreeMap;
-    pub use ::alloc::collections::BTreeSet;
-    pub use ::alloc::format;
-    pub use ::alloc::string::String;
-    pub use ::alloc::string::ToString;
-    pub use ::alloc::sync::Arc;
-    pub use ::alloc::vec;
-    pub use ::alloc::vec::Vec;
-}

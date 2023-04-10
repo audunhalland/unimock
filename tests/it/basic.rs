@@ -1,6 +1,6 @@
 use core::panic::{RefUnwindSafe, UnwindSafe};
 
-use unimock::lib::{format, String, ToString};
+use unimock::private::lib::{format, String, ToString};
 use unimock::*;
 
 fn assert_implements_niceness<T: Send + Sync + UnwindSafe + RefUnwindSafe>() {}
@@ -427,7 +427,7 @@ mod custom_api_module {
 
 mod flattened_module {
     mod basic {
-        use unimock::lib::String;
+        use unimock::private::lib::String;
         use unimock::*;
 
         #[unimock(api=[Foo, Bar])]
@@ -444,7 +444,7 @@ mod flattened_module {
     }
 
     mod generics {
-        use unimock::lib::String;
+        use unimock::private::lib::String;
         use unimock::*;
 
         #[unimock(api=[Foo, Bar])]
@@ -564,7 +564,7 @@ fn newtype() {
 
 #[test]
 fn borrow_intricate_lifetimes() {
-    use unimock::lib::{Box, String};
+    use unimock::private::lib::{Box, String};
 
     pub struct I<'s>(core::marker::PhantomData<&'s ()>);
     pub struct O<'s>(&'s String);
@@ -757,7 +757,7 @@ mod lifetime_constrained_output_type {
 }
 
 mod slice_matching {
-    use unimock::lib::{vec, String, Vec};
+    use unimock::private::lib::{vec, String, Vec};
 
     use super::*;
 

@@ -1,4 +1,4 @@
-use crate::lib::{Arc, Vec};
+use crate::private::lib::{Arc, Vec};
 use crate::{error::MockError, Unimock};
 
 #[cfg(feature = "std")]

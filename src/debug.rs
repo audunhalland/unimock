@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use crate::lib::{Box, String, Vec};
+use crate::private::lib::{Box, String, Vec};
 use crate::{call_pattern::PatIndex, MockFnInfo};
 
 #[derive(Clone)]

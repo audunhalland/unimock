@@ -1,9 +1,9 @@
 use core::fmt::Display;
 
-use crate::lib::{vec, BTreeSet, String, Vec};
+use crate::private::lib::{vec, BTreeSet, String, Vec};
 use crate::{
     call_pattern::{InputIndex, PatIndex},
-    macro_api::MismatchReporter,
+    private::MismatchReporter,
 };
 
 #[derive(Clone)]

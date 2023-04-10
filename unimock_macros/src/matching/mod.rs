@@ -26,8 +26,8 @@ impl Arg {
     fn render_expr(&self) -> proc_macro2::TokenStream {
         let arg_ident = &self.arg_ident;
         match self.kind {
-            ArgKind::LitStr => quote! { ::unimock::macro_api::as_str_ref(#arg_ident) },
-            ArgKind::Slice => quote! { ::unimock::macro_api::as_slice(#arg_ident) },
+            ArgKind::LitStr => quote! { ::unimock::private::as_str_ref(#arg_ident) },
+            ArgKind::Slice => quote! { ::unimock::private::as_slice(#arg_ident) },
             _ => quote! { #arg_ident },
         }
     }
@@ -252,7 +252,7 @@ impl ArgMatcher {
                         match #arg_expr {
                             #pat => {}
                             mismatch => {
-                                use ::unimock::macro_api::{ProperDebug, NoDebug};
+                                use ::unimock::private::{ProperDebug, NoDebug};
                                 reporter.pat_fail(#index, mismatch.unimock_try_debug(), Some(#doc_lit));
                             }
                         }
@@ -274,7 +274,7 @@ impl ArgMatcher {
 
                 Some(quote! {
                     if !(#arg_expr #operator #local_ident) {
-                        use ::unimock::macro_api::{ProperDebug, NoDebug};
+                        use ::unimock::private::{ProperDebug, NoDebug};
                         reporter.#reporter_method(#index, #arg_expr.unimock_try_debug(), #local_ident.unimock_try_debug());
                     }
                 })

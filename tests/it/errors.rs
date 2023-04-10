@@ -1,4 +1,4 @@
-use unimock::lib::String;
+use unimock::private::lib::String;
 use unimock::*;
 
 #[unimock(api=SingleArgMock)]

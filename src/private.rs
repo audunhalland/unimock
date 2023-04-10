@@ -1,9 +1,10 @@
 use crate::call_pattern::InputIndex;
 use crate::debug;
-use crate::lib::{vec, Box, String, Vec};
 use crate::mismatch::{Mismatch, MismatchKind};
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, *};
+
+use lib::{Box, String, Vec};
 
 /// The evaluation of a [MockFn].
 ///
@@ -93,14 +94,14 @@ impl MismatchReporter {
     pub(crate) fn new_enabled() -> Self {
         Self {
             enabled: true,
-            mismatches: crate::lib::vec![],
+            mismatches: lib::vec![],
         }
     }
 
     pub(crate) fn new_disabled() -> Self {
         Self {
             enabled: false,
-            mismatches: vec![],
+            mismatches: lib::vec![],
         }
     }
 
@@ -229,7 +230,7 @@ pub trait NoDebug {
 
 impl<T: core::fmt::Debug> ProperDebug for T {
     fn unimock_try_debug(&self) -> Option<String> {
-        Some(crate::lib::format!("{self:?}"))
+        Some(lib::format!("{self:?}"))
     }
 }
 
@@ -273,4 +274,34 @@ where
     T: AsMut<U>,
 {
     <T as AsMut<U>>::as_mut(input)
+}
+
+/// Standard library re-exports when using `std`.
+#[doc_cfg::doc_cfg(feature = "std")]
+pub mod lib {
+    pub use ::std::boxed::Box;
+    pub use ::std::collections::btree_map::Entry;
+    pub use ::std::collections::BTreeMap;
+    pub use ::std::collections::BTreeSet;
+    pub use ::std::format;
+    pub use ::std::string::String;
+    pub use ::std::string::ToString;
+    pub use ::std::sync::Arc;
+    pub use ::std::vec;
+    pub use ::std::vec::Vec;
+}
+
+/// Standard library re-exports when using `no_std`.
+#[doc_cfg::doc_cfg(not(feature = "std"))]
+pub mod lib {
+    pub use ::alloc::boxed::Box;
+    pub use ::alloc::collections::btree_map::Entry;
+    pub use ::alloc::collections::BTreeMap;
+    pub use ::alloc::collections::BTreeSet;
+    pub use ::alloc::format;
+    pub use ::alloc::string::String;
+    pub use ::alloc::string::ToString;
+    pub use ::alloc::sync::Arc;
+    pub use ::alloc::vec;
+    pub use ::alloc::vec::Vec;
 }

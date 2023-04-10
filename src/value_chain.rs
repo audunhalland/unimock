@@ -1,7 +1,7 @@
 use core::any::Any;
 use once_cell::sync::OnceCell;
 
-use crate::lib::Box;
+use crate::private::lib::Box;
 
 /// A collection that can store values, but never remove them until dropped.
 ///

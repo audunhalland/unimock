@@ -1,8 +1,7 @@
 use crate::build::dyn_builder::DynCallPatternBuilder;
 use crate::call_pattern::CallPattern;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::lib::{format, vec, String};
-use crate::lib::{BTreeMap, Entry};
+use crate::private::lib::{format, vec, BTreeMap, Entry, String};
 use crate::Clause;
 use crate::{clause, MockFnInfo};
 
