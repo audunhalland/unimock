@@ -1,5 +1,16 @@
-use crate::private::lib::{Arc, Vec};
+use crate::private::lib::{Arc, ToString, Vec};
 use crate::{error::MockError, Unimock};
+
+#[track_caller]
+pub(crate) fn teardown_panic(unimock: &mut Unimock) {
+    if let Err(errors) = teardown(unimock) {
+        let error_strings = errors
+            .iter()
+            .map(<MockError as ToString>::to_string)
+            .collect::<Vec<_>>();
+        panic!("{}", error_strings.join("\n"));
+    }
+}
 
 #[cfg(feature = "std")]
 pub(crate) fn teardown_report(unimock: &mut Unimock) -> std::process::ExitCode {
@@ -14,6 +25,7 @@ pub(crate) fn teardown_report(unimock: &mut Unimock) -> std::process::ExitCode {
     }
 }
 
+#[track_caller]
 pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
     unimock.torn_down = true;
 

@@ -624,8 +624,6 @@ pub use unimock_macros::unimock;
 ///
 pub use unimock_macros::matching;
 
-use crate::error::MockError;
-
 #[derive(Clone, Copy)]
 enum FallbackMode {
     Error,
@@ -669,6 +667,7 @@ pub struct Unimock {
 
     original_instance: bool,
     torn_down: bool,
+    verify_in_drop: bool,
 
     // Hack when running in `no_std` mode.
     // There is a problem with panic-in-drop if the thread is already panicking.
@@ -739,6 +738,33 @@ impl Unimock {
         )
     }
 
+    /// Turn off auto-verification within [Drop::drop].
+    ///
+    /// The current use case for this is `[no_std]`. In `[no_std]` there is no thread API,
+    /// and therefore no way to check if the current thread is already panicking.
+    ///
+    /// Leaving verify-in-drop on in such circumstances (in the context of panicking unit tests)
+    /// easily leads to double panics, which are quite hard to debug.
+    pub fn no_verify_in_drop(mut self) -> Self {
+        if !self.original_instance {
+            panic!("Called no_verify_on_drop() on a cloned instance. Configure the original instance instead.");
+        }
+
+        self.verify_in_drop = false;
+        self
+    }
+
+    /// Explicitly verify this unimock instance.
+    ///
+    /// There is no need to do this explicitly unless [Self::no_verify_in_drop] has been called.
+    pub fn verify(mut self) {
+        if !self.original_instance {
+            panic!("Called verify() on a cloned instance. Verify the original instance instead.");
+        }
+
+        teardown::teardown_panic(&mut self);
+    }
+
     #[track_caller]
     fn from_assembler(
         assembler_result: Result<MockAssembler, private::lib::String>,
@@ -758,6 +784,7 @@ impl Unimock {
             default_impl_delegator_cell: Default::default(),
             original_instance: true,
             torn_down: false,
+            verify_in_drop: true,
             #[cfg(not(feature = "std"))]
             panicked: ::spin::Mutex::new(false),
         }
@@ -794,6 +821,7 @@ impl Clone for Unimock {
             default_impl_delegator_cell: Default::default(),
             original_instance: false,
             torn_down: false,
+            verify_in_drop: self.verify_in_drop,
             #[cfg(not(feature = "std"))]
             panicked: ::spin::Mutex::new(false),
         }
@@ -832,12 +860,8 @@ impl Drop for Unimock {
             return;
         }
 
-        if let Err(errors) = teardown::teardown(self) {
-            let error_strings = errors
-                .iter()
-                .map(<MockError as private::lib::ToString>::to_string)
-                .collect::<private::lib::Vec<_>>();
-            panic!("{}", error_strings.join("\n"));
+        if self.verify_in_drop {
+            teardown::teardown_panic(self);
         }
     }
 }

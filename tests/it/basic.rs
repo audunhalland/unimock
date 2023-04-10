@@ -942,3 +942,38 @@ mod associated_type {
         fn assoc_ref_arg(&self, arg: &Self::Foo) -> bool;
     }
 }
+
+mod no_verify_in_drop {
+    use unimock::*;
+
+    #[unimock(api = TraitMock)]
+    trait Trait {
+        fn foo(&self);
+    }
+
+    fn mock() -> Unimock {
+        Unimock::new(TraitMock::foo.next_call(matching!()).returns(()))
+    }
+
+    fn mock_no_verify_in_drop() -> Unimock {
+        mock().no_verify_in_drop()
+    }
+
+    #[test]
+    #[should_panic = "actually matched no calls"]
+    fn panics() {
+        mock();
+    }
+
+    #[test]
+    fn no_panic() {
+        mock_no_verify_in_drop();
+    }
+
+    #[test]
+    #[should_panic = "actually matched no calls"]
+    fn explicit_verify() {
+        let unimock = mock_no_verify_in_drop();
+        unimock.verify();
+    }
+}
