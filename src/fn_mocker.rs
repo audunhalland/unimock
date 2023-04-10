@@ -39,7 +39,7 @@ impl FnMocker {
 
     pub fn debug_pattern(&self, pat_index: PatIndex) -> debug::CallPatternDebug {
         debug::CallPatternDebug::new(
-            self.info.clone(),
+            self.info,
             self.call_patterns[pat_index.0].debug_location(pat_index),
         )
     }
@@ -59,9 +59,7 @@ impl FnMocker {
         }
 
         if total_calls == 0 {
-            errors.push(error::MockError::MockNeverCalled {
-                info: self.info.clone(),
-            });
+            errors.push(error::MockError::MockNeverCalled { info: self.info });
         }
     }
 }

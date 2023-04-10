@@ -835,7 +835,7 @@ impl Drop for Unimock {
         if let Err(errors) = teardown::teardown(self) {
             let error_strings = errors
                 .iter()
-                .map(|err| <MockError as private::lib::ToString>::to_string(err))
+                .map(<MockError as private::lib::ToString>::to_string)
                 .collect::<private::lib::Vec<_>>();
             panic!("{}", error_strings.join("\n"));
         }
