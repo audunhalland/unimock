@@ -363,7 +363,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-/// Types used for building and defining mock behaviour.
+/// Builder pattern types used for defining mocked behaviour.
 pub mod build;
 /// Function outputs.
 pub mod output;
