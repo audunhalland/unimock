@@ -894,7 +894,10 @@ pub trait MockFn: Sized + 'static {
     fn info() -> MockFnInfo;
 
     /// Compute some debug representation of the inputs.
-    fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>>;
+    #[allow(unused)]
+    fn debug_inputs(inputs: &Self::Inputs<'_>) -> Vec<Option<String>> {
+        vec![]
+    }
 
     /// Create a stubbing clause by grouping calls.
     ///

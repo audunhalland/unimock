@@ -103,7 +103,7 @@ impl<'t> MockMethod<'t> {
         }
     }
 
-    pub fn generate_debug_inputs_fn(&self, attr: &Attr) -> proc_macro2::TokenStream {
+    pub fn generate_debug_inputs_fn(&self, attr: &Attr) -> Option<proc_macro2::TokenStream> {
         let prefix = &attr.prefix;
         let first_param = self
             .method
@@ -119,18 +119,16 @@ impl<'t> MockMethod<'t> {
                 vec![#(#inputs_try_debug_exprs),*]
             }
         } else {
-            quote! {
-                vec![]
-            }
+            return None;
         };
 
         let inputs = self.inputs_destructuring(InputsSyntax::FnPattern, Tupled(true), attr);
 
-        quote! {
+        Some(quote! {
             fn debug_inputs(#inputs: &Self::Inputs<'_>) -> std::vec::Vec<core::option::Option<String>> {
                 #body
             }
-        }
+        })
     }
 
     pub fn inputs_try_debug_exprs(&self) -> impl Iterator<Item = proc_macro2::TokenStream> + 't {
