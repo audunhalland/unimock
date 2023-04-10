@@ -293,6 +293,7 @@
 //! #### What kinds of things can be mocked with unimock?
 //! * Traits with any number of methods
 //! * Traits with generic parameters, although these cannot be lifetime constrained (i.e. need to satisfy `T: 'static`).
+//! * Traits with associated types, using `#[unimock(type T = Foo;)]` syntax.
 //! * Methods with any self receiver (`self`, `&self`, `&mut self` or arbitrary (e.g. `self: Rc<Self>`)).
 //! * Methods that take reference inputs.
 //! * Methods returning references to self.
@@ -306,7 +307,6 @@
 //! * Methods that return a future that is an associated type. Requires nightly.
 //!
 //! #### What kinds of traits or methods cannot be mocked?
-//! * Traits with associated types. Unimock would have to select a type at random, which does not make a lot of sense.
 //! * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
 //! * Methods receiving `&mut` arguments other than `&mut self`.
 //!     It _might_ work, but is currently unsupported due to stricter lifetime constraints that is harder to express via generics.
@@ -489,15 +489,16 @@ use once_cell::sync::OnceCell;
 ///
 ///
 /// # Arguments
-/// The unimock macro accepts a number of comma-separated key-value configuration parameters:
+/// The unimock macro accepts a number of comma or colon-separated key-value configuration parameters:
 ///
-/// * `#[unimock(api=#ident)]`: Export a mocking API as a module with the given name
-/// * `#[unimock(api=[method1, method2, ..])`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
+/// * `#[unimock(api=#ident), ]`: Export a mocking API as a module with the given name
+/// * `#[unimock(api=[method1, method2, ..], )]`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
 ///     with the names of those structs passed with array-like syntax in the same order as the methods appear in the trait definition.
-/// * `#[unimock(unmock_with=[a, b, _])`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
+/// * `#[unimock(unmock_with=[a, b, _], )]`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
 ///     The functions are assigned to the methods in the same order as the methods are listed in the trait.
 ///     A value of `_` means _no unmock support_ for that method.
-/// * `#[unimock(prefix=path)]`: Makes unimock use a different path prefix than `::unimock`, in case the crate has been re-exported through another crate.
+/// * `#[unimock(prefix=path, )]`: Makes unimock use a different path prefix than `::unimock`, in case the crate has been re-exported through another crate.
+/// * `#[unimock(type #ident = #assoc; )]`: Specify the value of the associated type `#ident`.
 pub use unimock_macros::unimock;
 
 ///

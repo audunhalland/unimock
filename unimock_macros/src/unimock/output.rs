@@ -74,9 +74,8 @@ impl OutputOwnership {
 }
 
 pub fn determine_output_structure(
-    prefix: &syn::Path,
-    item_trait: &syn::ItemTrait,
     sig: &syn::Signature,
+    item_trait: &syn::ItemTrait,
     attr: &Attr,
 ) -> OutputStructure {
     match &sig.output {
@@ -89,6 +88,7 @@ pub fn determine_output_structure(
         syn::ReturnType::Type(_, ty) => match ty.as_ref() {
             syn::Type::Reference(type_reference) => {
                 let mut inner_ty = *type_reference.elem.clone();
+                inner_ty = util::self_type_to_unimock(inner_ty, item_trait, attr);
 
                 let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
                 let ownership = determine_reference_ownership(sig, type_reference);
@@ -109,27 +109,28 @@ pub fn determine_output_structure(
                     && is_self_segment(path.path.segments.first())
                     && (path.path.segments.len() == 2) =>
             {
-                determine_associated_future_structure(prefix, item_trait, sig, &path.path, attr)
+                determine_associated_future_structure(sig, &path.path, item_trait, attr)
                     .unwrap_or_else(|| {
-                        determine_owned_or_mixed_output_structure(prefix, sig, ty, attr)
+                        determine_owned_or_mixed_output_structure(sig, ty, item_trait, attr)
                     })
             }
-            _ => determine_owned_or_mixed_output_structure(prefix, sig, ty, attr),
+            _ => determine_owned_or_mixed_output_structure(sig, ty, item_trait, attr),
         },
     }
 }
 
 /// Determine output structure that is not a reference nor a future
 pub fn determine_owned_or_mixed_output_structure(
-    prefix: &syn::Path,
     sig: &syn::Signature,
     ty: &syn::Type,
+    item_trait: &syn::ItemTrait,
     attr: &Attr,
 ) -> OutputStructure {
+    let prefix = &attr.prefix;
+
+    let ty = util::self_type_to_unimock(ty.clone(), item_trait, attr);
+
     let mut inner_ty = ty.clone();
-
-    inner_ty = util::self_type_to_unimock(inner_ty, attr);
-
     let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
 
     let ownership = if borrow_info.has_input_lifetime {
@@ -190,7 +191,7 @@ pub fn determine_owned_or_mixed_output_structure(
         }
         (ownership, inner_ty) => {
             let response_ty = AssociatedInnerType::new_static(inner_ty, &borrow_info);
-            let output_ty = AssociatedInnerType::new_gat(ty.clone(), &borrow_info, &ownership);
+            let output_ty = AssociatedInnerType::new_gat(ty, &borrow_info, &ownership);
 
             OutputStructure {
                 wrapping: OutputWrapping::None,
@@ -210,10 +211,9 @@ fn is_self_segment(segment: Option<&syn::PathSegment>) -> bool {
 }
 
 fn determine_associated_future_structure(
-    prefix: &syn::Path,
-    item_trait: &syn::ItemTrait,
     sig: &syn::Signature,
     path: &syn::Path,
+    item_trait: &syn::ItemTrait,
     attr: &Attr,
 ) -> Option<OutputStructure> {
     let assoc_ident = &path.segments[1].ident;
@@ -269,7 +269,7 @@ fn determine_associated_future_structure(
         .next()?;
 
     let mut future_output_structure =
-        determine_owned_or_mixed_output_structure(prefix, sig, &output_binding.ty, attr);
+        determine_owned_or_mixed_output_structure(sig, &output_binding.ty, item_trait, attr);
     future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty.clone());
 
     Some(future_output_structure)

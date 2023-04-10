@@ -177,7 +177,6 @@ impl<'t> MockMethod<'t> {
 }
 
 pub fn extract_methods<'s>(
-    prefix: &syn::Path,
     item_trait: &'s syn::ItemTrait,
     is_trait_type_generic: IsTypeGeneric,
     attr: &Attr,
@@ -203,7 +202,7 @@ pub fn extract_methods<'s>(
                 IsTypeGeneric(is_trait_type_generic.0 || adapt_sig_result.is_type_generic.0);
 
             let output_structure =
-                output::determine_output_structure(prefix, item_trait, &adapted_sig, attr);
+                output::determine_output_structure(&adapted_sig, item_trait, attr);
 
             let mirrored_attr_indexes = method
                 .attrs

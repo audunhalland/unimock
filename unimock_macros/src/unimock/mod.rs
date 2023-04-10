@@ -18,7 +18,7 @@ use self::method::MockMethod;
 use self::util::{iter_generic_type_params, InferImplTrait};
 
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
-    let trait_info = trait_info::TraitInfo::analyze(&attr.prefix, &item_trait, &attr)?;
+    let trait_info = trait_info::TraitInfo::analyze(&item_trait, &attr)?;
     attr.validate(&trait_info)?;
 
     let prefix = &attr.prefix;
@@ -73,6 +73,26 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .map(|def| &def.impl_details);
     let generic_params = util::Generics::params(&trait_info, None);
     let generic_args = util::Generics::args(&trait_info, None, InferImplTrait(false));
+
+    let attr_associated_types = trait_info
+        .input_trait
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::TraitItem::Type(trait_item_type) => {
+                let ident = &trait_item_type.ident;
+                let ident_string = ident.to_string();
+                attr.associated_types
+                    .get(&ident_string)
+                    .map(|trait_item_type| {
+                        quote! {
+                            #trait_item_type
+                        }
+                    })
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
 
     let (opt_mock_interface_public, opt_mock_interface_private, impl_doc) = match &attr.mock_api {
         MockApi::Hidden => (
@@ -136,6 +156,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         Some(quote! {
             #(#impl_attributes)*
             impl #generic_params #trait_path #generic_args for #prefix::macro_api::DefaultImplDelegator #where_clause {
+                #(#attr_associated_types)*
                 #(#non_default_methods)*
             }
         })
@@ -157,6 +178,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #impl_doc
             #(#impl_attributes)*
             impl #generic_params #trait_path #generic_args for #prefix::Unimock #where_clause {
+                #(#attr_associated_types)*
                 #(#associated_futures)*
                 #(#method_impls)*
             }
@@ -193,7 +215,7 @@ fn def_mock_fn(
     };
 
     let input_lifetime = &attr.input_lifetime;
-    let input_types_tuple = InputTypesTuple::new(method, attr);
+    let input_types_tuple = InputTypesTuple::new(method, trait_info, attr);
 
     let mutation = if let Some(mutated_arg) = &method.mutated_arg {
         let ty = &mutated_arg.ty;
@@ -456,7 +478,7 @@ fn prefix_with_span(prefix: &syn::Path, span: proc_macro2::Span) -> syn::Path {
 struct InputTypesTuple(Vec<syn::Type>);
 
 impl InputTypesTuple {
-    fn new(mock_method: &MockMethod, attr: &Attr) -> Self {
+    fn new(mock_method: &MockMethod, trait_info: &TraitInfo, attr: &Attr) -> Self {
         let prefix = &attr.prefix;
         let input_lifetime = &attr.input_lifetime;
         Self(
@@ -482,7 +504,7 @@ impl InputTypesTuple {
                 })
                 .map(|mut ty| {
                     ty = util::substitute_lifetimes(ty, input_lifetime);
-                    ty = util::self_type_to_unimock(ty, attr);
+                    ty = util::self_type_to_unimock(ty, trait_info.input_trait, attr);
                     ty
                 })
                 .collect::<Vec<_>>(),

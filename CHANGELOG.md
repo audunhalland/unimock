@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Support for mutating one `&mut` parameter with `.mutates`.
 - Support for falling back to default implementations of methods.
+- (static) Associated type support with `#[unimock(type T = Foo;)]`.
 ### Changed
 - Improve `macro_api` debugging API.
 - `MockFn::debug_inputs` now returns `Vec<Option<String>>`.

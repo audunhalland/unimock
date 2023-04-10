@@ -222,24 +222,37 @@ pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: &syn::Lifetime) -> syn:
     ty
 }
 
-pub fn self_type_to_unimock(mut ty: syn::Type, attr: &Attr) -> syn::Type {
+pub fn self_type_to_unimock(
+    mut ty: syn::Type,
+    item_trait: &syn::ItemTrait,
+    attr: &Attr,
+) -> syn::Type {
     struct SelfTypeToUnimock<'a> {
+        item_trait: &'a syn::ItemTrait,
         attr: &'a Attr,
     }
 
     impl<'a> syn::visit_mut::VisitMut for SelfTypeToUnimock<'a> {
-        fn visit_type_mut(&mut self, ty: &mut syn::Type) {
-            if let syn::Type::Path(type_path) = ty {
-                if type_path.path.is_ident("Self") {
+        fn visit_type_path_mut(&mut self, node: &mut syn::TypePath) {
+            if node.path.is_ident("Self") {
+                let prefix = &self.attr.prefix;
+                node.path = syn::parse_quote!(#prefix::Unimock);
+            } else if node.path.segments.len() == 2 {
+                let first_segment = &node.path.segments[0];
+                if first_segment.ident == "Self" {
                     let prefix = &self.attr.prefix;
-                    type_path.path = syn::parse_quote!(#prefix::Unimock);
+                    let trait_ident = &self.item_trait.ident;
+                    let second_segment = &node.path.segments[1];
+
+                    *node = syn::parse_quote!(<#prefix::Unimock as #trait_ident>::#second_segment);
                 }
             }
-            syn::visit_mut::visit_type_mut(self, ty);
+
+            syn::visit_mut::visit_type_path_mut(self, node);
         }
     }
 
-    let mut sttu = SelfTypeToUnimock { attr };
+    let mut sttu = SelfTypeToUnimock { item_trait, attr };
     use syn::visit_mut::VisitMut;
     sttu.visit_type_mut(&mut ty);
 

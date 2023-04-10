@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::trait_info::TraitInfo;
 
 /// Parsed unimock attribute
@@ -6,6 +8,7 @@ pub struct Attr {
     pub prefix: syn::Path,
     /// Module to put the MockFn in
     pub mock_api: MockApi,
+    pub associated_types: HashMap<String, syn::TraitItemType>,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
     pub mirror: Option<syn::Path>,
     pub input_lifetime: syn::Lifetime,
@@ -44,66 +47,79 @@ impl syn::parse::Parse for Attr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut prefix: Option<syn::Path> = None;
         let mut mock_api = MockApi::Hidden;
+        let mut associated_types = HashMap::default();
         let mut unmocks = None;
         let mut debug = false;
         let mut mirror = None;
 
         while !input.is_empty() {
-            let keyword: syn::Ident = input.parse()?;
-            let _: syn::token::Eq = input.parse()?;
-            match keyword.to_string().as_str() {
-                "api" => {
-                    mock_api = if input.peek(syn::token::Bracket) {
+            if input.peek(syn::token::Type) {
+                let trait_item_type: syn::TraitItemType = input.parse()?;
+
+                associated_types.insert(trait_item_type.ident.to_string(), trait_item_type);
+            } else {
+                let keyword: syn::Ident = input.parse()?;
+                match keyword.to_string().as_str() {
+                    "api" => {
+                        let _: syn::token::Eq = input.parse()?;
+                        mock_api = if input.peek(syn::token::Bracket) {
+                            let content;
+                            let _ = syn::bracketed!(content in input);
+                            let mut idents: Vec<syn::Ident> = vec![content.parse()?];
+
+                            while content.peek(syn::token::Comma) {
+                                let _: syn::token::Comma = content.parse()?;
+                                idents.push(content.parse()?);
+                            }
+                            MockApi::Flattened(FlattenedMethods {
+                                span: content.span(),
+                                idents,
+                            })
+                        } else {
+                            MockApi::MockMod(input.parse()?)
+                        };
+                    }
+                    "prefix" => {
+                        let _: syn::token::Eq = input.parse()?;
+                        prefix = Some(input.parse()?);
+                    }
+                    "unmock_with" => {
+                        let _: syn::token::Eq = input.parse()?;
+
                         let content;
                         let _ = syn::bracketed!(content in input);
-                        let mut idents: Vec<syn::Ident> = vec![content.parse()?];
+                        let mut unmocked: Vec<Unmock> = vec![content.parse()?];
 
                         while content.peek(syn::token::Comma) {
                             let _: syn::token::Comma = content.parse()?;
-                            idents.push(content.parse()?);
+                            unmocked.push(content.parse()?);
                         }
-                        MockApi::Flattened(FlattenedMethods {
-                            span: content.span(),
-                            idents,
-                        })
-                    } else {
-                        MockApi::MockMod(input.parse()?)
-                    };
-                }
-                "prefix" => {
-                    prefix = Some(input.parse()?);
-                }
-                "unmock_with" => {
-                    let content;
-                    let _ = syn::bracketed!(content in input);
-                    let mut unmocked: Vec<Unmock> = vec![content.parse()?];
-
-                    while content.peek(syn::token::Comma) {
-                        let _: syn::token::Comma = content.parse()?;
-                        unmocked.push(content.parse()?);
+                        unmocks = Some(WithSpan(unmocked, content.span()));
                     }
-                    unmocks = Some(WithSpan(unmocked, content.span()));
+                    "debug" => {
+                        let _: syn::token::Eq = input.parse()?;
+                        debug = input.parse::<syn::LitBool>()?.value;
+                    }
+                    "mirror" => {
+                        let _: syn::token::Eq = input.parse()?;
+                        let path: syn::Path = input.parse()?;
+                        mirror = Some(path);
+                    }
+                    _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
                 }
-                "debug" => {
-                    debug = input.parse::<syn::LitBool>()?.value;
-                }
-                "mirror" => {
-                    let path: syn::Path = input.parse()?;
-                    mirror = Some(path);
-                }
-                _ => return Err(syn::Error::new(keyword.span(), "Unrecognized keyword")),
-            };
 
-            if input.peek(syn::token::Comma) {
-                let _: syn::token::Comma = input.parse()?;
-            } else {
-                break;
+                if input.peek(syn::token::Comma) {
+                    let _: syn::token::Comma = input.parse()?;
+                } else {
+                    break;
+                }
             }
         }
 
         Ok(Self {
             prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
             mock_api,
+            associated_types,
             unmocks,
             mirror,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),

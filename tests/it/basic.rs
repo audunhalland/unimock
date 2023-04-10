@@ -910,3 +910,19 @@ mod borrow_dyn {
         assert!(u3.is_none());
     }
 }
+
+mod associated_type {
+    use unimock::*;
+
+    #[unimock(api = AssocMock, type Foo = i32; type Bar = i32;)]
+    pub trait Assoc {
+        type Foo;
+        type Bar;
+
+        fn assoc_ret(&self) -> Self::Foo;
+        fn assoc_ref_ret(&self) -> &Self::Foo;
+        fn assoc_mixed_ret(&self) -> Option<&Self::Foo>;
+        fn assoc_arg(&self, arg: Self::Foo) -> bool;
+        fn assoc_ref_arg(&self, arg: &Self::Foo) -> bool;
+    }
+}

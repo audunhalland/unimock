@@ -15,11 +15,7 @@ pub struct TraitInfo<'t> {
 }
 
 impl<'t> TraitInfo<'t> {
-    pub fn analyze(
-        prefix: &syn::Path,
-        input_trait: &'t syn::ItemTrait,
-        attr: &Attr,
-    ) -> syn::Result<Self> {
+    pub fn analyze(input_trait: &'t syn::ItemTrait, attr: &Attr) -> syn::Result<Self> {
         let generics = &input_trait.generics;
         let is_type_generic = IsTypeGeneric(
             input_trait
@@ -29,7 +25,7 @@ impl<'t> TraitInfo<'t> {
                 .any(|param| matches!(param, syn::GenericParam::Type(_))),
         );
 
-        let methods = method::extract_methods(prefix, input_trait, is_type_generic, attr)?;
+        let methods = method::extract_methods(input_trait, is_type_generic, attr)?;
 
         let has_default_impls = methods
             .iter()
