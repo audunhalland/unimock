@@ -1,16 +1,16 @@
 use std::fmt::Display;
 
-use crate::{call_pattern::PatIndex, fn_mocker::DynMockFn};
+use crate::{call_pattern::PatIndex, MockFnInfo};
 
 #[derive(Clone)]
 pub(crate) struct FnActualCall {
-    pub mock_fn: DynMockFn,
+    pub info: MockFnInfo,
     pub inputs_debug: Vec<Option<String>>,
 }
 
 impl std::fmt::Display for FnActualCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}(", self.mock_fn.info.path)?;
+        write!(f, "{}(", self.info.path)?;
 
         let mut iter = self.inputs_debug.iter().peekable();
         while let Some(next) = iter.next() {
@@ -26,10 +26,19 @@ impl std::fmt::Display for FnActualCall {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(crate) struct TraitMethodPath {
     pub trait_ident: &'static str,
     pub method_ident: &'static str,
+}
+
+impl Default for TraitMethodPath {
+    fn default() -> Self {
+        Self {
+            trait_ident: "?",
+            method_ident: "?",
+        }
+    }
 }
 
 impl Display for TraitMethodPath {
@@ -44,9 +53,9 @@ pub(crate) struct CallPatternDebug {
 }
 
 impl CallPatternDebug {
-    pub fn new(mock_fn: DynMockFn, location: CallPatternLocation) -> Self {
+    pub fn new(info: MockFnInfo, location: CallPatternLocation) -> Self {
         Self {
-            inner: Box::new(CallPatternDebugInner { mock_fn, location }),
+            inner: Box::new(CallPatternDebugInner { info, location }),
         }
     }
 }
@@ -59,18 +68,10 @@ impl std::fmt::Display for CallPatternDebug {
                 file,
                 line,
             }) => {
-                write!(
-                    f,
-                    "{}{} at {file}:{line}",
-                    self.inner.mock_fn.info.path, pat_debug
-                )
+                write!(f, "{}{} at {file}:{line}", self.inner.info.path, pat_debug)
             }
             CallPatternLocation::PatIndex(pat_index) => {
-                write!(
-                    f,
-                    "call pattern {}[{pat_index}]",
-                    self.inner.mock_fn.info.path
-                )
+                write!(f, "call pattern {}[{pat_index}]", self.inner.info.path)
             }
         }
     }
@@ -78,7 +79,7 @@ impl std::fmt::Display for CallPatternDebug {
 
 #[derive(Clone)]
 struct CallPatternDebugInner {
-    mock_fn: DynMockFn,
+    info: MockFnInfo,
     location: CallPatternLocation,
 }
 

@@ -1,6 +1,6 @@
 use crate::call_pattern::*;
 use crate::clause::{self};
-use crate::fn_mocker::{DynMockFn, PatternMatchMode};
+use crate::fn_mocker::PatternMatchMode;
 use crate::output::{IntoCloneResponder, IntoOnceResponder, IntoResponse, Respond, StaticRef};
 use crate::property::*;
 use crate::Clause;
@@ -144,7 +144,7 @@ where
         }
 
         for builder in self.patterns.into_iter() {
-            sink.push(DynMockFn::new::<F>(), builder)?;
+            sink.push(F::info(), builder)?;
         }
 
         Ok(())
@@ -526,7 +526,7 @@ where
             self.wrapper.quantify(1, counter::Exactness::Exact);
         }
 
-        sink.push(DynMockFn::new::<F>(), self.wrapper.into_owned())
+        sink.push(F::info(), self.wrapper.into_owned())
     }
 }
 
@@ -574,7 +574,7 @@ where
     R: Repetition,
 {
     fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String> {
-        sink.push(DynMockFn::new::<F>(), self.wrapper.into_owned())
+        sink.push(F::info(), self.wrapper.into_owned())
     }
 }
 

@@ -262,7 +262,7 @@ fn def_mock_fn(
             type Output<'u> = #output_associated_type;
 
             fn info() -> #prefix::MockFnInfo {
-                #prefix::MockFnInfo::new()
+                #prefix::MockFnInfo::new::<Self>()
                     .path(#trait_ident_lit, #method_ident_lit)
                     #info_set_default_impl
             }

@@ -1,8 +1,8 @@
 use crate::build::dyn_builder::DynCallPatternBuilder;
 use crate::call_pattern::CallPattern;
-use crate::clause;
-use crate::fn_mocker::{DynMockFn, FnMocker, PatternMatchMode};
+use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::Clause;
+use crate::{clause, MockFnInfo};
 
 use std::any::TypeId;
 use std::collections::hash_map::Entry;
@@ -34,14 +34,9 @@ impl MockAssembler {
 }
 
 impl clause::term::Sink for MockAssembler {
-    fn push(
-        &mut self,
-        dyn_mock_fn: DynMockFn,
-        builder: DynCallPatternBuilder,
-    ) -> Result<(), String> {
+    fn push(&mut self, info: MockFnInfo, builder: DynCallPatternBuilder) -> Result<(), String> {
         let pattern_match_mode = builder.pattern_match_mode;
-        let dyn_mock_fn = dyn_mock_fn.clone();
-        let mock_type_id = dyn_mock_fn.type_id;
+        let mock_type_id = info.type_id;
 
         let call_pattern = self.new_call_pattern(builder);
 
@@ -51,7 +46,7 @@ impl clause::term::Sink for MockAssembler {
                     return Err(
                         format!(
                             "A clause for {path} has already been registered as {old_mode:?}, but got re-registered as {new_mode:?}. They cannot be mixed for the same MockFn.",
-                            path = &entry.get().dyn_mock_fn.info.path,
+                            path = &entry.get().info.path,
                             old_mode = entry.get().pattern_match_mode,
                             new_mode = pattern_match_mode,
                         ),
@@ -62,7 +57,7 @@ impl clause::term::Sink for MockAssembler {
             }
             Entry::Vacant(entry) => {
                 entry.insert(FnMocker {
-                    dyn_mock_fn,
+                    info,
                     pattern_match_mode,
                     call_patterns: vec![call_pattern],
                 });

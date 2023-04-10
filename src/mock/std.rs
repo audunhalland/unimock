@@ -91,7 +91,7 @@ pub mod process {
             type Output<'u> = Self::Response;
 
             fn info() -> crate::MockFnInfo {
-                let mut info = crate::MockFnInfo::new().path("Termination", "report");
+                let mut info = crate::MockFnInfo::new::<Self>().path("Termination", "report");
                 info.partial_by_default = true;
                 info
             }

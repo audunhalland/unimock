@@ -4,12 +4,12 @@ use crate::call_pattern::{
 };
 use crate::error::{self};
 use crate::error::{MockError, MockResult};
-use crate::fn_mocker::{DynMockFn, FnMocker, PatternMatchMode};
+use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::macro_api::{Evaluation, MismatchReporter};
 use crate::mismatch::Mismatches;
 use crate::output::Output;
 use crate::state::SharedState;
-use crate::{debug, Unimock};
+use crate::{debug, MockFnInfo, Unimock};
 use crate::{FallbackMode, MockFn};
 
 enum EvalResult<'u> {
@@ -30,7 +30,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
     mutation: &mut F::Mutation<'_>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
-        mock_fn: DynMockFn::new::<F>(),
+        info: F::info(),
         shared_state: &unimock.shared_state,
         input_debugger: &|| F::debug_inputs(&inputs),
     };
@@ -100,7 +100,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
 
 /// 'u = unimock instance, 's = stack
 struct DynCtx<'u, 's> {
-    mock_fn: DynMockFn,
+    info: MockFnInfo,
     shared_state: &'u SharedState,
     input_debugger: &'s dyn Fn() -> Vec<Option<String>>,
 }
@@ -111,11 +111,11 @@ impl<'u, 's> DynCtx<'u, 's> {
         &self,
         match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> PatternResult<bool>,
     ) -> MockResult<EvalResult<'u>> {
-        let fn_mocker = match self.shared_state.fn_mockers.get(&self.mock_fn.type_id) {
+        let fn_mocker = match self.shared_state.fn_mockers.get(&self.info.type_id) {
             None => {
-                return if self.mock_fn.info.has_default_impl {
+                return if self.info.has_default_impl {
                     Ok(EvalResult::CallDefaultImpl)
-                } else if self.mock_fn.info.partial_by_default {
+                } else if self.info.partial_by_default {
                     Ok(EvalResult::Unmock)
                 } else {
                     match self.shared_state.fallback_mode {
@@ -249,7 +249,7 @@ impl<'u, 's> DynCtx<'u, 's> {
 
     fn fn_call(&self) -> debug::FnActualCall {
         debug::FnActualCall {
-            mock_fn: self.mock_fn.clone(),
+            info: self.info,
             inputs_debug: self.debug_inputs(),
         }
     }

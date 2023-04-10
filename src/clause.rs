@@ -1,14 +1,10 @@
 use crate::*;
 
 pub(crate) mod term {
-    use crate::{build::dyn_builder::DynCallPatternBuilder, fn_mocker::DynMockFn};
+    use crate::{build::dyn_builder::DynCallPatternBuilder, MockFnInfo};
 
     pub trait Sink {
-        fn push(
-            &mut self,
-            dyn_mock_fn: DynMockFn,
-            builder: DynCallPatternBuilder,
-        ) -> Result<(), String>;
+        fn push(&mut self, info: MockFnInfo, builder: DynCallPatternBuilder) -> Result<(), String>;
     }
 }
 

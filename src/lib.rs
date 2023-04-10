@@ -966,21 +966,24 @@ pub trait MockFn: Sized + 'static {
 }
 
 /// Static information about a method
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct MockFnInfo {
+    type_id: TypeId,
     path: TraitMethodPath,
     has_default_impl: bool,
-    pub(crate) partial_by_default: bool,
+    partial_by_default: bool,
 }
 
 impl MockFnInfo {
-    /// Construct a new MethodInfo.
-    pub const fn new() -> Self {
+    /// Construct a new MockFnInfo.
+    pub fn new<F: MockFn>() -> Self {
+        Self::with_type_id(TypeId::of::<F>())
+    }
+
+    fn with_type_id(type_id: TypeId) -> Self {
         Self {
-            path: TraitMethodPath {
-                trait_ident: "?",
-                method_ident: "?",
-            },
+            type_id,
+            path: TraitMethodPath::default(),
             has_default_impl: false,
             partial_by_default: false,
         }

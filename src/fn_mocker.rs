@@ -3,21 +3,6 @@ use crate::debug;
 use crate::error::MockError;
 use crate::*;
 
-#[derive(Clone)]
-pub struct DynMockFn {
-    pub type_id: TypeId,
-    pub info: MockFnInfo,
-}
-
-impl DynMockFn {
-    pub fn new<F: crate::MockFn>() -> Self {
-        Self {
-            type_id: TypeId::of::<F>(),
-            info: F::info(),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub(crate) enum PatternMatchMode {
     /// Each new call starts at the first call pattern, tries to
@@ -31,7 +16,7 @@ pub(crate) enum PatternMatchMode {
 /// Holds all the state for mocking one particular MockFn
 /// during Unimock's lifetime
 pub(crate) struct FnMocker {
-    pub dyn_mock_fn: DynMockFn,
+    pub info: MockFnInfo,
     pub pattern_match_mode: PatternMatchMode,
     pub call_patterns: Vec<call_pattern::CallPattern>,
 }
@@ -53,7 +38,7 @@ impl FnMocker {
 
     pub fn debug_pattern(&self, pat_index: PatIndex) -> debug::CallPatternDebug {
         debug::CallPatternDebug::new(
-            self.dyn_mock_fn.clone(),
+            self.info.clone(),
             self.call_patterns[pat_index.0].debug_location(pat_index),
         )
     }
@@ -65,7 +50,7 @@ impl FnMocker {
             total_calls += pattern
                 .call_counter
                 .verify(
-                    &self.dyn_mock_fn.info,
+                    &self.info,
                     || self.debug_pattern(PatIndex(pat_index)),
                     errors,
                 )
@@ -74,7 +59,7 @@ impl FnMocker {
 
         if total_calls == 0 {
             errors.push(error::MockError::MockNeverCalled {
-                info: self.dyn_mock_fn.info.clone(),
+                info: self.info.clone(),
             });
         }
     }
