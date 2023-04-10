@@ -29,7 +29,13 @@ pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
         return Ok(());
     }
 
-    // skip verification if already panicking in the original thread.
+    // skip verification if a known panic occured from unimock.
+    #[cfg(not(feature = "std"))]
+    if *unimock.panicked.lock() {
+        return Ok(());
+    }
+
+    // skip verification if the thread panicked for any other reason.
     #[cfg(feature = "std")]
     if std::thread::panicking() {
         return Ok(());

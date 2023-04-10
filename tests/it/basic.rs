@@ -290,7 +290,6 @@ mod no_debug {
         }
     }
 
-    #[cfg(feature = "std")]
     #[test]
     #[should_panic(expected = "VeryPrimitive::primitive(?, \"\"): No matching call patterns.")]
     fn should_format_non_debug_input_with_a_question_mark() {
@@ -412,10 +411,9 @@ mod custom_api_module {
         fn func(&self) -> &MyType;
     }
 
-    #[cfg(feature = "std")]
     #[test]
     #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:424 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:421 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
         Unimock::new(
@@ -654,10 +652,9 @@ mod responders_in_series {
         assert_eq!(3, a.series());
     }
 
-    #[cfg(feature = "std")]
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:618 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:630 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());

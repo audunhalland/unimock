@@ -104,10 +104,9 @@ fn in_result_clone_acrobatics() {
     assert_eq!(Err(clone::Nope), u.err_no_clone());
 }
 
-#[cfg(feature = "std")]
 #[test]
 #[should_panic(
-    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/mixed.rs:113 to match exactly 1 call, but it actually matched 2 calls."
+    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/mixed.rs:114 to match exactly 1 call, but it actually matched 2 calls."
 )]
 fn in_result_may_multi_respond_on_ok_no_clone() {
     let u = Unimock::new(

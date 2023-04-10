@@ -403,6 +403,7 @@ use macro_api::DefaultImplDelegator;
 use macro_api::Matching;
 
 use once_cell::sync::OnceCell;
+
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
 ///
@@ -667,6 +668,15 @@ pub struct Unimock {
 
     original_instance: bool,
     torn_down: bool,
+
+    // Hack when running in `no_std` mode.
+    // There is a problem with panic-in-drop if the thread is already panicking.
+    // in `no_std` there is no way to check that the current thread is panicking.
+    // Instead unimock can remember that it induced a panic during mock calls.
+    // But this only works when it's _unimock_ that induced the panic.
+    // E.g. a failing `assert!` failing will still break the test, with bad debug output.
+    #[cfg(not(feature = "std"))]
+    panicked: ::spin::Mutex<bool>,
 }
 
 impl Unimock {
@@ -744,6 +754,8 @@ impl Unimock {
             default_impl_delegator_cell: Default::default(),
             original_instance: true,
             torn_down: false,
+            #[cfg(not(feature = "std"))]
+            panicked: ::spin::Mutex::new(false),
         }
     }
 
@@ -751,8 +763,22 @@ impl Unimock {
     fn handle_error<T>(&self, result: Result<T, error::MockError>) -> T {
         match result {
             Ok(value) => value,
-            Err(error) => panic!("{}", self.shared_state.prepare_panic(error)),
+            Err(error) => panic!("{}", self.prepare_panic(error)),
         }
+    }
+
+    fn prepare_panic(&self, error: error::MockError) -> lib::String {
+        #[cfg(not(feature = "std"))]
+        {
+            *self.panicked.lock() = true;
+        }
+
+        let msg = crate::lib::format!("{error}");
+
+        let mut panic_reasons = self.shared_state.panic_reasons.lock();
+        panic_reasons.push(error);
+
+        msg
     }
 }
 
@@ -764,6 +790,8 @@ impl Clone for Unimock {
             default_impl_delegator_cell: Default::default(),
             original_instance: false,
             torn_down: false,
+            #[cfg(not(feature = "std"))]
+            panicked: ::spin::Mutex::new(false),
         }
     }
 }

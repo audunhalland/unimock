@@ -5,7 +5,7 @@ use spin::Mutex;
 use crate::debug;
 use crate::error;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::lib::{BTreeMap, String, Vec};
+use crate::lib::{BTreeMap, Vec};
 use crate::FallbackMode;
 
 pub(crate) struct SharedState {
@@ -16,7 +16,7 @@ pub(crate) struct SharedState {
     pub original_thread: std::thread::ThreadId,
 
     next_ordered_call_index: AtomicUsize,
-    panic_reasons: Mutex<Vec<error::MockError>>,
+    pub panic_reasons: Mutex<Vec<error::MockError>>,
 }
 
 impl SharedState {
@@ -36,15 +36,6 @@ impl SharedState {
     pub fn bump_ordered_call_index(&self) -> usize {
         self.next_ordered_call_index
             .fetch_add(1, core::sync::atomic::Ordering::SeqCst)
-    }
-
-    pub fn prepare_panic(&self, error: error::MockError) -> String {
-        let msg = crate::lib::format!("{error}");
-
-        let mut panic_reasons = self.panic_reasons.lock();
-        panic_reasons.push(error);
-
-        msg
     }
 
     pub fn clone_panic_reasons(&self) -> Vec<error::MockError> {
