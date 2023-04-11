@@ -162,7 +162,7 @@ mod borrowed {
         type Type = &'u T;
 
         fn from_response(
-            response: <Borrowed<T> as Respond>::Type,
+            response: <Self as Respond>::Type,
             value_chain: &'u ValueChain,
         ) -> Self::Type {
             let value_ref = value_chain.add(response);
@@ -171,7 +171,7 @@ mod borrowed {
         }
 
         fn try_from_borrowed_response(
-            response: &'u <Borrowed<T> as Respond>::Type,
+            response: &'u <Self as Respond>::Type,
         ) -> Result<Self::Type, SignatureError> {
             Ok(response.as_ref().borrow())
         }
