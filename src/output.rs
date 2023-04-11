@@ -3,6 +3,15 @@ use core::borrow::Borrow;
 use crate::private::lib::Box;
 use crate::{call_pattern::DynResponder, value_chain::ValueChain, MockFn, Responder};
 
+#[derive(Debug)]
+#[doc(hidden)]
+pub enum ResponderError {
+    OwnershipRequired,
+    NoMutexApi,
+}
+
+type OutputResult<T> = Result<T, ResponderError>;
+
 /// Trait for responding to function calls.
 pub trait Respond {
     /// The type of the response, as stored temporarily inside Unimock.
@@ -21,13 +30,13 @@ pub trait IntoResponse<R: Respond> {
 /// This can be implemented by types that do not implement `Clone`.
 pub trait IntoOnceResponder<R: Respond>: IntoResponse<R> {
     #[doc(hidden)]
-    fn into_once_responder<F: MockFn<Response = R>>(self) -> Responder;
+    fn into_once_responder<F: MockFn<Response = R>>(self) -> OutputResult<Responder>;
 }
 
 /// Types that may converted into a responder that responds any number of times.
 pub trait IntoCloneResponder<R: Respond>: IntoOnceResponder<R> {
     #[doc(hidden)]
-    fn into_clone_responder<F: MockFn<Response = R>>(self) -> Responder;
+    fn into_clone_responder<F: MockFn<Response = R>>(self) -> OutputResult<Responder>;
 }
 
 /// Trait that describes the output of a mocked function, and how responses are converted into that type.
@@ -42,13 +51,7 @@ pub trait Output<'u, R: Respond> {
     fn from_response(response: R::Type, value_chain: &'u ValueChain) -> Self::Type;
 
     #[doc(hidden)]
-    fn try_from_borrowed_response(response: &'u R::Type) -> Result<Self::Type, SignatureError>;
-}
-
-#[derive(Debug)]
-#[doc(hidden)]
-pub enum SignatureError {
-    OwnershipRequired,
+    fn try_from_borrowed_response(response: &'u R::Type) -> OutputResult<Self::Type>;
 }
 
 #[doc(hidden)]
@@ -89,9 +92,9 @@ mod owned {
     where
         T0: Into<T>,
     {
-        fn into_once_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
+        fn into_once_responder<F: MockFn<Response = Owned<T>>>(self) -> OutputResult<Responder> {
             let response = <T0 as IntoResponse<Owned<T>>>::into_response(self);
-            Responder(DynResponder::new_cell::<F>(response))
+            Ok(Responder(DynResponder::new_cell::<F>(response)?))
         }
     }
 
@@ -99,9 +102,9 @@ mod owned {
     where
         T0: Into<T>,
     {
-        fn into_clone_responder<F: MockFn<Response = Owned<T>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = Owned<T>>>(self) -> OutputResult<Responder> {
             let response = <T0 as IntoResponse<Owned<T>>>::into_response(self);
-            Responder(DynResponder::new_clone_cell::<F>(response))
+            Ok(Responder(DynResponder::new_clone_cell::<F>(response)))
         }
     }
 
@@ -112,10 +115,8 @@ mod owned {
             response
         }
 
-        fn try_from_borrowed_response(
-            _: &'u <Self as Respond>::Type,
-        ) -> Result<Self::Type, SignatureError> {
-            Err(SignatureError::OwnershipRequired)
+        fn try_from_borrowed_response(_: &'u <Self as Respond>::Type) -> OutputResult<Self::Type> {
+            Err(ResponderError::OwnershipRequired)
         }
     }
 }
@@ -142,9 +143,9 @@ mod borrowed {
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_once_responder<F: MockFn<Response = Borrowed<T>>>(self) -> Responder {
+        fn into_once_responder<F: MockFn<Response = Borrowed<T>>>(self) -> OutputResult<Responder> {
             let response = <T0 as IntoResponse<Borrowed<T>>>::into_response(self);
-            Responder(DynResponder::new_borrow::<F>(response))
+            Ok(Responder(DynResponder::new_borrow::<F>(response)))
         }
     }
 
@@ -153,7 +154,9 @@ mod borrowed {
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_clone_responder<F: MockFn<Response = Borrowed<T>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = Borrowed<T>>>(
+            self,
+        ) -> OutputResult<Responder> {
             <T0 as IntoOnceResponder<Borrowed<T>>>::into_once_responder::<F>(self)
         }
     }
@@ -172,7 +175,7 @@ mod borrowed {
 
         fn try_from_borrowed_response(
             response: &'u <Self as Respond>::Type,
-        ) -> Result<Self::Type, SignatureError> {
+        ) -> OutputResult<Self::Type> {
             Ok(response.as_ref().borrow())
         }
     }
@@ -192,14 +195,18 @@ mod static_ref {
     }
 
     impl<T: ?Sized + Send + Sync + 'static> IntoOnceResponder<StaticRef<T>> for &'static T {
-        fn into_once_responder<F: MockFn<Response = StaticRef<T>>>(self) -> Responder {
+        fn into_once_responder<F: MockFn<Response = StaticRef<T>>>(
+            self,
+        ) -> OutputResult<Responder> {
             let response = <Self as IntoResponse<StaticRef<T>>>::into_response(self);
-            Responder(DynResponder::new_borrow::<F>(response))
+            Ok(Responder(DynResponder::new_borrow::<F>(response)))
         }
     }
 
     impl<T: ?Sized + Send + Sync + 'static> IntoCloneResponder<StaticRef<T>> for &'static T {
-        fn into_clone_responder<F: MockFn<Response = StaticRef<T>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = StaticRef<T>>>(
+            self,
+        ) -> OutputResult<Responder> {
             <Self as IntoOnceResponder<StaticRef<T>>>::into_once_responder::<F>(self)
         }
     }
@@ -213,7 +220,7 @@ mod static_ref {
 
         fn try_from_borrowed_response(
             value: &'u <Self as Respond>::Type,
-        ) -> Result<Self::Type, SignatureError> {
+        ) -> OutputResult<Self::Type> {
             Ok(*value)
         }
     }
@@ -246,9 +253,9 @@ mod mixed_option {
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
+        fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> OutputResult<Responder> {
             let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
-            Responder(DynResponder::new_borrow::<F>(response))
+            Ok(Responder(DynResponder::new_borrow::<F>(response)))
         }
     }
 
@@ -257,9 +264,9 @@ mod mixed_option {
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> OutputResult<Responder> {
             let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
-            Responder(DynResponder::new_borrow::<F>(response))
+            Ok(Responder(DynResponder::new_borrow::<F>(response)))
         }
     }
 
@@ -278,7 +285,7 @@ mod mixed_option {
 
         fn try_from_borrowed_response(
             response: &'u <Mix<T> as Respond>::Type,
-        ) -> Result<Self::Type, SignatureError> {
+        ) -> OutputResult<Self::Type> {
             Ok(response.as_ref().map(|value| value.as_ref().borrow()))
         }
     }
@@ -312,9 +319,9 @@ mod mixed_vec {
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
+        fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> OutputResult<Responder> {
             let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
-            Responder(DynResponder::new_borrow::<F>(response))
+            Ok(Responder(DynResponder::new_borrow::<F>(response)))
         }
     }
 
@@ -323,9 +330,9 @@ mod mixed_vec {
         T0: Borrow<T> + Send + Sync + 'static,
         T: ?Sized + 'static,
     {
-        fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> OutputResult<Responder> {
             let response = <Self as IntoResponse<Mix<T>>>::into_response(self);
-            Responder(DynResponder::new_borrow::<F>(response))
+            Ok(Responder(DynResponder::new_borrow::<F>(response)))
         }
     }
 
@@ -341,7 +348,7 @@ mod mixed_vec {
 
         fn try_from_borrowed_response(
             response: &'u <Mix<T> as Respond>::Type,
-        ) -> Result<Self::Type, SignatureError> {
+        ) -> OutputResult<Self::Type> {
             Ok(response.iter().map(|b| b.as_ref().borrow()).collect())
         }
     }
@@ -376,12 +383,14 @@ mod mixed_result_borrowed_t {
         T: ?Sized + 'static,
         E: Send + Sync + 'static,
     {
-        fn into_once_responder<F: MockFn<Response = Mix<T, E>>>(self) -> Responder {
+        fn into_once_responder<F: MockFn<Response = Mix<T, E>>>(self) -> OutputResult<Responder> {
             match self {
                 // In the Ok variant we make a multi-value responder out of it anyway:
-                Ok(value) => Responder(DynResponder::new_borrow::<F>(Ok(Box::new(value)))),
+                Ok(value) => Ok(Responder(DynResponder::new_borrow::<F>(Ok(Box::new(
+                    value,
+                ))))),
                 // The Err variant can only be used once:
-                Err(error) => Responder(DynResponder::new_cell::<F>(Err(error))),
+                Err(error) => Ok(Responder(DynResponder::new_cell::<F>(Err(error))?)),
             }
         }
     }
@@ -392,14 +401,16 @@ mod mixed_result_borrowed_t {
         T: ?Sized + 'static,
         E: Clone + Send + Sync + 'static,
     {
-        fn into_clone_responder<F: MockFn<Response = Mix<T, E>>>(self) -> Responder {
+        fn into_clone_responder<F: MockFn<Response = Mix<T, E>>>(self) -> OutputResult<Responder> {
             match self {
                 // There is no `T0: Clone` bound, because it just uses the borrow responder mechanism:
-                Ok(value) => Responder(DynResponder::new_borrow::<F>(Ok(Box::new(value)))),
+                Ok(value) => Ok(Responder(DynResponder::new_borrow::<F>(Ok(Box::new(
+                    value,
+                ))))),
                 // We have `E: Clone` because the E is in fact owned...
-                Err(error) => Responder(DynResponder::new_clone_factory_cell::<F>(move || {
-                    Some(Err(error.clone()))
-                })),
+                Err(error) => Ok(Responder(DynResponder::new_clone_factory_cell::<F>(
+                    move || Some(Err(error.clone())),
+                ))),
             }
         }
     }
@@ -422,11 +433,11 @@ mod mixed_result_borrowed_t {
 
         fn try_from_borrowed_response(
             response: &'u <Mix<T, E> as Respond>::Type,
-        ) -> Result<Self::Type, SignatureError> {
+        ) -> OutputResult<Self::Type> {
             match response {
                 Ok(value) => Ok(Ok(value.as_ref().borrow())),
                 // No chance of converting the E into owned here:
-                Err(_) => Err(SignatureError::OwnershipRequired),
+                Err(_) => Err(ResponderError::OwnershipRequired),
             }
         }
     }
@@ -455,9 +466,9 @@ macro_rules! mixed_tuples {
             $(<$t as Respond>::Type: Send + Sync),+,
             $($a: IntoResponse<$t>),+,
         {
-            fn into_once_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> Responder {
+            fn into_once_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> OutputResult<Responder> {
                 let response = <Self as IntoResponse<Mixed<($($t),+,)>>>::into_response(self);
-                Responder(DynResponder::new_cell::<F>(response))
+                Ok(Responder(DynResponder::new_cell::<F>(response)?))
             }
         }
 
@@ -468,9 +479,9 @@ macro_rules! mixed_tuples {
             $(<$t as Respond>::Type: Clone + Send + Sync),+,
             $($a: IntoCloneResponder<$t>),+,
         {
-            fn into_clone_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> Responder {
+            fn into_clone_responder<F: MockFn<Response = Mixed<($($t),+,)>>>(self) -> OutputResult<Responder> {
                 let response = <Self as IntoResponse<Mixed<($($t),+,)>>>::into_response(self);
-                Responder(DynResponder::new_clone_cell::<F>(response))
+                Ok(Responder(DynResponder::new_clone_cell::<F>(response)))
             }
         }
 
@@ -492,7 +503,7 @@ macro_rules! mixed_tuples {
 
             fn try_from_borrowed_response(
                 response: &'u <Mixed<($($t),+,)> as Respond>::Type,
-            ) -> Result<Self::Type, SignatureError> {
+            ) -> OutputResult<Self::Type> {
                 Ok((
                     $(<$a as Output<'u, $t>>::try_from_borrowed_response(&response.$i)?),+,
                 ))

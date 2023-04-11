@@ -1,12 +1,13 @@
-use core::panic::{RefUnwindSafe, UnwindSafe};
-
 use unimock::private::lib::{format, String, ToString};
 use unimock::*;
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
 #[test]
 fn all_the_auto_trait_goodies() {
-    fn assert_implements_niceness<T: Send + Sync + UnwindSafe + RefUnwindSafe>() {}
+    fn assert_implements_niceness<
+        T: Send + Sync + core::panic::UnwindSafe + core::panic::RefUnwindSafe,
+    >() {
+    }
 
     assert_implements_niceness::<Unimock>();
 }
@@ -413,9 +414,7 @@ mod custom_api_module {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:422 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
-    )]
+    #[should_panic = "Single::func: Expected Single::func(_) at tests/it/basic.rs:421 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."]
     fn test_without_module() {
         Unimock::new(
             FakeSingle::func
@@ -655,7 +654,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:631 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:630 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
@@ -808,7 +807,7 @@ fn fn_cfg_attrs() {
         fn b(&self) -> NonExistentType;
     }
 
-    let u = Unimock::new(TraitMock::a.next_call(matching!()).returns(0));
+    let u = Unimock::new(TraitMock::a.each_call(matching!()).returns(0));
     u.a();
 }
 
@@ -848,7 +847,7 @@ mod default_body_delegation {
             Unimock::new(
                 DefaultBodyMock::default_body
                     .next_call(matching!(21))
-                    .returns(777)
+                    .answers(|_| 777)
             )
             .default_body(21)
         );
@@ -858,8 +857,12 @@ mod default_body_delegation {
     fn delegate_through_default_body() {
         assert_eq!(
             666,
-            Unimock::new(DefaultBodyMock::core.next_call(matching!(42)).returns(666))
-                .default_body(21)
+            Unimock::new(
+                DefaultBodyMock::core
+                    .next_call(matching!(42))
+                    .answers(|_| 666)
+            )
+            .default_body(21)
         );
     }
 }
@@ -955,7 +958,7 @@ mod no_verify_in_drop {
     }
 
     fn mock() -> Unimock {
-        Unimock::new(TraitMock::foo.next_call(matching!()).returns(()))
+        Unimock::new(TraitMock::foo.next_call(matching!()).answers(|_| ()))
     }
 
     fn mock_no_verify_in_drop() -> Unimock {

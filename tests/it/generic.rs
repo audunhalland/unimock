@@ -161,6 +161,7 @@ mod generic_with_unmock {
     }
 }
 
+#[cfg(any(feature = "std", feature = "spin-lock"))]
 mod method_generics {
     use super::*;
 

@@ -4,6 +4,7 @@ use unimock::*;
 #[unimock(api=SingleArgMock)]
 trait SingleArg {
     fn method1<'s>(&'s self, a: &'s str) -> &'s str;
+    fn owned(&self) -> i32;
 }
 
 #[test]
@@ -22,6 +23,7 @@ fn should_panic_for_unused_stub() {
     }));
 }
 
+#[cfg(any(feature = "std", feature = "spin-lock"))]
 #[test]
 #[should_panic(
     expected = "A clause for SingleArg::method1 has already been registered as InAnyOrder, but got re-registered as InOrder. They cannot be mixed for the same MockFn."
@@ -44,7 +46,7 @@ fn should_panic_for_empty_stub_closure() {
 
 #[test]
 #[should_panic(
-    expected = "SingleArg::method1(\"whatever\"): No output available for after matching SingleArg::method1(_) at tests/it/errors.rs:51."
+    expected = "SingleArg::method1(\"whatever\"): No output available for after matching SingleArg::method1(_) at tests/it/errors.rs:53."
 )]
 fn call_pattern_without_output_factory_should_crash() {
     Unimock::new(SingleArgMock::method1.stub(|each| {
@@ -64,7 +66,7 @@ fn should_panic_if_no_call_patterns_in_stub_are_matched() {
 
 #[test]
 #[should_panic(
-    expected = "SingleArg::method1: Expected SingleArg::method1(\"a\") at tests/it/errors.rs:71 to match exactly 1 call, but it actually matched no calls."
+    expected = "SingleArg::method1: Expected SingleArg::method1(\"a\") at tests/it/errors.rs:73 to match exactly 1 call, but it actually matched no calls."
 )]
 fn call_pattern_with_count_expectation_should_panic_if_not_met() {
     Unimock::new(SingleArgMock::method1.stub(|each| {
@@ -76,7 +78,7 @@ fn call_pattern_with_count_expectation_should_panic_if_not_met() {
 
 #[test]
 #[should_panic(
-    expected = "SingleArg::method1(\"b\"): Explicit panic from SingleArg::method1(_) at tests/it/errors.rs:83: foobar!"
+    expected = "SingleArg::method1(\"b\"): Explicit panic from SingleArg::method1(_) at tests/it/errors.rs:85: foobar!"
 )]
 fn should_panic_with_explicit_message() {
     Unimock::new(SingleArgMock::method1.stub(|each| {
@@ -114,9 +116,10 @@ fn multithread_error_reporting_works() {
     .expect_err("");
 }
 
+#[cfg(any(feature = "std", feature = "spin-lock"))]
 #[test]
 #[should_panic(
-    expected = "Foo::foo(2): Cannot return value more than once from Foo::foo(_) at tests/it/errors.rs:127, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
+    expected = "Foo::foo(2): Cannot return value more than once from Foo::foo(_) at tests/it/errors.rs:130, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
 )]
 fn should_complain_when_returning_unquantified_value_more_then_once() {
     #[unimock(api=FooMock)]
@@ -130,9 +133,10 @@ fn should_complain_when_returning_unquantified_value_more_then_once() {
     unimock.foo(2);
 }
 
+#[cfg(any(feature = "std", feature = "spin-lock"))]
 #[test]
 #[should_panic(
-    expected = "Foo::foo: Expected Foo::foo(2) at tests/it/errors.rs:145 to match exactly 1 call, but it actually matched no calls."
+    expected = "Foo::foo: Expected Foo::foo(2) at tests/it/errors.rs:149 to match exactly 1 call, but it actually matched no calls."
 )]
 fn should_require_both_calls_2_some_call() {
     #[unimock(api=FooMock)]
@@ -178,4 +182,11 @@ fn no_default_impl() {
             .default_implementation(),
     );
     u.method1("");
+}
+
+#[cfg(not(any(feature = "std", feature = "spin-lock")))]
+#[test]
+#[should_panic = "No Mutex API available"]
+fn should_panic_without_mutex_api_for_owned_once_responder() {
+    Unimock::new(SingleArgMock::owned.next_call(matching!(_)).returns(666));
 }
