@@ -16,10 +16,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-hack
       - name: Test
-        run: cargo hack \
-          --feature-powerset \
-          --exclude-features default,nightly-tests,unstable-doc-cfg \
-          test --all
+        run: cargo hack --feature-powerset --exclude-features default,nightly-tests,unstable-doc-cfg test --all
       - name: Doctest
         run: cargo test --doc
       - name: Clippy
