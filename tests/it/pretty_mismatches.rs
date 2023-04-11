@@ -1,8 +1,9 @@
+use unimock::private::lib::{String, ToString};
 use unimock::*;
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo([\"a\"]): Method invoked in the correct order (1), but inputs didn't match Trait::foo([]) at tests/it/pretty_mismatches.rs:13. \nPattern mismatch for input #0 (actual / expected):\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<[\u{1b}[0m\u{1b}[1;48;5;52;31m\"a\"\u{1b}[0m\u{1b}[31m]\u{1b}[0m\n\u{1b}[32m>[]\u{1b}[0m\n"
+    expected = "Trait::foo([\"a\"]): Method invoked in the correct order (1), but inputs didn't match Trait::foo([]) at tests/it/pretty_mismatches.rs:14. \nPattern mismatch for input #0 (actual / expected):\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<[\u{1b}[0m\u{1b}[1;48;5;52;31m\"a\"\u{1b}[0m\u{1b}[31m]\u{1b}[0m\n\u{1b}[32m>[]\u{1b}[0m\n"
 )]
 fn should_print_pattern_mismatch_on_call_order_failure() {
     #[unimock(api=TraitMock)]
@@ -16,7 +17,7 @@ fn should_print_pattern_mismatch_on_call_order_failure() {
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo(S { value: \"b\" }): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/pretty_mismatches.rs:34. \nEquality mismatch for input #0 (actual / expected):\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<S { value: \"\u{1b}[0m\u{1b}[1;48;5;52;31mb\u{1b}[0m\u{1b}[31m\" }\u{1b}[0m\n\u{1b}[32m>S { value: \"\u{1b}[0m\u{1b}[1;48;5;22;32ma\u{1b}[0m\u{1b}[32m\" }\u{1b}[0m\n"
+    expected = "Trait::foo(S { value: \"b\" }): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/pretty_mismatches.rs:35. \nEquality mismatch for input #0 (actual / expected):\n\u{1b}[1mDiff\u{1b}[0m \u{1b}[31m< left\u{1b}[0m / \u{1b}[32mright >\u{1b}[0m :\n\u{1b}[31m<S { value: \"\u{1b}[0m\u{1b}[1;48;5;52;31mb\u{1b}[0m\u{1b}[31m\" }\u{1b}[0m\n\u{1b}[32m>S { value: \"\u{1b}[0m\u{1b}[1;48;5;22;32ma\u{1b}[0m\u{1b}[32m\" }\u{1b}[0m\n"
 )]
 fn should_print_eq_mismatch_on_call_order_failure() {
     #[derive(Debug, Eq, PartialEq)]
@@ -44,7 +45,7 @@ fn should_print_eq_mismatch_on_call_order_failure() {
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/pretty_mismatches.rs:62. \nEquality mismatch for input #0:\nActual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
+    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(eq!(..)) at tests/it/pretty_mismatches.rs:63. \nEquality mismatch for input #0:\nActual value did not equal expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
 )]
 fn should_print_message_about_missing_debug() {
     #[derive(Eq, PartialEq)]
@@ -72,7 +73,7 @@ fn should_print_message_about_missing_debug() {
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo(S { value: \"a\" }): Method invoked in the correct order (1), but inputs didn't match Trait::foo(ne!(..)) at tests/it/pretty_mismatches.rs:90. \nInequality mismatch for input #0:\nS { value: \"a\" }"
+    expected = "Trait::foo(S { value: \"a\" }): Method invoked in the correct order (1), but inputs didn't match Trait::foo(ne!(..)) at tests/it/pretty_mismatches.rs:91. \nInequality mismatch for input #0:\nS { value: \"a\" }"
 )]
 fn should_print_message_about_failed_inequality_check() {
     #[derive(Debug, Eq, PartialEq)]
@@ -100,7 +101,7 @@ fn should_print_message_about_failed_inequality_check() {
 
 #[test]
 #[should_panic(
-    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(ne!(..)) at tests/it/pretty_mismatches.rs:118. \nInequality mismatch for input #0:\nActual value unexpectedly equalled expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
+    expected = "Trait::foo(?): Method invoked in the correct order (1), but inputs didn't match Trait::foo(ne!(..)) at tests/it/pretty_mismatches.rs:119. \nInequality mismatch for input #0:\nActual value unexpectedly equalled expected value, but can't display diagnostics because the type is likely missing #[derive(Debug)]."
 )]
 fn should_complain_about_missing_debug_representation_for_inequality_mismatch() {
     #[derive(Eq, PartialEq)]

@@ -14,10 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-hack
       - name: Test
-        run: cargo test --all
-      - name: Test no-default-features
-        run: cargo test --no-default-features
+        run: cargo hack --feature-powerset --exclude-features default,nightly-tests,unstable-doc-cfg test --all
+      - name: Doctest
+        run: cargo test --doc
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for falling back to default implementations of methods.
 - (static) Associated type support with `#[unimock(type T = Foo;)]`.
 - `no_std` support, by opting out of the `"std"` feature.
+- `spin_lock` feature for `no_std` users.
 ### Changed
 - `macro_api` renamed to `private` and excluded from docs.
 - `MockFn::NAME` replaced by `fn info() -> MockFnInfo`.

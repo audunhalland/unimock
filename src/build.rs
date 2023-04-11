@@ -10,7 +10,9 @@ use crate::Clause;
 use crate::*;
 
 pub(crate) mod dyn_builder {
+    use crate::output::ResponderError;
     use crate::private::lib::{vec, Vec};
+    use crate::Responder;
 
     use crate::{
         call_pattern::{DynCallOrderResponder, DynInputMatcher, DynResponder},
@@ -25,6 +27,7 @@ pub(crate) mod dyn_builder {
         pub(crate) responders: Vec<DynCallOrderResponder>,
         pub(crate) count_expectation: counter::CallCountExpectation,
         pub(crate) current_response_index: usize,
+        pub(crate) responder_error: Option<ResponderError>,
     }
 
     impl DynCallPatternBuilder {
@@ -38,6 +41,7 @@ pub(crate) mod dyn_builder {
                 responders: vec![],
                 count_expectation: Default::default(),
                 current_response_index: 0,
+                responder_error: None,
             }
         }
     }
@@ -68,6 +72,18 @@ pub(crate) mod dyn_builder {
                 Self::Borrowed(builder) => builder,
                 Self::Owned(builder) => builder,
                 Self::Stolen => panic!("builder stolen"),
+            }
+        }
+
+        pub fn push_responder_result(&mut self, result: Result<Responder, ResponderError>) {
+            match result {
+                Ok(responder) => self.push_responder(responder.0),
+                Err(error) => {
+                    let dyn_builder = self.inner_mut();
+                    if dyn_builder.responder_error.is_none() {
+                        dyn_builder.responder_error = Some(error);
+                    }
+                }
             }
         }
 
@@ -203,7 +219,7 @@ where
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
     pub fn returns<V: IntoCloneResponder<F::Response>>(mut self, value: V) -> Quantify<'p, F, O> {
         self.wrapper
-            .push_responder(value.into_clone_responder::<F>().0);
+            .push_responder_result(value.into_clone_responder::<F>());
         self.quantify()
     }
 }
@@ -388,13 +404,8 @@ where
     ///
     /// This is the only quantifier that works together with return values that don't implement [Clone].
     pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.wrapper.push_responder(
-            self.return_value
-                .take()
-                .unwrap()
-                .into_once_responder::<F>()
-                .0,
-        );
+        self.wrapper
+            .push_responder_result(self.return_value.take().unwrap().into_once_responder::<F>());
         self.wrapper.quantify(1, counter::Exactness::Exact);
         QuantifiedResponse {
             wrapper: self.wrapper.steal(),
@@ -409,12 +420,11 @@ where
     where
         T: IntoCloneResponder<F::Response>,
     {
-        self.wrapper.push_responder(
+        self.wrapper.push_responder_result(
             self.return_value
                 .take()
                 .unwrap()
-                .into_clone_responder::<F>()
-                .0,
+                .into_clone_responder::<F>(),
         );
         self.wrapper.quantify(times, counter::Exactness::Exact);
         QuantifiedResponse {
@@ -434,12 +444,11 @@ where
         T: IntoCloneResponder<F::Response>,
         O: Ordering<Kind = InAnyOrder>,
     {
-        self.wrapper.push_responder(
+        self.wrapper.push_responder_result(
             self.return_value
                 .take()
                 .unwrap()
-                .into_clone_responder::<F>()
-                .0,
+                .into_clone_responder::<F>(),
         );
         self.wrapper.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
@@ -475,7 +484,7 @@ where
     fn drop(&mut self) {
         if let Some(return_value) = self.return_value.take() {
             self.wrapper
-                .push_responder(return_value.into_once_responder::<F>().0);
+                .push_responder_result(return_value.into_once_responder::<F>());
         }
     }
 }

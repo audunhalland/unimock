@@ -1,11 +1,10 @@
 use crate::private::lib::{Box, String, Vec};
 use core::any::Any;
-use spin::Mutex;
 
 use crate::build;
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
-use crate::output::Respond;
+use crate::output::{Respond, ResponderError};
 use crate::private::MismatchReporter;
 use crate::*;
 
@@ -111,18 +110,28 @@ pub(crate) enum DynResponder {
 }
 
 impl DynResponder {
-    pub fn new_cell<F: MockFn>(response: <F::Response as Respond>::Type) -> Self
+    #[cfg(any(feature = "std", feature = "spin-lock"))]
+    pub fn new_cell<F: MockFn>(
+        response: <F::Response as Respond>::Type,
+    ) -> Result<Self, ResponderError>
     where
         <F::Response as Respond>::Type: Send + Sync + 'static,
     {
-        let response = Mutex::new(Some(response));
-        CellResponder::<F> {
+        let response = crate::private::MutexIsh::new(Some(response));
+        Ok(CellResponder::<F> {
             cell: Box::new(FactoryCell::new(move || {
-                let mut lock = response.lock();
-                lock.take()
+                response.locked(|option| option.take())
             })),
         }
-        .into_dyn_responder()
+        .into_dyn_responder())
+    }
+
+    #[cfg(not(any(feature = "std", feature = "spin-lock")))]
+    pub fn new_cell<F: MockFn>(_: <F::Response as Respond>::Type) -> Result<Self, ResponderError>
+    where
+        <F::Response as Respond>::Type: Send + Sync + 'static,
+    {
+        Err(ResponderError::NoMutexApi)
     }
 
     pub fn new_clone_cell<F: MockFn>(response: <F::Response as Respond>::Type) -> Self

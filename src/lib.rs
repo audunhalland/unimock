@@ -730,7 +730,7 @@ pub struct Unimock {
     // But this only works when it's _unimock_ that induced the panic.
     // E.g. a failing `assert!` failing will still break the test, with bad debug output.
     #[cfg(not(feature = "std"))]
-    panicked: ::spin::Mutex<bool>,
+    panicked: private::MutexIsh<bool>,
 }
 
 impl Unimock {
@@ -840,7 +840,7 @@ impl Unimock {
             torn_down: false,
             verify_in_drop: true,
             #[cfg(not(feature = "std"))]
-            panicked: ::spin::Mutex::new(false),
+            panicked: private::MutexIsh::new(false),
         }
     }
 
@@ -855,13 +855,16 @@ impl Unimock {
     fn prepare_panic(&self, error: error::MockError) -> private::lib::String {
         #[cfg(not(feature = "std"))]
         {
-            *self.panicked.lock() = true;
+            self.panicked.locked(|panicked| {
+                *panicked = true;
+            });
         }
 
         let msg = private::lib::format!("{error}");
 
-        let mut panic_reasons = self.shared_state.panic_reasons.lock();
-        panic_reasons.push(error);
+        self.shared_state.panic_reasons.locked(move |reasons| {
+            reasons.push(error);
+        });
 
         msg
     }
@@ -877,7 +880,7 @@ impl Clone for Unimock {
             torn_down: false,
             verify_in_drop: self.verify_in_drop,
             #[cfg(not(feature = "std"))]
-            panicked: ::spin::Mutex::new(false),
+            panicked: private::MutexIsh::new(false),
         }
     }
 }
