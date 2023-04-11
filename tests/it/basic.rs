@@ -3,10 +3,11 @@ use core::panic::{RefUnwindSafe, UnwindSafe};
 use unimock::private::lib::{format, String, ToString};
 use unimock::*;
 
-fn assert_implements_niceness<T: Send + Sync + UnwindSafe + RefUnwindSafe>() {}
-
+#[cfg(any(feature = "std", feature = "spin-lock"))]
 #[test]
 fn all_the_auto_trait_goodies() {
+    fn assert_implements_niceness<T: Send + Sync + UnwindSafe + RefUnwindSafe>() {}
+
     assert_implements_niceness::<Unimock>();
 }
 
@@ -413,7 +414,7 @@ mod custom_api_module {
 
     #[test]
     #[should_panic(
-        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:421 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
+        expected = "Single::func: Expected Single::func(_) at tests/it/basic.rs:422 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."
     )]
     fn test_without_module() {
         Unimock::new(
@@ -654,7 +655,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:630 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:631 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
@@ -890,6 +891,8 @@ mod mutated_arg {
     }
 }
 
+// Note: This test needs thread safe Unimock
+#[cfg(any(feature = "std", feature = "spin-lock"))]
 mod borrow_dyn {
     use core::borrow::Borrow;
 

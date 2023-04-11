@@ -43,7 +43,7 @@ pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
 
     // skip verification if a known panic occured from unimock.
     #[cfg(not(feature = "std"))]
-    if *unimock.panicked.lock() {
+    if unimock.panicked.locked(|panicked| *panicked) {
         return Ok(());
     }
 

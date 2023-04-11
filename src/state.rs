@@ -1,11 +1,11 @@
 use core::any::TypeId;
 use core::sync::atomic::AtomicUsize;
-use spin::Mutex;
 
 use crate::debug;
 use crate::error;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::private::lib::{vec, BTreeMap, Vec};
+use crate::private::MutexIsh;
 use crate::FallbackMode;
 
 pub(crate) struct SharedState {
@@ -16,7 +16,7 @@ pub(crate) struct SharedState {
     pub original_thread: std::thread::ThreadId,
 
     next_ordered_call_index: AtomicUsize,
-    pub panic_reasons: Mutex<Vec<error::MockError>>,
+    pub panic_reasons: MutexIsh<Vec<error::MockError>>,
 }
 
 impl SharedState {
@@ -29,7 +29,7 @@ impl SharedState {
             original_thread: std::thread::current().id(),
 
             next_ordered_call_index: AtomicUsize::new(0),
-            panic_reasons: Mutex::new(vec![]),
+            panic_reasons: MutexIsh::new(vec![]),
         }
     }
 
@@ -39,7 +39,7 @@ impl SharedState {
     }
 
     pub fn clone_panic_reasons(&self) -> Vec<error::MockError> {
-        self.panic_reasons.lock().clone()
+        self.panic_reasons.locked(|reasons| reasons.clone())
     }
 
     pub fn find_ordered_expected_call_pattern_debug(

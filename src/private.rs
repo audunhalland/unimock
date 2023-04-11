@@ -305,3 +305,55 @@ pub mod lib {
     pub use ::alloc::vec;
     pub use ::alloc::vec::Vec;
 }
+
+pub struct MutexIsh<T> {
+    #[cfg(feature = "std")]
+    inner: ::std::sync::Mutex<T>,
+
+    #[cfg(all(feature = "spin-lock", not(feature = "std")))]
+    inner: ::spin::Mutex<T>,
+
+    #[cfg(not(any(feature = "std", feature = "spin-lock")))]
+    inner: core::cell::RefCell<T>,
+}
+
+#[cfg(feature = "std")]
+impl<T> MutexIsh<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            inner: ::std::sync::Mutex::new(value),
+        }
+    }
+
+    pub fn locked<U>(&self, func: impl FnOnce(&mut T) -> U) -> U {
+        let mut lock = self.inner.lock().unwrap();
+        func(&mut *lock)
+    }
+}
+
+#[cfg(all(feature = "spin-lock", not(feature = "std")))]
+impl<T> MutexIsh<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            inner: ::spin::Mutex::new(value),
+        }
+    }
+
+    pub fn locked<U>(&self, func: impl FnOnce(&mut T) -> U) -> U {
+        let mut lock = self.inner.lock();
+        func(&mut *lock)
+    }
+}
+
+#[cfg(not(any(feature = "std", feature = "spin-lock")))]
+impl<T> MutexIsh<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            inner: core::cell::RefCell::new(value),
+        }
+    }
+
+    pub fn locked<U>(&self, func: impl FnOnce(&mut T) -> U) -> U {
+        func(&mut self.inner.borrow_mut())
+    }
+}
