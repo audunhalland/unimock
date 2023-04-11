@@ -9,16 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for mutating one `&mut` parameter with `.mutates`.
 - Support for falling back to default implementations of methods.
 - (static) Associated type support with `#[unimock(type T = Foo;)]`.
+- `no_std` support, by opting out of the `"std"` feature.
 ### Changed
-- Improve `macro_api` debugging API.
-- `MockFn::debug_inputs` now returns `Vec<Option<String>>`.
-- `macro_api::Evalution` is now `#[non_exhaustive]`.
-- `macro_api::Evalution::Skipped` is not called `Unmocked`.
+- `macro_api` renamed to `private` and excluded from docs.
 - `MockFn::NAME` replaced by `fn info() -> MockFnInfo`.
 - macro keyword `emulate` renamed to `mirror`.
 ### Fixed
 - Generics involving `Self`.
-- Unimock now implements `UnwindSafe` and `RefUnwindSafe` by manual (safe) implementation.
+- Unimock now implements `UnwindSafe` and `RefUnwindSafe` by manual implementation.
 
 ## [0.4.12] - 2023-03-29
 ### Fixed
