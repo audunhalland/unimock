@@ -18,7 +18,7 @@ mod mock_order;
 
 mod prefix;
 
-#[cfg(feature = "pretty-print")]
+#[cfg(all(feature = "pretty-print", any(feature = "std", feature = "spin-lock")))]
 mod pretty_mismatches;
 
 #[cfg(feature = "std")]

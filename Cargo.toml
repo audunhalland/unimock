@@ -31,6 +31,10 @@ doc-cfg = "0.1"
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
 
+[lib]
+# do not run doctest by default with `cargo hack`. They are tested with a separate `cargo test --doc` run.
+doctest = false
+
 [package.metadata.docs.rs]
 features = ["unstable-doc-cfg"]
 
