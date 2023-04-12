@@ -22,7 +22,7 @@ jobs:
       - name: Test no_std
         run: cargo hack --feature-powerset --exclude-features std,mock-std,default,nightly-tests,unstable-doc-cfg test
       - name: Doctest
-        run: cargo test --doc
+        run: cargo test --doc --features mock-core,mock-std
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
