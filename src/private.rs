@@ -279,7 +279,7 @@ where
 }
 
 /// Standard library re-exports when using `std`.
-#[doc_cfg::doc_cfg(feature = "std")]
+#[cfg(feature = "std")]
 pub mod lib {
     pub use ::std::boxed::Box;
     pub use ::std::collections::btree_map::Entry;
@@ -294,7 +294,7 @@ pub mod lib {
 }
 
 /// Standard library re-exports when using `no_std`.
-#[doc_cfg::doc_cfg(not(feature = "std"))]
+#[cfg(not(feature = "std"))]
 pub mod lib {
     pub use ::alloc::boxed::Box;
     pub use ::alloc::collections::btree_map::Entry;
