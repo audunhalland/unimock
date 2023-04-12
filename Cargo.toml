@@ -8,7 +8,7 @@ license = "MIT"
 description = "A versatile and developer-friendly trait mocking library"
 repository = "https://github.com/audunhalland/unimock/"
 keywords = ["mocking", "mock", "testing", "test"]
-categories = ["development-tools", "development-tools::testing"]
+categories = ["development-tools", "development-tools::testing", "no-std"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
