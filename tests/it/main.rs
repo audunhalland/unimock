@@ -21,7 +21,7 @@ mod prefix;
 #[cfg(all(feature = "pretty-print", any(feature = "std", feature = "spin-lock")))]
 mod pretty_mismatches;
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "mock-core", feature = "mock-std"))]
 mod std;
 
 mod unmock;

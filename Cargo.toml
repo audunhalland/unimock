@@ -17,6 +17,8 @@ default = ["std", "pretty-print"]
 pretty-print = ["dep:pretty_assertions"]
 std = []
 spin-lock = ["dep:spin"]
+mock-core = []
+mock-std = ["std", "mock-core"]
 nightly-tests = []
 unstable-doc-cfg = []
 
@@ -36,7 +38,7 @@ tokio = { version = "1", features = ["full"] }
 doctest = false
 
 [package.metadata.docs.rs]
-features = ["unstable-doc-cfg"]
+features = ["unstable-doc-cfg", "mock-core", "mock-std"]
 
 [workspace]
 members = ["unimock_macros"]

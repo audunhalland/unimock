@@ -201,12 +201,14 @@ impl AsMut<Unimock> for DefaultImplDelegator {
     }
 }
 
+#[cfg(feature = "mock-std")]
 impl core::fmt::Display for DefaultImplDelegator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         <Unimock as core::fmt::Display>::fmt(&self.unimock, f)
     }
 }
 
+#[cfg(feature = "mock-std")]
 impl core::fmt::Debug for DefaultImplDelegator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         <Unimock as core::fmt::Debug>::fmt(&self.unimock, f)

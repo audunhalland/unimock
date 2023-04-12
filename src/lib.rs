@@ -936,18 +936,24 @@ impl Drop for Unimock {
 ///
 /// This enables a more functional test style, instead of relying on panic-in-drop.
 ///
-/// Calling `report` is the only way to stop unimock panicking on failed verifications, so _use with care_.
+/// Calling `report` prevents unimock from panicking later (in drop) on failed verifications, so _use with care_.
 ///
 /// # Mocking
-/// The `"std"` feature also enables mocking of this trait through [mock::std::process::TerminationMock].
+/// The `mock-std` feature also enables mocking of this trait through [mock::std::process::TerminationMock].
 /// This trait mock is partial by default: Unless explicitly mocked, it behaves as specified above.
 #[doc_cfg::doc_cfg(feature = "std")]
 impl std::process::Termination for Unimock {
+    #[cfg(feature = "mock-std")]
     fn report(mut self) -> std::process::ExitCode {
         match private::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ()) {
             private::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
             e => e.unwrap(&self),
         }
+    }
+
+    #[cfg(not(feature = "mock-std"))]
+    fn report(mut self) -> std::process::ExitCode {
+        teardown::teardown_report(&mut self)
     }
 }
 
