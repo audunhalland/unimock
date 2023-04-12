@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [0.5.0] - 2024-04-12
 ### Added
 - Support for mutating one `&mut` parameter with `.mutates`.
 - Support for falling back to default implementations of methods.
@@ -13,13 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `spin-lock` feature for `no_std` users.
 - `mock-core` feature for mocking implementations of traits in `core`.
 - `mock-std` feature for mocking implementations of traits in `std`.
+- Unimock now implements `UnwindSafe` and `RefUnwindSafe` by manual implementation.
 ### Changed
 - `macro_api` renamed to `private` and excluded from docs.
 - `MockFn::NAME` replaced by `fn info() -> MockFnInfo`.
 - macro keyword `emulate` renamed to `mirror`.
 ### Fixed
 - Generics involving `Self`.
-- Unimock now implements `UnwindSafe` and `RefUnwindSafe` by manual implementation.
 
 ## [0.4.12] - 2023-03-29
 ### Fixed
