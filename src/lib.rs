@@ -939,6 +939,7 @@ impl Drop for Unimock {
 /// # Mocking
 /// The `mock-std` feature also enables mocking of this trait through [mock::std::process::TerminationMock].
 /// This trait mock is partial by default: Unless explicitly mocked, it behaves as specified above.
+#[cfg_attr(feature = "unstable-doc-cfg", doc(cfg(feature = "std")))]
 #[cfg(feature = "std")]
 impl std::process::Termination for Unimock {
     #[cfg(feature = "mock-std")]
