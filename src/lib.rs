@@ -345,8 +345,6 @@
 //!
 //! #### What kinds of traits or methods cannot be mocked?
 //! * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
-//! * Methods receiving `&mut` arguments other than `&mut self`.
-//!     It _might_ work, but is currently unsupported due to stricter lifetime constraints that is harder to express via generics.
 //!
 //! #### Selecting a name for the mock `api`
 //! Due to [macro hygiene](https://en.wikipedia.org/wiki/Hygienic_macro),
