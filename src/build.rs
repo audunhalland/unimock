@@ -97,7 +97,7 @@ pub(crate) mod dyn_builder {
 
         /// Note: must be called after `push_responder`
         pub fn quantify(&mut self, times: usize, exactness: counter::Exactness) {
-            let mut builder = self.inner_mut();
+            let builder = self.inner_mut();
 
             builder.count_expectation.add_to_minimum(times, exactness);
             builder.current_response_index += times;
