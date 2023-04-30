@@ -74,7 +74,7 @@ fn test_write() {
     ));
 
     use std::io::Write;
-    write!(&mut unimock, "hello {}", "world").unwrap();
+    write!(&mut unimock, "hello {}", "world".to_string()).unwrap();
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn test_write_fail() {
     );
 
     use std::io::Write;
-    write!(&mut unimock, "hello {}", "world").unwrap();
+    write!(&mut unimock, "hello {}", "world".to_string()).unwrap();
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn test_fmt_io_duplex_default_impl_implicit() {
     let unimock = Unimock::new((
         DisplayMock::fmt
             .next_call(matching!())
-            .mutates(|f, _| write!(f, "hello {}", "unimock")),
+            .mutates(|f, _| write!(f, "hello {}", "unimock".to_string())),
         // NOTE: write! calls `write_all` which should get re-routed to `write`:
         WriteMock::write
             .next_call(matching!(eq!(b"hello ")))
@@ -115,7 +115,7 @@ fn test_fmt_io_duplex_default_impl_explicit() {
     let unimock = Unimock::new((
         DisplayMock::fmt
             .next_call(matching!())
-            .mutates(|f, _| write!(f, "hello {}", "unimock")),
+            .mutates(|f, _| write!(f, "hello {}", "unimock".to_string())),
         WriteMock::write_all
             .next_call(matching!(eq!(b"hello ")))
             .default_implementation(),
