@@ -32,7 +32,7 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
             Self::CallDefaultImpl(_) => error::MockError::NoDefaultImpl { info: F::info() },
         };
 
-        panic!("{}", unimock.prepare_panic(error))
+        unimock.induce_panic(error)
     }
 }
 

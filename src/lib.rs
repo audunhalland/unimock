@@ -847,11 +847,11 @@ impl Unimock {
     fn handle_error<T>(&self, result: Result<T, error::MockError>) -> T {
         match result {
             Ok(value) => value,
-            Err(error) => panic!("{}", self.prepare_panic(error)),
+            Err(error) => self.induce_panic(error),
         }
     }
 
-    fn prepare_panic(&self, error: error::MockError) -> private::lib::String {
+    fn induce_panic(&self, error: error::MockError) -> ! {
         #[cfg(not(feature = "std"))]
         {
             self.panicked.locked(|panicked| {
@@ -865,7 +865,7 @@ impl Unimock {
             reasons.push(error);
         });
 
-        msg
+        panic!("{msg}")
     }
 }
 
