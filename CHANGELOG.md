@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Mock of lifetime generic trait
 
+### Added
+- Missing MIT license file
+
 ## [0.5.2] - 2023-04-30
 ### Fixed
 - Documentation inaccuracies
