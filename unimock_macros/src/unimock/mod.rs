@@ -71,8 +71,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .iter()
         .filter_map(Option::as_ref)
         .map(|def| &def.impl_details);
-    let generic_params = util::Generics::params(&trait_info, None);
-    let generic_args = util::Generics::args(&trait_info, None, InferImplTrait(false));
+    let generic_params = util::Generics::trait_params(&trait_info, None);
+    let generic_args = util::Generics::trait_args(&trait_info, None, InferImplTrait(false));
 
     let attr_associated_types = trait_info
         .input_trait
@@ -224,8 +224,8 @@ fn def_mock_fn(
         quote! { () }
     };
 
-    let generic_params = util::Generics::params(trait_info, Some(method));
-    let generic_args = util::Generics::args(trait_info, Some(method), InferImplTrait(false));
+    let generic_params = util::Generics::fn_params(trait_info, Some(method));
+    let generic_args = util::Generics::fn_args(trait_info, Some(method), InferImplTrait(false));
     let where_clause = &trait_info.input_trait.generics.where_clause;
 
     let doc_attrs = if matches!(attr.mock_api, attr::MockApi::Hidden) {
@@ -337,7 +337,7 @@ fn def_method_impl(
     let mock_fn_path = method.mock_fn_path(attr);
 
     let self_ref = method.self_reference();
-    let eval_generic_args = util::Generics::args(trait_info, Some(method), InferImplTrait(true));
+    let eval_generic_args = util::Generics::fn_args(trait_info, Some(method), InferImplTrait(true));
 
     let has_impl_trait_future = matches!(
         method.output_structure.wrapping,

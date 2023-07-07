@@ -5,7 +5,7 @@ use syn::spanned::Spanned;
 use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
-use super::util::{DotAwait, GenericParamsWithBounds, IsTypeGeneric};
+use super::util::{DotAwait, GenericParamsWithBounds, IsGeneric, IsTypeGeneric};
 use super::Attr;
 use super::{output, util};
 
@@ -17,6 +17,7 @@ pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemFn,
     pub adapted_sig: syn::Signature,
     pub non_receiver_arg_count: usize,
+    pub is_generic: IsGeneric,
     pub is_type_generic: IsTypeGeneric,
     pub generic_params_with_bounds: GenericParamsWithBounds,
     pub impl_trait_idents: HashSet<String>,
@@ -257,6 +258,7 @@ pub fn extract_methods<'s>(
                 method,
                 adapted_sig,
                 non_receiver_arg_count,
+                is_generic: adapt_sig_result.is_generic,
                 is_type_generic: adapt_sig_result.is_type_generic,
                 generic_params_with_bounds,
                 impl_trait_idents: adapt_sig_result.impl_trait_idents,
@@ -439,6 +441,7 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
 }
 
 struct AdaptSigResult {
+    is_generic: IsGeneric,
     is_type_generic: IsTypeGeneric,
     impl_trait_idents: HashSet<String>,
 }
@@ -498,6 +501,7 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
     }
 
     AdaptSigResult {
+        is_generic: IsGeneric(!sig.generics.params.is_empty()),
         is_type_generic,
         impl_trait_idents,
     }

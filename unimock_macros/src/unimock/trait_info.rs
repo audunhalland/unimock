@@ -1,7 +1,7 @@
 use super::attr::Attr;
 use super::method;
 use super::output::OutputWrapping;
-use super::util::{GenericParamsWithBounds, IsTypeGeneric};
+use super::util::{GenericParamsWithBounds, IsGeneric, IsTypeGeneric};
 
 pub struct TraitInfo<'t> {
     pub input_trait: &'t syn::ItemTrait,
@@ -11,12 +11,14 @@ pub struct TraitInfo<'t> {
     pub generic_params_with_bounds: GenericParamsWithBounds,
     pub methods: Vec<Option<method::MockMethod<'t>>>,
     pub has_default_impls: bool,
+    pub is_generic: IsGeneric,
     pub is_type_generic: IsTypeGeneric,
 }
 
 impl<'t> TraitInfo<'t> {
     pub fn analyze(input_trait: &'t syn::ItemTrait, attr: &Attr) -> syn::Result<Self> {
         let generics = &input_trait.generics;
+        let is_generic = IsGeneric(!input_trait.generics.params.is_empty());
         let is_type_generic = IsTypeGeneric(
             input_trait
                 .generics
@@ -60,6 +62,7 @@ impl<'t> TraitInfo<'t> {
             generic_params_with_bounds: GenericParamsWithBounds::new(generics, contains_async),
             methods,
             has_default_impls,
+            is_generic,
             is_type_generic,
         })
     }

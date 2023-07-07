@@ -754,6 +754,27 @@ mod lifetime_constrained_output_type {
         assert_eq!(result.0, "a");
         assert_eq!(result.1, "b");
     }
+
+    #[unimock(api=BorrowSyncLifetimeGenericMock)]
+    trait BorrowSyncLifetimeGeneric<'a> {
+        fn borrow_sync_basic_lt(&self) -> Borrowing1<'a>;
+        fn borrow_sync_result_lt(&self) -> Result<Borrowing1<'a>, ()>;
+    }
+
+    #[test]
+    fn test_borrow_lifetime_generic() {
+        let deps = Unimock::new((
+            BorrowSyncLifetimeGenericMock::borrow_sync_basic_lt
+                .next_call(matching!())
+                .returns(Borrowing1("a")),
+            BorrowSyncLifetimeGenericMock::borrow_sync_result_lt
+                .next_call(matching!())
+                .returns(Ok(Borrowing1("b"))),
+        ));
+
+        assert_eq!("a", deps.borrow_sync_basic_lt().0);
+        assert_eq!("b", deps.borrow_sync_result_lt().unwrap().0);
+    }
 }
 
 mod slice_matching {

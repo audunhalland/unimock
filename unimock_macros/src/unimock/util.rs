@@ -3,6 +3,9 @@ use super::{method::MockMethod, trait_info::TraitInfo, Attr};
 use quote::*;
 
 #[derive(Clone, Copy)]
+pub struct IsGeneric(pub bool);
+
+#[derive(Clone, Copy)]
 pub struct IsTypeGeneric(pub bool);
 
 pub struct Generics<'t> {
@@ -13,12 +16,31 @@ pub struct Generics<'t> {
 
 enum GenericsKind {
     None,
-    GenericParams,
-    Args(InferImplTrait),
+    TraitParams,
+    FnParams,
+    TraitArgs(InferImplTrait),
+    FnArgs(InferImplTrait),
 }
 
 #[derive(Clone, Copy)]
+pub struct IncludeTraitLifetimes(pub bool);
+
+#[derive(Clone, Copy)]
 pub struct InferImplTrait(pub bool);
+
+fn is_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> IsGeneric {
+    if trait_info.is_generic.0 {
+        return IsGeneric(true);
+    }
+
+    if let Some(method) = method {
+        if method.is_generic.0 {
+            return IsGeneric(true);
+        }
+    }
+
+    IsGeneric(false)
+}
 
 fn is_type_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> IsTypeGeneric {
     if trait_info.is_type_generic.0 {
@@ -36,12 +58,25 @@ fn is_type_generic(trait_info: &TraitInfo, method: Option<&MockMethod<'_>>) -> I
 
 impl<'t> Generics<'t> {
     // Params: e.g. impl<A, B>
-    pub fn params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
+    pub fn trait_params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
+        Self {
+            trait_info,
+            method,
+            kind: if is_generic(trait_info, method).0 {
+                GenericsKind::TraitParams
+            } else {
+                GenericsKind::None
+            },
+        }
+    }
+
+    // Params: e.g. impl<A, B>
+    pub fn fn_params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
         Self {
             trait_info,
             method,
             kind: if is_type_generic(trait_info, method).0 {
-                GenericsKind::GenericParams
+                GenericsKind::FnParams
             } else {
                 GenericsKind::None
             },
@@ -49,7 +84,23 @@ impl<'t> Generics<'t> {
     }
 
     // Args: e.g. SomeType<A, B>
-    pub fn args(
+    pub fn trait_args(
+        trait_info: &'t TraitInfo,
+        method: Option<&'t MockMethod<'t>>,
+        infer: InferImplTrait,
+    ) -> Self {
+        Self {
+            trait_info,
+            method,
+            kind: if is_generic(trait_info, method).0 {
+                GenericsKind::TraitArgs(infer)
+            } else {
+                GenericsKind::None
+            },
+        }
+    }
+
+    pub fn fn_args(
         trait_info: &'t TraitInfo,
         method: Option<&'t MockMethod<'t>>,
         infer: InferImplTrait,
@@ -58,7 +109,7 @@ impl<'t> Generics<'t> {
             trait_info,
             method,
             kind: if is_type_generic(trait_info, method).0 {
-                GenericsKind::Args(infer)
+                GenericsKind::FnArgs(infer)
             } else {
                 GenericsKind::None
             },
@@ -67,6 +118,7 @@ impl<'t> Generics<'t> {
 
     fn args_iterator(
         &self,
+        include_trait_lifetimes: IncludeTraitLifetimes,
         infer_impl_trait: InferImplTrait,
     ) -> impl Iterator<Item = proc_macro2::TokenStream> + '_ {
         self.trait_info
@@ -74,9 +126,13 @@ impl<'t> Generics<'t> {
             .generics
             .params
             .iter()
-            .map(|trait_param| match trait_param {
+            .map(move |trait_param| match trait_param {
                 syn::GenericParam::Lifetime(lifetime) => {
-                    quote! { #lifetime }
+                    if include_trait_lifetimes.0 {
+                        quote! { #lifetime }
+                    } else {
+                        quote! {}
+                    }
                 }
                 syn::GenericParam::Type(type_param) => {
                     let ident = &type_param.ident;
@@ -128,7 +184,15 @@ impl<'t> quote::ToTokens for Generics<'t> {
         syn::token::Lt::default().to_tokens(tokens);
         match &self.kind {
             GenericsKind::None => {}
-            GenericsKind::GenericParams => {
+            GenericsKind::TraitParams | GenericsKind::FnParams => {
+                if let GenericsKind::TraitParams = &self.kind {
+                    for generic_param in &self.trait_info.input_trait.generics.params {
+                        if let syn::GenericParam::Lifetime(lt) = generic_param {
+                            lt.to_tokens(tokens);
+                        }
+                    }
+                }
+
                 self.trait_info
                     .generic_params_with_bounds
                     .params
@@ -141,8 +205,15 @@ impl<'t> quote::ToTokens for Generics<'t> {
                     method.generic_params_with_bounds.params.to_tokens(tokens);
                 }
             }
-            GenericsKind::Args(infer_impl_trait) => {
-                let args = self.args_iterator(*infer_impl_trait);
+            GenericsKind::TraitArgs(infer_impl_trait) => {
+                let args = self.args_iterator(IncludeTraitLifetimes(true), *infer_impl_trait);
+                quote! {
+                    #(#args),*
+                }
+                .to_tokens(tokens);
+            }
+            GenericsKind::FnArgs(infer_impl_trait) => {
+                let args = self.args_iterator(IncludeTraitLifetimes(false), *infer_impl_trait);
                 quote! {
                     #(#args),*
                 }
