@@ -1,7 +1,6 @@
 //! Mock APIs for `core` traits
 
 /// Mock APIs for `core::fmt` traits
-#[cfg_attr(feature = "unstable-doc-cfg", doc(cfg(feature = "mock-core")))]
 #[cfg(feature = "mock-core")]
 pub mod fmt {
     use unimock_macros::unimock;
@@ -18,7 +17,6 @@ pub mod fmt {
 }
 
 /// Mock APIs for `core::hash` traits
-#[cfg_attr(feature = "unstable-doc-cfg", doc(cfg(feature = "mock-core")))]
 #[cfg(feature = "mock-core")]
 pub mod hash {
     use unimock_macros::unimock;
