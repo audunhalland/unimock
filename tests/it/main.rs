@@ -3,6 +3,7 @@
 #[cfg(any(feature = "std", feature = "spin-lock"))]
 mod basic;
 
+mod default_impl;
 mod errors;
 mod generic;
 mod matching_eq;

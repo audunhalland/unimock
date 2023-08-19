@@ -1,4 +1,5 @@
 use quote::{quote, quote_spanned, ToTokens};
+use syn::parse_quote;
 
 mod associated_future;
 mod attr;
@@ -9,6 +10,7 @@ mod util;
 
 use crate::doc::SynDoc;
 use crate::unimock::method::{InputsSyntax, Tupled};
+use crate::unimock::util::replace_self_ty_with_path;
 pub use attr::{Attr, MockApi};
 use trait_info::TraitInfo;
 
@@ -386,10 +388,19 @@ fn def_method_impl(
 
                 let delegator_constructor = match method_sig.receiver() {
                     Some(syn::Receiver {
-                        reference: None, ..
-                    }) => quote! {
-                        #delegator_path::from(self.clone())
-                    },
+                        reference: None,
+                        ty,
+                        ..
+                    }) => {
+                        // This might be e.g. `Rc<DefaultImplDelegator>`
+                        let target_impl_delegator_type =
+                            replace_self_ty_with_path(*ty.clone(), &parse_quote!(#delegator_path));
+
+                        quote! {
+                            #delegator_path::__from_unimock(#prefix::private::clone_unimock(&self))
+                                .__cast_unimock_default_impl_delegator::<#target_impl_delegator_type>()
+                        }
+                    }
                     Some(syn::Receiver {
                         reference: Some(_),
                         mutability: None,
@@ -444,12 +455,22 @@ fn def_method_impl(
                     reference: None,
                     ty,
                     ..
-                }) => match ty.as_ref() {
-                    syn::Type::Path(path) if path.path.is_ident("Self") => {
-                        quote! { #prefix::Unimock::from(self) }
+                }) => {
+                    let unimock_type = replace_self_ty_with_path(
+                        *ty.clone(),
+                        &parse_quote! {
+                            #prefix::Unimock
+                        },
+                    );
+
+                    quote! {
+                        {
+                            let __u = #prefix::private::as_ref::<Self, #prefix::Unimock>(&self).clone();
+                            let __u: #unimock_type = __u.into();
+                            __u
+                        }
                     }
-                    _ => panic!("BUG: Incompatible receiver for default delegator"),
-                },
+                }
                 Some(syn::Receiver {
                     reference: Some(_),
                     mutability: None,

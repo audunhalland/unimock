@@ -183,6 +183,22 @@ pub struct DefaultImplDelegator {
     pub(crate) unimock: Unimock,
 }
 
+impl DefaultImplDelegator {
+    /// Construct a default impl delegator from a unimock instance.
+    ///
+    /// This method exists as a helper in case of type inference problems with `From<T>`.
+    pub fn __from_unimock(unimock: Unimock) -> Self {
+        Self { unimock }
+    }
+
+    /// Construct a default impl delegator from a unimock instance.
+    ///
+    /// This method exists as a helper in case of type inference problems with `From<T>`.
+    pub fn __cast_unimock_default_impl_delegator<T: From<Self>>(self) -> T {
+        self.into()
+    }
+}
+
 impl From<Unimock> for DefaultImplDelegator {
     fn from(unimock: Unimock) -> Self {
         Self { unimock }
@@ -213,6 +229,11 @@ impl core::fmt::Debug for DefaultImplDelegator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         <Unimock as core::fmt::Debug>::fmt(&self.unimock, f)
     }
+}
+
+/// Clone a Unimock instance
+pub fn clone_unimock(unimock: &Unimock) -> Unimock {
+    unimock.clone()
 }
 
 /// Trait for computing the proper [std::fmt::Debug] representation of a value.

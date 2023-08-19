@@ -886,17 +886,18 @@ impl Clone for Unimock {
 
 impl AsRef<DefaultImplDelegator> for Unimock {
     fn as_ref(&self) -> &DefaultImplDelegator {
-        let delegator = self
-            .default_impl_delegator_cell
-            .get_or_init(|| private::lib::Box::new(DefaultImplDelegator::from(self.clone())));
+        let delegator = self.default_impl_delegator_cell.get_or_init(|| {
+            private::lib::Box::new(DefaultImplDelegator::__from_unimock(self.clone()))
+        });
         delegator.as_ref()
     }
 }
 
 impl AsMut<DefaultImplDelegator> for Unimock {
     fn as_mut(&mut self) -> &mut DefaultImplDelegator {
-        self.default_impl_delegator_cell
-            .get_or_init(|| private::lib::Box::new(DefaultImplDelegator::from(self.clone())));
+        self.default_impl_delegator_cell.get_or_init(|| {
+            private::lib::Box::new(DefaultImplDelegator::__from_unimock(self.clone()))
+        });
         self.default_impl_delegator_cell.get_mut().unwrap()
     }
 }
