@@ -414,3 +414,25 @@ fn add_send_bound_if_not_present(type_param: &mut syn::TypeParam) {
             .push(syn::TypeParamBound::Trait(syn::parse_quote! { Send }));
     }
 }
+
+pub fn replace_self_ty_with_path(mut ty: syn::Type, replacement_path: &syn::Path) -> syn::Type {
+    struct Replacer<'s> {
+        replacement_path: &'s syn::Path,
+    }
+
+    impl<'s> syn::visit_mut::VisitMut for Replacer<'s> {
+        fn visit_path_mut(&mut self, path: &mut syn::Path) {
+            if path.is_ident("Self") {
+                *path = self.replacement_path.clone();
+            }
+
+            syn::visit_mut::visit_path_mut(self, path);
+        }
+    }
+
+    let mut replacer = Replacer { replacement_path };
+    use syn::visit_mut::VisitMut;
+    replacer.visit_type_mut(&mut ty);
+
+    ty
+}
