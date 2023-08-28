@@ -47,6 +47,14 @@ pub enum InputsSyntax {
     EvalParams,
 }
 
+pub enum ArgClass<'m, 't> {
+    Receiver,
+    MutMutated(&'m MutatedArg, &'t syn::PatIdent),
+    MutImpossible(&'t syn::PatIdent, &'t syn::Type),
+    Other(&'t syn::PatIdent, &'t syn::Type),
+    Unprocessable(&'t syn::PatType),
+}
+
 impl<'t> MockMethod<'t> {
     pub fn span(&self) -> proc_macro2::Span {
         self.method.sig.span()
@@ -173,6 +181,53 @@ impl<'t> MockMethod<'t> {
         vec![quote! {
             #[doc = #doc_lit]
         }]
+    }
+
+    pub fn classify_arg(&self, arg: &'t syn::FnArg, index: usize) -> ArgClass<'_, 't> {
+        match arg {
+            syn::FnArg::Receiver(_) => ArgClass::Receiver,
+            syn::FnArg::Typed(pat_type) => {
+                match (index, pat_type.pat.as_ref(), &self.mutated_arg) {
+                    (0, syn::Pat::Ident(pat_ident), _) if pat_ident.ident == "self" => {
+                        ArgClass::Receiver
+                    }
+                    (index, syn::Pat::Ident(pat_ident), Some(mutated_arg))
+                        if mutated_arg.index == index =>
+                    {
+                        ArgClass::MutMutated(mutated_arg, pat_ident)
+                    }
+                    (_, syn::Pat::Ident(pat_ident), _) => {
+                        if Self::is_mutable_reference_with_lifetimes_in_type(pat_type.ty.as_ref()) {
+                            ArgClass::MutImpossible(pat_ident, &pat_type.ty)
+                        } else {
+                            ArgClass::Other(pat_ident, &pat_type.ty)
+                        }
+                    }
+                    _ => ArgClass::Unprocessable(pat_type),
+                }
+            }
+        }
+    }
+
+    fn is_mutable_reference_with_lifetimes_in_type(ty: &syn::Type) -> bool {
+        if let syn::Type::Reference(reference) = ty {
+            if reference.mutability.is_some() {
+                let inner_type = reference.elem.as_ref();
+                if let syn::Type::Path(type_path) = inner_type {
+                    if let Some(last_segment) = type_path.path.segments.last() {
+                        if let syn::PathArguments::AngleBracketed(angle_bracketed) =
+                            &last_segment.arguments
+                        {
+                            return angle_bracketed.args.iter().any(|generic_argument| {
+                                matches!(generic_argument, syn::GenericArgument::Lifetime(_))
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        false
     }
 }
 
@@ -406,38 +461,37 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
 
             let last_index = self.method.method.sig.inputs.len() - 1;
             for (index, pair) in self.method.method.sig.inputs.pairs().enumerate() {
-                if let syn::FnArg::Typed(pat_type) = pair.value() {
-                    match (index, pat_type.pat.as_ref(), &self.method.mutated_arg) {
-                        (0, syn::Pat::Ident(pat_ident), _) if pat_ident.ident == "self" => {}
-                        (index, syn::Pat::Ident(pat_ident), Some(mutated_arg))
-                            if index == mutated_arg.index =>
-                        {
-                            match self.syntax {
-                                InputsSyntax::FnPattern | InputsSyntax::FnParams => {
-                                    pat_ident.to_tokens(tokens)
-                                }
-                                InputsSyntax::EvalParams => {
-                                    let prefix = &self.attr.prefix;
-                                    quote! {
-                                        #prefix::PhantomMut::default()
-                                    }
-                                    .to_tokens(tokens)
-                                }
-                                InputsSyntax::EvalPattern => quote! { _ }.to_tokens(tokens),
-                            }
-                        }
-                        (_, syn::Pat::Ident(pat_ident), _) => {
-                            pat_ident.to_tokens(tokens);
-                        }
-                        _ => {
-                            syn::Error::new(pat_type.span(), "Unprocessable argument")
-                                .to_compile_error()
-                                .to_tokens(tokens);
-                        }
-                    };
-                    if index < last_index {
-                        syn::token::Comma::default().to_tokens(tokens);
+                match self.method.classify_arg(pair.value(), index) {
+                    ArgClass::Receiver => {
+                        continue;
                     }
+                    ArgClass::MutMutated(_, pat_ident) | ArgClass::MutImpossible(pat_ident, _) => {
+                        match self.syntax {
+                            InputsSyntax::FnPattern | InputsSyntax::FnParams => {
+                                pat_ident.to_tokens(tokens)
+                            }
+                            InputsSyntax::EvalParams => {
+                                let prefix = &self.attr.prefix;
+                                quote! {
+                                    #prefix::PhantomMut::default()
+                                }
+                                .to_tokens(tokens)
+                            }
+                            InputsSyntax::EvalPattern => quote! { _ }.to_tokens(tokens),
+                        }
+                    }
+                    ArgClass::Other(pat_ident, _ty) => {
+                        pat_ident.to_tokens(tokens);
+                    }
+                    ArgClass::Unprocessable(pat_type) => {
+                        syn::Error::new(pat_type.span(), "Unprocessable argument")
+                            .to_compile_error()
+                            .to_tokens(tokens);
+                    }
+                };
+
+                if index < last_index {
+                    syn::token::Comma::default().to_tokens(tokens);
                 }
             }
         }

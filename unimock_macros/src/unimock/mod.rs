@@ -16,7 +16,7 @@ use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
-use self::method::MockMethod;
+use self::method::{ArgClass, MockMethod};
 use self::util::{iter_generic_type_params, InferImplTrait};
 
 pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
@@ -504,6 +504,7 @@ fn def_method_impl(
     quote_spanned! { span=>
         #(#mirrored_attrs)*
         #[track_caller]
+        #[allow(unused)]
         #method_sig {
             #body
         }
@@ -531,21 +532,22 @@ impl InputTypesTuple {
                 .inputs
                 .iter()
                 .enumerate()
-                .filter_map(|(index, input)| match input {
-                    syn::FnArg::Receiver(_) => None,
-                    syn::FnArg::Typed(pat_type) => {
-                        match (index, pat_type.pat.as_ref(), &mock_method.mutated_arg) {
-                            (0, syn::Pat::Ident(pat_ident), _) if pat_ident.ident == "self" => None,
-                            (index, _, Some(mutated_arg)) if index == mutated_arg.index => {
-                                let mutated_ty = &mutated_arg.ty;
-                                Some(syn::parse_quote!(
-                                    #prefix::PhantomMut<&#input_lifetime #mutated_ty>
-                                ))
-                            }
-                            _ => Some(pat_type.ty.as_ref().clone()),
+                .filter_map(
+                    |(index, input)| match mock_method.classify_arg(input, index) {
+                        ArgClass::Receiver => None,
+                        ArgClass::MutMutated(mutated_arg, _) => {
+                            let mutated_ty = &mutated_arg.ty;
+                            Some(syn::parse_quote!(
+                                #prefix::PhantomMut<&#input_lifetime #mutated_ty>
+                            ))
                         }
-                    }
-                })
+                        ArgClass::MutImpossible(..) => Some(syn::parse_quote!(
+                            #prefix::PhantomMut<#prefix::Impossible>
+                        )),
+                        ArgClass::Other(_, ty) => Some(ty.clone()),
+                        ArgClass::Unprocessable(_) => None,
+                    },
+                )
                 .map(|mut ty| {
                     ty = util::substitute_lifetimes(ty, input_lifetime);
                     ty = util::self_type_to_unimock(ty, trait_info.input_trait, attr);

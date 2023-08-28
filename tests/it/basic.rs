@@ -849,21 +849,23 @@ fn non_sync_return() {
     assert_eq!(Cell::new(42), u.return_cell());
 }
 
-mod mutated_arg {
+mod mutated_args {
+    use core::marker::PhantomData;
+
     use unimock::*;
 
-    #[unimock(api = MutMock)]
-    trait Mut {
-        fn mutation(&self, a: i32, b: &mut i32, c: i32) -> i32;
+    #[unimock(api = Mut1Mock)]
+    trait Mut1 {
+        fn mut1_a(&self, a: i32, b: &mut i32, c: i32) -> i32;
 
-        fn mutation2(&self, a: i32, b: &mut i32, c: i32) -> i32 {
-            self.mutation(a, b, c)
+        fn mut1_b(&self, a: i32, b: &mut i32, c: i32) -> i32 {
+            self.mut1_a(a, b, c)
         }
     }
 
     #[test]
-    fn can_mutate() {
-        let u = Unimock::new(MutMock::mutation.next_call(matching!(2, _, 21)).mutates(
+    fn can_mutate1() {
+        let u = Unimock::new(Mut1Mock::mut1_a.next_call(matching!(2, _, 21)).mutates(
             |b, (a, _, c)| {
                 *b = a * c;
                 a + c
@@ -871,8 +873,46 @@ mod mutated_arg {
         ));
 
         let mut arg1 = 21;
-        assert_eq!(23, u.mutation2(2, &mut arg1, 21));
+        assert_eq!(23, u.mut1_b(2, &mut arg1, 21));
         assert_eq!(42, arg1);
+    }
+
+    // There should be no conflict when there are several lifetime-less &mut arguments
+    #[unimock(api = Mut2Mock)]
+    trait Mut2 {
+        fn mut2_a(&self, a: i32, b: &mut i32, c: &mut i32) -> i32;
+
+        fn mut2_b(&self, a: i32, b: &mut i32, c: &mut i32) -> i32 {
+            self.mut2_a(a, b, c)
+        }
+    }
+
+    struct LifetimeArg<'a> {
+        data: PhantomData<&'a ()>,
+    }
+
+    // A mutable argument with a lifetime is not possible to send into Unimock,
+    // so it should use `PhantomMut<Impossible>` for b.
+    #[unimock(api = ImpossibleMutableLifetimeArgMock)]
+    trait ImpossibleMutableLifetimeArg {
+        fn mut_b_impossible(&self, a: i32, b: &mut LifetimeArg<'_>, c: &mut i32) -> i32;
+    }
+
+    #[test]
+    fn can_mutate_with_lifetime_arg() {
+        let u = Unimock::new(
+            ImpossibleMutableLifetimeArgMock::mut_b_impossible
+                .next_call(matching!(2, _, _))
+                .mutates(|c, (a, _impossible, _phantom_mut)| {
+                    *c *= a;
+                    *c + a
+                }),
+        );
+
+        let mut arg3 = 21;
+        let mut lifetime_arg = LifetimeArg { data: PhantomData };
+        assert_eq!(44, u.mut_b_impossible(2, &mut lifetime_arg, &mut arg3));
+        assert_eq!(42, arg3);
     }
 }
 

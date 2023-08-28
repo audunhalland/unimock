@@ -1150,6 +1150,9 @@ impl<T> Debug for PhantomMut<T> {
     }
 }
 
+/// A marker type used when Unimock is unable to represent the user's type.
+pub struct Impossible;
+
 /// A clause represents a recipe for creating a unimock instance.
 ///
 /// Clauses may be _terminal_ (basic) and _non-terminal_ (composite).
