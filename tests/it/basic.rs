@@ -965,3 +965,16 @@ mod no_verify_in_drop {
         unimock.verify();
     }
 }
+
+mod debug_mut_arg {
+    pub struct Arg;
+
+    use unimock::*;
+
+    // A bug where we need `(&*arg).unimock_try_debug();`
+    // instead of `(*arg).unimock_try_debug()`
+    #[unimock(api = TestMock)]
+    trait Test {
+        fn f(&self, arg1: &mut Arg, arg2: &mut Arg);
+    }
+}

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixed
 - Default methods combined with arbitrary Self types like `Rc<Self>`/`Arc<Self>`.
+- Argument debugging for `&mut T` args where `T` does not implement `Debug`.
 
 ## [0.5.3] - 2023-07-07
 ### Fixed
