@@ -88,6 +88,7 @@ fn owned_output_works() {
 #[cfg(feature = "std")]
 mod exotic_self_types {
     use super::*;
+    use core::pin::Pin;
     use std::rc::Rc;
 
     #[unimock]
@@ -100,16 +101,16 @@ mod exotic_self_types {
         fn mut_self(&mut self);
     }
 
-    #[unimock(api=RcSelfMock)]
-    trait RcSelf {
-        fn rc_self(self: Rc<Self>);
-    }
-
     #[test]
     fn mut_self() {
         let mut u = Unimock::new(MutSelfMock::mut_self.each_call(matching!()).returns(()));
 
         u.mut_self();
+    }
+
+    #[unimock(api=RcSelfMock)]
+    trait RcSelf {
+        fn rc_self(self: Rc<Self>);
     }
 
     #[test]
@@ -119,6 +120,27 @@ mod exotic_self_types {
         ));
 
         deps.rc_self();
+    }
+
+    #[unimock(api=PinMutSelfMock)]
+    trait PinMutSelf {
+        fn pin_mut_self(self: Pin<&mut Self>) -> i32;
+    }
+
+    #[test]
+    fn pin_mut_self() {
+        let mut deps = Unimock::new(
+            PinMutSelfMock::pin_mut_self
+                .each_call(matching!())
+                .returns(42),
+        );
+
+        assert_eq!(42, Pin::new(&mut deps).pin_mut_self());
+    }
+
+    #[unimock(api=PinMutSelfBorrowMock)]
+    trait PinMutBorrowSelf {
+        fn pin_mut_self_borrow(self: Pin<&mut Self>) -> Option<&i32>;
     }
 }
 
@@ -414,7 +436,7 @@ mod custom_api_module {
     }
 
     #[test]
-    #[should_panic = "Single::func: Expected Single::func(_) at tests/it/basic.rs:421 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."]
+    #[should_panic = "Single::func: Expected Single::func(_) at tests/it/basic.rs:443 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."]
     fn test_without_module() {
         Unimock::new(
             FakeSingle::func
@@ -654,7 +676,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:630 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:652 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());

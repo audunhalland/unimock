@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Mixed return type support for `core::task::Poll<T>` where `T` is already mixed.
 ### Fixed
-- Default methods combined with arbitrary Self types like `Rc<Self>`/`Arc<Self>`.
+- Default methods combined with arbitrary Self types like `Rc<Self>`/`Arc<Self>`/`Pin<&mut Self>`.
 - Argument debugging for `&mut T` args where `T` does not implement `Debug`.
 - Compile error for `&mut T<'_>` arguments that are not mock-mutable.
 

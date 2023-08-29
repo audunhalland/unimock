@@ -9,7 +9,7 @@ mod trait_info;
 mod util;
 
 use crate::doc::SynDoc;
-use crate::unimock::method::{InputsSyntax, Tupled};
+use crate::unimock::method::{InputsSyntax, Receiver, SelfReference, Tupled};
 use crate::unimock::util::replace_self_ty_with_path;
 pub use attr::{Attr, MockApi};
 use trait_info::TraitInfo;
@@ -338,7 +338,8 @@ fn def_method_impl(
     let mirrored_attrs = method.mirrored_attrs();
     let mock_fn_path = method.mock_fn_path(attr);
 
-    let self_ref = method.self_reference();
+    let receiver = method.receiver();
+    let self_ref = SelfReference(&receiver);
     let eval_generic_args = util::Generics::fn_args(trait_info, Some(method), InferImplTrait(true));
 
     let has_impl_trait_future = matches!(
@@ -491,6 +492,15 @@ fn def_method_impl(
                 #unimock_accessor.#ident(#inputs_destructuring)
             }
         }
+    };
+
+    let body = if let Receiver::Pin { surrogate_self } = &receiver {
+        quote! {
+            let #surrogate_self = ::core::pin::Pin::into_inner(self);
+            #body
+        }
+    } else {
+        body
     };
 
     let body = if has_impl_trait_future {

@@ -104,12 +104,26 @@ impl<'t> MockMethod<'t> {
         }
     }
 
-    pub fn self_reference(&self) -> SelfReference {
+    pub fn receiver(&self) -> Receiver {
         match self.method.sig.receiver() {
             Some(syn::Receiver {
-                reference: None, ..
-            }) => SelfReference { create_ref: true },
-            _ => SelfReference { create_ref: false },
+                reference: None,
+                self_token,
+                ty,
+                ..
+            }) => {
+                if Self::guess_is_pin(ty) {
+                    Receiver::Pin {
+                        surrogate_self: syn::Ident::new("__self", self_token.span()),
+                    }
+                } else {
+                    Receiver::Owned
+                }
+            }
+            Some(syn::Receiver {
+                reference: Some(_), ..
+            }) => Receiver::Reference,
+            _ => Receiver::Reference,
         }
     }
 
@@ -150,7 +164,6 @@ impl<'t> MockMethod<'t> {
             .filter_map(|(index, fn_arg)| match fn_arg {
                 syn::FnArg::Receiver(_) => None,
                 syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
-                    (0, syn::Pat::Ident(pat_ident)) if pat_ident.ident == "self" => None,
                     (_, syn::Pat::Ident(pat_ident)) => {
                         Some(try_debug_expr(pat_ident, &pat_type.ty))
                     }
@@ -188,9 +201,6 @@ impl<'t> MockMethod<'t> {
             syn::FnArg::Receiver(_) => ArgClass::Receiver,
             syn::FnArg::Typed(pat_type) => {
                 match (index, pat_type.pat.as_ref(), &self.mutated_arg) {
-                    (0, syn::Pat::Ident(pat_ident), _) if pat_ident.ident == "self" => {
-                        ArgClass::Receiver
-                    }
                     (index, syn::Pat::Ident(pat_ident), Some(mutated_arg))
                         if mutated_arg.index == index =>
                     {
@@ -222,6 +232,20 @@ impl<'t> MockMethod<'t> {
                                 matches!(generic_argument, syn::GenericArgument::Lifetime(_))
                             });
                         }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    fn guess_is_pin(ty: &syn::Type) -> bool {
+        if let syn::Type::Path(type_path) = ty {
+            if let Some(last_segment) = type_path.path.segments.last() {
+                if last_segment.ident == "Pin" {
+                    if let syn::PathArguments::AngleBracketed(_) = &last_segment.arguments {
+                        return true;
                     }
                 }
             }
@@ -565,15 +589,27 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
     }
 }
 
-pub struct SelfReference {
-    create_ref: bool,
+pub enum Receiver {
+    Owned,
+    Reference,
+    Pin { surrogate_self: syn::Ident },
 }
 
-impl quote::ToTokens for SelfReference {
+pub struct SelfReference<'a>(pub &'a Receiver);
+
+impl<'a> quote::ToTokens for SelfReference<'a> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        if self.create_ref {
-            syn::token::And::default().to_tokens(tokens);
+        match &self.0 {
+            Receiver::Owned => {
+                syn::token::And::default().to_tokens(tokens);
+                syn::token::SelfValue::default().to_tokens(tokens);
+            }
+            Receiver::Reference => {
+                syn::token::SelfValue::default().to_tokens(tokens);
+            }
+            Receiver::Pin { surrogate_self } => {
+                surrogate_self.to_tokens(tokens);
+            }
         }
-        syn::token::SelfValue::default().to_tokens(tokens);
     }
 }
