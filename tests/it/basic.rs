@@ -5,7 +5,7 @@ use unimock::*;
 #[test]
 fn all_the_auto_trait_goodies() {
     fn assert_implements_niceness<
-        T: Send + Sync + core::panic::UnwindSafe + core::panic::RefUnwindSafe,
+        T: Send + Sync + core::panic::UnwindSafe + core::panic::RefUnwindSafe + core::marker::Unpin,
     >() {
     }
 
