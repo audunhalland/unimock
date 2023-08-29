@@ -193,6 +193,21 @@ fn mixed_tuple_clone_combinatorics_many() {
 
 #[unimock(api=InPollMock)]
 trait InPoll {
-    fn poll_result(&self) -> Poll<Result<&u32, ()>>;
-    fn poll_option(&self) -> Poll<Option<&u32>>;
+    fn poll_result(&self) -> Poll<Result<&i32, ()>>;
+    fn poll_option(&self) -> Poll<Option<&i32>>;
+}
+
+#[test]
+fn in_poll() {
+    let u = Unimock::new((
+        InPollMock::poll_result
+            .next_call(matching!())
+            .returns(Poll::Ready(Ok(42))),
+        InPollMock::poll_option
+            .next_call(matching!())
+            .returns(Poll::<Option<&i32>>::Pending),
+    ));
+
+    assert_eq!(Poll::Ready(Ok(&42)), <Unimock as InPoll>::poll_result(&u));
+    assert_eq!(Poll::Pending, <Unimock as InPoll>::poll_option(&u));
 }

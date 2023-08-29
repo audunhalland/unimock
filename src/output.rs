@@ -226,6 +226,7 @@ mod static_ref {
     }
 }
 
+// TODO: Generalize in mixed enum macro.
 mod mixed_option {
     use super::*;
 
@@ -354,6 +355,7 @@ mod mixed_vec {
     }
 }
 
+// TODO: Generalize in mixed enum macro.
 mod mixed_result_borrowed_t {
     use super::*;
 
@@ -557,7 +559,7 @@ mod mixed_poll {
                 Poll::Ready(value) => Ok(Responder(DynResponder::new_cell::<F>(Poll::Ready(
                     value.into_response(),
                 ))?)),
-                Poll::Pending => todo!(),
+                Poll::Pending => Ok(Responder(DynResponder::new_cell::<F>(Poll::Pending)?)),
             }
         }
     }
@@ -573,7 +575,7 @@ mod mixed_poll {
                 Poll::Ready(value) => Ok(Responder(DynResponder::new_clone_cell::<F>(
                     Poll::Ready(value.into_response()),
                 ))),
-                Poll::Pending => todo!(),
+                Poll::Pending => Ok(Responder(DynResponder::new_cell::<F>(Poll::Pending)?)),
             }
         }
     }
