@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- Mixed return type support for `core::task::Poll<T>` where `T` is already mixed.
 ### Fixed
 - Default methods combined with arbitrary Self types like `Rc<Self>`/`Arc<Self>`.
 - Argument debugging for `&mut T` args where `T` does not implement `Debug`.

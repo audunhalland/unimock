@@ -516,3 +516,97 @@ mixed_tuples!((T0, A0, 0));
 mixed_tuples!((T0, A0, 0), (T1, A1, 1));
 mixed_tuples!((T0, A0, 0), (T1, A1, 1), (T2, A2, 2));
 mixed_tuples!((T0, A0, 0), (T1, A1, 1), (T2, A2, 2), (T3, A3, 3));
+
+// This can perhaps serve as the template for a macro that handles Mixed enums
+mod mixed_poll {
+    use super::*;
+    use core::task::Poll;
+
+    type Mix<T> = Mixed<Poll<T>>;
+
+    impl<T> Respond for Mix<T>
+    where
+        Mixed<T>: Respond,
+        <Mixed<T> as Respond>::Type: 'static + Send + Sync,
+    {
+        type Type = Poll<<Mixed<T> as Respond>::Type>;
+    }
+
+    impl<T0, T> IntoResponse<Mix<T>> for Poll<T0>
+    where
+        T0: IntoResponse<Mixed<T>>,
+        Mixed<T>: Respond,
+        <Mixed<T> as Respond>::Type: 'static + Send + Sync,
+    {
+        fn into_response(self) -> <Mix<T> as Respond>::Type {
+            match self {
+                Poll::Ready(value) => Poll::Ready(value.into_response()),
+                Poll::Pending => Poll::Pending,
+            }
+        }
+    }
+
+    impl<T0, T> IntoOnceResponder<Mix<T>> for Poll<T0>
+    where
+        T0: IntoResponse<Mixed<T>>,
+        Mixed<T>: Respond,
+        <Mixed<T> as Respond>::Type: 'static + Send + Sync,
+    {
+        fn into_once_responder<F: MockFn<Response = Mix<T>>>(self) -> OutputResult<Responder> {
+            match self {
+                Poll::Ready(value) => Ok(Responder(DynResponder::new_cell::<F>(Poll::Ready(
+                    value.into_response(),
+                ))?)),
+                Poll::Pending => todo!(),
+            }
+        }
+    }
+
+    impl<T0, T> IntoCloneResponder<Mix<T>> for Poll<T0>
+    where
+        T0: IntoResponse<Mixed<T>>,
+        Mixed<T>: Respond,
+        <Mixed<T> as Respond>::Type: 'static + Send + Sync + Clone,
+    {
+        fn into_clone_responder<F: MockFn<Response = Mix<T>>>(self) -> OutputResult<Responder> {
+            match self {
+                Poll::Ready(value) => Ok(Responder(DynResponder::new_clone_cell::<F>(
+                    Poll::Ready(value.into_response()),
+                ))),
+                Poll::Pending => todo!(),
+            }
+        }
+    }
+
+    impl<'u, T, A> Output<'u, Mix<T>> for Mixed<Poll<A>>
+    where
+        Mixed<T>: Respond,
+        <Mixed<T> as Respond>::Type: 'static + Send + Sync,
+        Mixed<A>: Output<'u, Mixed<T>>,
+    {
+        type Type = Poll<<Mixed<A> as Output<'u, Mixed<T>>>::Type>;
+
+        fn from_response(
+            response: <Mix<T> as Respond>::Type,
+            value_chain: &'u ValueChain,
+        ) -> Self::Type {
+            match response {
+                Poll::Ready(value) => Poll::Ready(
+                    <Mixed<A> as Output<'u, Mixed<T>>>::from_response(value, value_chain),
+                ),
+                Poll::Pending => Poll::Pending,
+            }
+        }
+
+        fn try_from_borrowed_response(
+            response: &'u <Mix<T> as Respond>::Type,
+        ) -> OutputResult<Self::Type> {
+            Ok(match response {
+                Poll::Ready(value) => Poll::Ready(
+                    <Mixed<A> as Output<'u, Mixed<T>>>::try_from_borrowed_response(value)?,
+                ),
+                Poll::Pending => Poll::Pending,
+            })
+        }
+    }
+}
