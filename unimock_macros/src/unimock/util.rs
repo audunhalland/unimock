@@ -436,3 +436,19 @@ pub fn replace_self_ty_with_path(mut ty: syn::Type, replacement_path: &syn::Path
 
     ty
 }
+
+pub fn is_path_unimock_prefix_output(path: &syn::Path, prefix: &syn::Path) -> bool {
+    let mut prefix_iter = prefix.segments.iter();
+
+    for segment in &path.segments {
+        if let Some(prefix_segment) = prefix_iter.next() {
+            if segment.ident != prefix_segment.ident {
+                return false;
+            }
+        } else {
+            return segment.ident == "output";
+        }
+    }
+
+    false
+}

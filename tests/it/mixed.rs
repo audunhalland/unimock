@@ -207,7 +207,11 @@ fn in_poll() {
             .next_call(matching!())
             .returns(Poll::<Option<&i32>>::Pending),
     ));
-
     assert_eq!(Poll::Ready(Ok(&42)), <Unimock as InPoll>::poll_result(&u));
     assert_eq!(Poll::Pending, <Unimock as InPoll>::poll_option(&u));
+}
+
+#[unimock(api=NestedOptionOptionMock)]
+trait NestedOptionOption {
+    fn nested(&self) -> Option<Option<&i32>>;
 }

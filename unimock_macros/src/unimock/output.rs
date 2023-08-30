@@ -1,8 +1,11 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{parse_quote, visit_mut::VisitMut};
 
-use super::{util, Attr};
+use super::{
+    util::{self, is_path_unimock_prefix_output},
+    Attr,
+};
 
 pub struct OutputStructure {
     pub wrapping: OutputWrapping,
@@ -25,6 +28,34 @@ impl OutputStructure {
         prefix: &syn::Path,
         associated_type: &AssociatedInnerType,
     ) -> proc_macro2::TokenStream {
+        let args = (prefix, associated_type);
+        match &self.ownership {
+            OutputOwnership::Owned => self.wrap_once(args, "Owned"),
+            OutputOwnership::SelfReference => self.wrap_once(args, "Borrowed"),
+            OutputOwnership::ParamReference => self.wrap_once(args, "StaticRef"),
+            OutputOwnership::StaticReference => self.wrap_once(args, "StaticRef"),
+            OutputOwnership::Mixed => {
+                let ty = match associated_type {
+                    AssociatedInnerType::SameAsResponse => panic!(),
+                    AssociatedInnerType::Unit => panic!(),
+                    AssociatedInnerType::Typed(ty) => ty,
+                };
+                let mixed_path: syn::Path = syn::parse_quote! {
+                    #prefix::output::Mixed
+                };
+                let mut token_stream = TokenStream::new();
+                self.wrap_mixed(ty, &mixed_path, prefix, &mut token_stream);
+
+                token_stream
+            }
+        }
+    }
+
+    fn wrap_once(
+        &self,
+        (prefix, associated_type): (&syn::Path, &AssociatedInnerType),
+        response_ident: &str,
+    ) -> TokenStream {
         let inner = match associated_type {
             AssociatedInnerType::SameAsResponse => {
                 return quote! { Self::Response };
@@ -36,11 +67,87 @@ impl OutputStructure {
                 quote! { #inner_type }
             }
         };
-
-        let response_type_ident = self.ownership.response_type_ident();
+        let response_ident = syn::Ident::new(response_ident, proc_macro2::Span::call_site());
         quote! {
-            #prefix::output::#response_type_ident<#inner>
+            #prefix::output::#response_ident<#inner>
         }
+    }
+
+    fn wrap_mixed(
+        &self,
+        ty: &syn::Type,
+        mixed_path: &syn::Path,
+        prefix: &syn::Path,
+        output: &mut TokenStream,
+    ) {
+        match ty {
+            syn::Type::Path(type_path) => {
+                if let Some(last_segment) = type_path.path.segments.last() {
+                    if let syn::PathArguments::AngleBracketed(_) = &last_segment.arguments {
+                        if !is_path_unimock_prefix_output(&type_path.path, prefix) {
+                            mixed_path.to_tokens(output);
+                            syn::token::Lt::default().to_tokens(output);
+
+                            for pair in type_path.path.segments.pairs() {
+                                let (segment, sep) = (pair.value(), pair.punct());
+                                segment.ident.to_tokens(output);
+                                sep.to_tokens(output);
+
+                                match &segment.arguments {
+                                    syn::PathArguments::None => {}
+                                    syn::PathArguments::Parenthesized(parenthesized) => {
+                                        parenthesized.to_tokens(output);
+                                    }
+                                    syn::PathArguments::AngleBracketed(bracketed) => {
+                                        bracketed.lt_token.to_tokens(output);
+                                        for pair in bracketed.args.pairs() {
+                                            let (arg, sep) = (pair.value(), pair.punct());
+                                            match arg {
+                                                syn::GenericArgument::Type(generic_ty) => {
+                                                    self.wrap_mixed(
+                                                        generic_ty, mixed_path, prefix, output,
+                                                    );
+                                                }
+                                                other => {
+                                                    other.to_tokens(output);
+                                                }
+                                            }
+
+                                            sep.to_tokens(output);
+                                        }
+                                        bracketed.gt_token.to_tokens(output);
+                                    }
+                                }
+                            }
+
+                            syn::token::Gt::default().to_tokens(output);
+                            return;
+                        }
+                    }
+                }
+            }
+            syn::Type::Tuple(type_tuple) => {
+                if !type_tuple.elems.is_empty() {
+                    mixed_path.to_tokens(output);
+                    syn::token::Lt::default().to_tokens(output);
+
+                    type_tuple.paren_token.surround(output, |output| {
+                        for pair in type_tuple.elems.pairs() {
+                            let (elem, sep) = (pair.value(), pair.punct());
+
+                            self.wrap_mixed(elem, mixed_path, prefix, output);
+                            sep.to_tokens(output);
+                        }
+                    });
+
+                    syn::token::Gt::default().to_tokens(output);
+                    return;
+                }
+            }
+            _ => {}
+        }
+
+        ty.to_tokens(output);
     }
 }
 
@@ -55,22 +162,6 @@ pub enum OutputOwnership {
     ParamReference,
     StaticReference,
     Mixed,
-}
-
-impl OutputOwnership {
-    fn response_type_ident(&self) -> syn::Ident {
-        syn::Ident::new(self.response_typename(), proc_macro2::Span::call_site())
-    }
-
-    pub fn response_typename(&self) -> &'static str {
-        match self {
-            Self::Owned => "Owned",
-            Self::SelfReference => "Borrowed",
-            Self::ParamReference => "StaticRef",
-            Self::StaticReference => "StaticRef",
-            Self::Mixed => "Mixed",
-        }
-    }
 }
 
 pub fn determine_output_structure(
