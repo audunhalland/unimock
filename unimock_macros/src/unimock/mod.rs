@@ -347,9 +347,12 @@ fn def_method_impl(
         output::OutputWrapping::ImplTraitFuture(_)
     );
 
+    let trait_path = &trait_info.trait_path;
+    let method_ident = &method_sig.ident;
+    let opt_dot_await = method.opt_dot_await();
+
     let body = match kind {
         MethodImplKind::Mock => {
-            let opt_dot_await = method.opt_dot_await();
             let unmock_arm = attr.get_unmock_fn(index).map(
                 |UnmockFn {
                      path: unmock_path,
@@ -377,7 +380,6 @@ fn def_method_impl(
             );
 
             let default_impl_delegate_arm = if method.method.default.is_some() {
-                let method_ident = &method_sig.ident;
                 let eval_pattern =
                     method.inputs_destructuring(InputsSyntax::EvalPattern, Tupled(true), attr);
                 let fn_params =
@@ -421,8 +423,10 @@ fn def_method_impl(
 
                 Some(quote! {
                     #prefix::private::Evaluation::CallDefaultImpl(#eval_pattern) => {
-                        #delegator_constructor
-                            .#method_ident(#fn_params)
+                        <#delegator_path as #trait_path>::#method_ident(
+                            #delegator_constructor,
+                            #fn_params
+                        )
                             #opt_dot_await
                     },
                 })
@@ -448,7 +452,6 @@ fn def_method_impl(
             }
         }
         MethodImplKind::Delegate0 => {
-            let ident = &method_sig.ident;
             let inputs_destructuring =
                 method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
             let unimock_accessor = match method_sig.receiver() {
@@ -489,7 +492,11 @@ fn def_method_impl(
                 _ => panic!("BUG: Incompatible receiver for default delegator"),
             };
             quote! {
-                #unimock_accessor.#ident(#inputs_destructuring)
+                <#prefix::Unimock as #trait_path>::#method_ident(
+                    #unimock_accessor,
+                    #inputs_destructuring
+                )
+                    #opt_dot_await
             }
         }
     };
