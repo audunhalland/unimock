@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default methods combined with arbitrary Self types like `Rc<Self>`/`Arc<Self>`/`Pin<&mut Self>`.
 - Argument debugging for `&mut T` args where `T` does not implement `Debug`.
 - Compile error for `&mut T<'_>` arguments that are not mock-mutable.
-- `.await` syntax when using default async methods
-- fully qualified method call syntax with using default methods, to avoid amgiguity
+- Missing `.await` syntax when using default async methods.
+- Fully qualified method call syntax in default method glue, to avoid ambiguity.
 
 ## [0.5.3] - 2023-07-07
 ### Fixed
