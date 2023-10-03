@@ -409,14 +409,14 @@ fn def_method_impl(
                         mutability: None,
                         ..
                     }) => quote! {
-                        #prefix::private::as_ref::<Self, #delegator_path>(self)
+                        #prefix::private::as_ref(self)
                     },
                     Some(syn::Receiver {
                         reference: Some(_),
                         mutability: Some(_),
                         ..
                     }) => quote! {
-                        #prefix::private::as_mut::<Self, #delegator_path>(self)
+                        #prefix::private::as_mut(self)
                     },
                     _ => todo!("unhandled DefaultImplDelegator constructor"),
                 };
@@ -480,14 +480,14 @@ fn def_method_impl(
                     mutability: None,
                     ..
                 }) => {
-                    quote! { #prefix::private::as_ref::<Self, #prefix::Unimock>(self) }
+                    quote! { #prefix::private::as_ref(self) }
                 }
                 Some(syn::Receiver {
                     reference: Some(_),
                     mutability: Some(_),
                     ..
                 }) => {
-                    quote! { #prefix::private::as_mut::<Self, #prefix::Unimock>(self) }
+                    quote! { #prefix::private::as_mut(self) }
                 }
                 _ => panic!("BUG: Incompatible receiver for default delegator"),
             };
