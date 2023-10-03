@@ -144,3 +144,34 @@ mod default_impl_arc {
         );
     }
 }
+
+#[cfg(feature = "std")]
+mod default_impl_async_trait {
+    use unimock::*;
+
+    type TestResult<T> = Result<T, ()>;
+
+    // A point of these tests is that the method names
+    // in both traits are the same.
+    // This tests that the delegation is done with fully-qualified syntax.
+
+    #[unimock(api = AsyncTraitDefault1Mock)]
+    #[async_trait::async_trait]
+    trait AsyncTraitDefault1 {
+        async fn normal_method(&self) -> TestResult<i32>;
+
+        async fn default_method(&self) -> TestResult<i32> {
+            Ok(42)
+        }
+    }
+
+    #[unimock(api = AsyncTraitDefault2Mock)]
+    #[async_trait::async_trait]
+    trait AsyncTraitDefault2 {
+        async fn normal_method(&self) -> TestResult<i32>;
+
+        async fn default_method(&self) -> TestResult<i32> {
+            Ok(42)
+        }
+    }
+}
