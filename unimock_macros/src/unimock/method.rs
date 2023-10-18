@@ -122,9 +122,14 @@ impl<'t> MockMethod<'t> {
                 }
             }
             Some(syn::Receiver {
-                reference: Some(_), ..
-            }) => Receiver::Reference,
-            _ => Receiver::Reference,
+                reference: Some(_),
+                mutability: Some(_),
+                self_token,
+                ..
+            }) => Receiver::MutRef {
+                surrogate_self: syn::Ident::new("__self", self_token.span()),
+            },
+            _ => Receiver::Ref,
         }
     }
 
@@ -594,7 +599,8 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
 
 pub enum Receiver {
     Owned,
-    Reference,
+    Ref,
+    MutRef { surrogate_self: syn::Ident },
     Pin { surrogate_self: syn::Ident },
 }
 
@@ -607,10 +613,10 @@ impl<'a> quote::ToTokens for SelfReference<'a> {
                 syn::token::And::default().to_tokens(tokens);
                 syn::token::SelfValue::default().to_tokens(tokens);
             }
-            Receiver::Reference => {
+            Receiver::Ref => {
                 syn::token::SelfValue::default().to_tokens(tokens);
             }
-            Receiver::Pin { surrogate_self } => {
+            Receiver::Pin { surrogate_self } | Receiver::MutRef { surrogate_self } => {
                 surrogate_self.to_tokens(tokens);
             }
         }
@@ -622,8 +628,11 @@ pub struct SelfToDelegator<'a>(pub &'a Receiver);
 impl<'a> quote::ToTokens for SelfToDelegator<'a> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match &self.0 {
-            Receiver::Owned | Receiver::Reference => {
+            Receiver::Owned | Receiver::Ref => {
                 syn::token::SelfValue::default().to_tokens(tokens);
+            }
+            Receiver::MutRef { surrogate_self } => {
+                surrogate_self.to_tokens(tokens);
             }
             Receiver::Pin { surrogate_self } => {
                 quote! {

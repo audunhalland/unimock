@@ -420,7 +420,7 @@ fn def_method_impl(
                         mutability: Some(_),
                         ..
                     }) => quote! {
-                        #prefix::private::as_mut(self)
+                        #prefix::private::as_mut(__self)
                     },
                     _ => todo!("unhandled DefaultImplDelegator constructor"),
                 };
@@ -437,7 +437,7 @@ fn def_method_impl(
             };
 
             match &receiver {
-                Receiver::Pin { .. } => {
+                Receiver::MutRef { .. } | Receiver::Pin { .. } => {
                     let default_impl_delegate_arm_polonius = if method.method.default.is_some() {
                         let eval_pattern = method.inputs_destructuring(
                             InputsSyntax::EvalPatternMutAsWildcard,
@@ -562,6 +562,12 @@ fn def_method_impl(
     };
 
     let body = match (kind, &receiver) {
+        (MethodImplKind::Mock, Receiver::MutRef { surrogate_self }) => {
+            quote! {
+                let mut #surrogate_self = self;
+                #body
+            }
+        }
         (MethodImplKind::Mock, Receiver::Pin { surrogate_self }) => {
             quote! {
                 let mut #surrogate_self = ::core::pin::Pin::into_inner(self);

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixed
 - `Pin<&mut Self>` receivers in combination with the default impl delegator with the help of [polonius-the-crab](https://github.com/danielhenrymantilla/polonius-the-crab.rs)! ([#30](https://github.com/audunhalland/unimock/pull/30)).
+- `&mut Self` receivers that returns references to self, within default body (same fix as above).
 
 ## [0.5.4] - 2023-10-03
 ### Added
