@@ -436,6 +436,16 @@ pub mod private;
 #[doc(hidden)]
 pub mod value_chain;
 
+#[doc(hidden)]
+pub mod polonius {
+    pub use polonius_the_crab::exit_polonius as _exit;
+    pub use polonius_the_crab::polonius as _polonius;
+    pub use polonius_the_crab::polonius_return as _return;
+}
+
+#[doc(hidden)]
+mod default_impl_delegator;
+
 mod assemble;
 mod call_pattern;
 mod cell;
@@ -899,12 +909,6 @@ impl AsMut<DefaultImplDelegator> for Unimock {
             private::lib::Box::new(DefaultImplDelegator::__from_unimock(self.clone()))
         });
         self.default_impl_delegator_cell.get_mut().unwrap()
-    }
-}
-
-impl From<DefaultImplDelegator> for Unimock {
-    fn from(value: DefaultImplDelegator) -> Self {
-        value.unimock
     }
 }
 
