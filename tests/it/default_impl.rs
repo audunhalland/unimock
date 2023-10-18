@@ -175,3 +175,40 @@ mod default_impl_async_trait {
         }
     }
 }
+
+mod default_impl_pin {
+    use core::pin::Pin;
+
+    use unimock::*;
+
+    #[unimock(api = PinDefault1Mock)]
+    trait PinDefault1 {
+        fn pinned(self: Pin<&mut Self>, arg: i32) -> &i32;
+
+        fn pinned_default(self: Pin<&mut Self>) -> &i32 {
+            self.pinned(123)
+        }
+    }
+
+    #[unimock(api = PinDefault2Mock)]
+    trait PinDefault2 {
+        fn pinned(self: Pin<&mut Self>, arg: i32) -> &i32;
+
+        fn pinned_default(self: Pin<&mut Self>) -> &i32 {
+            self.pinned(123)
+        }
+    }
+
+    #[test]
+    fn mock_pin_default() {
+        let mut unimock = Unimock::new(
+            PinDefault1Mock::pinned
+                .next_call(matching!(123))
+                .answers(|_| 666),
+        );
+        assert_eq!(
+            &666,
+            <Unimock as PinDefault1>::pinned_default(Pin::new(&mut unimock))
+        );
+    }
+}

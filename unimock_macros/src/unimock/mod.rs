@@ -9,7 +9,7 @@ mod trait_info;
 mod util;
 
 use crate::doc::SynDoc;
-use crate::unimock::method::{InputsSyntax, Receiver, SelfReference, Tupled};
+use crate::unimock::method::{InputsSyntax, Receiver, SelfReference, SelfToDelegator, Tupled};
 use crate::unimock::util::replace_self_ty_with_path;
 pub use attr::{Attr, MockApi};
 use trait_info::TraitInfo;
@@ -340,6 +340,7 @@ fn def_method_impl(
 
     let receiver = method.receiver();
     let self_ref = SelfReference(&receiver);
+    let self_to_delegator = SelfToDelegator(&receiver);
     let eval_generic_args = util::Generics::fn_args(trait_info, Some(method), InferImplTrait(true));
 
     let has_impl_trait_future = matches!(
@@ -370,8 +371,11 @@ fn def_method_impl(
                         },
                     };
 
-                    let eval_pattern =
-                        method.inputs_destructuring(InputsSyntax::EvalPattern, Tupled(true), attr);
+                    let eval_pattern = method.inputs_destructuring(
+                        InputsSyntax::EvalPatternMutAsWildcard,
+                        Tupled(true),
+                        attr,
+                    );
 
                     quote! {
                         #prefix::private::Evaluation::Unmocked(#eval_pattern) => #unmock_expr,
@@ -379,29 +383,29 @@ fn def_method_impl(
                 },
             );
 
-            let default_impl_delegate_arm = if method.method.default.is_some() {
-                let eval_pattern =
-                    method.inputs_destructuring(InputsSyntax::EvalPattern, Tupled(true), attr);
-                let fn_params =
-                    method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
+            let inputs_eval_params =
+                method.inputs_destructuring(InputsSyntax::EvalParams, Tupled(true), attr);
+            let fn_params =
+                method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
+            let mutated_param = if let Some(mutated_arg) = &method.mutated_arg {
+                let ident = &mutated_arg.ident;
+                quote! { #ident }
+            } else {
+                quote! { &mut () }
+            };
 
+            let default_delegator_call = if method.method.default.is_some() {
                 let delegator_path = quote! {
                     #prefix::private::DefaultImplDelegator
                 };
-
                 let delegator_constructor = match method_sig.receiver() {
                     Some(syn::Receiver {
                         reference: None,
                         ty,
                         ..
                     }) => {
-                        // This might be e.g. `Rc<DefaultImplDelegator>`
-                        let target_impl_delegator_type =
-                            replace_self_ty_with_path(*ty.clone(), &parse_quote!(#delegator_path));
-
                         quote! {
-                            #delegator_path::__from_unimock(#prefix::private::clone_unimock(&self))
-                                .__cast_unimock_default_impl_delegator::<#target_impl_delegator_type>()
+                            <#ty as #prefix::private::DelegateToDefaultImpl>::to_delegator(#self_to_delegator)
                         }
                     }
                     Some(syn::Receiver {
@@ -422,32 +426,90 @@ fn def_method_impl(
                 };
 
                 Some(quote! {
-                    #prefix::private::Evaluation::CallDefaultImpl(#eval_pattern) => {
-                        <#delegator_path as #trait_path>::#method_ident(
-                            #delegator_constructor,
-                            #fn_params
-                        )
-                            #opt_dot_await
-                    },
+                    <#delegator_path as #trait_path>::#method_ident(
+                        #delegator_constructor,
+                        #fn_params
+                    )
+                        #opt_dot_await
                 })
             } else {
                 None
             };
 
-            let inputs_eval_params =
-                method.inputs_destructuring(InputsSyntax::EvalParams, Tupled(true), attr);
-            let mutated_param = if let Some(mutated_arg) = &method.mutated_arg {
-                let ident = &mutated_arg.ident;
-                quote! { #ident }
-            } else {
-                quote! { &mut () }
-            };
+            match &receiver {
+                Receiver::Pin { .. } => {
+                    let default_impl_delegate_arm_polonius = if method.method.default.is_some() {
+                        let eval_pattern = method.inputs_destructuring(
+                            InputsSyntax::EvalPatternMutAsWildcard,
+                            Tupled(true),
+                            attr,
+                        );
+                        let args =
+                            method.inputs_destructuring(InputsSyntax::FnParams, Tupled(true), attr);
+                        Some(quote! {
+                            #prefix::private::Evaluation::CallDefaultImpl(#eval_pattern) => {
+                                #prefix::polonius::_exit!(#args);
+                            },
+                        })
+                    } else {
+                        None
+                    };
 
-            quote_spanned! { span=>
-                match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
-                    #unmock_arm
-                    #default_impl_delegate_arm
-                    e => e.unwrap(#self_ref)
+                    let polonius_return_type: syn::Type = match method.method.sig.output.clone() {
+                        syn::ReturnType::Default => syn::parse_quote!(()),
+                        syn::ReturnType::Type(_arrow, ty) => {
+                            util::substitute_lifetimes(*ty, &syn::parse_quote!('polonius))
+                        }
+                    };
+
+                    let polonius = quote_spanned! { span=>
+                        #prefix::polonius::_polonius!(|#self_ref| -> #polonius_return_type {
+                            match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
+                                #unmock_arm
+                                #default_impl_delegate_arm_polonius
+                                e => #prefix::polonius::_return!(e.unwrap(#self_ref))
+                            }
+                        })
+                    };
+
+                    if method.method.default.is_some() {
+                        let eval_pattern = method.inputs_destructuring(
+                            InputsSyntax::EvalPatternAll,
+                            Tupled(true),
+                            attr,
+                        );
+
+                        quote! {
+                            let #eval_pattern = #polonius;
+                            #default_delegator_call
+                        }
+                    } else {
+                        polonius
+                    }
+                }
+                _ => {
+                    let default_impl_delegate_arm = if method.method.default.is_some() {
+                        let eval_pattern = method.inputs_destructuring(
+                            InputsSyntax::EvalPatternMutAsWildcard,
+                            Tupled(true),
+                            attr,
+                        );
+                        Some(quote! {
+                            #prefix::private::Evaluation::CallDefaultImpl(#eval_pattern) => {
+                                #default_delegator_call
+                            },
+                        })
+                    } else {
+                        None
+                    };
+
+                    quote_spanned! { span=>
+                        match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
+                            #unmock_arm
+                            #default_impl_delegate_arm
+                            e => e.unwrap(#self_ref)
+                        }
+                    }
                 }
             }
         }
@@ -469,9 +531,7 @@ fn def_method_impl(
 
                     quote! {
                         {
-                            let __u = #prefix::private::as_ref::<Self, #prefix::Unimock>(&self).clone();
-                            let __u: #unimock_type = __u.into();
-                            __u
+                            <#unimock_type as #prefix::private::DelegateToDefaultImpl>::from_delegator(self)
                         }
                     }
                 }
@@ -501,13 +561,14 @@ fn def_method_impl(
         }
     };
 
-    let body = if let Receiver::Pin { surrogate_self } = &receiver {
-        quote! {
-            let #surrogate_self = ::core::pin::Pin::into_inner(self);
-            #body
+    let body = match (kind, &receiver) {
+        (MethodImplKind::Mock, Receiver::Pin { surrogate_self }) => {
+            quote! {
+                let mut #surrogate_self = ::core::pin::Pin::into_inner(self);
+                #body
+            }
         }
-    } else {
-        body
+        _ => body,
     };
 
     let body = if has_impl_trait_future {

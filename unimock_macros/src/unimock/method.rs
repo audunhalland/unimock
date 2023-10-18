@@ -43,7 +43,8 @@ pub struct Tupled(pub bool);
 pub enum InputsSyntax {
     FnPattern,
     FnParams,
-    EvalPattern,
+    EvalPatternMutAsWildcard,
+    EvalPatternAll,
     EvalParams,
 }
 
@@ -491,9 +492,9 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
                     }
                     ArgClass::MutMutated(_, pat_ident) | ArgClass::MutImpossible(pat_ident, _) => {
                         match self.syntax {
-                            InputsSyntax::FnPattern | InputsSyntax::FnParams => {
-                                pat_ident.to_tokens(tokens)
-                            }
+                            InputsSyntax::FnPattern
+                            | InputsSyntax::FnParams
+                            | InputsSyntax::EvalPatternAll => pat_ident.to_tokens(tokens),
                             InputsSyntax::EvalParams => {
                                 let prefix = &self.attr.prefix;
                                 quote! {
@@ -501,7 +502,9 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
                                 }
                                 .to_tokens(tokens)
                             }
-                            InputsSyntax::EvalPattern => quote! { _ }.to_tokens(tokens),
+                            InputsSyntax::EvalPatternMutAsWildcard => {
+                                quote! { _ }.to_tokens(tokens)
+                            }
                         }
                     }
                     ArgClass::Other(pat_ident, _ty) => {
@@ -609,6 +612,24 @@ impl<'a> quote::ToTokens for SelfReference<'a> {
             }
             Receiver::Pin { surrogate_self } => {
                 surrogate_self.to_tokens(tokens);
+            }
+        }
+    }
+}
+
+pub struct SelfToDelegator<'a>(pub &'a Receiver);
+
+impl<'a> quote::ToTokens for SelfToDelegator<'a> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match &self.0 {
+            Receiver::Owned | Receiver::Reference => {
+                syn::token::SelfValue::default().to_tokens(tokens);
+            }
+            Receiver::Pin { surrogate_self } => {
+                quote! {
+                    ::core::pin::Pin::new(#surrogate_self)
+                }
+                .to_tokens(tokens);
             }
         }
     }

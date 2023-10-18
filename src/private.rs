@@ -6,6 +6,8 @@ use crate::{call_pattern::MatchingFn, *};
 
 use lib::{Box, String, Vec};
 
+pub use crate::default_impl_delegator::*;
+
 /// The evaluation of a [MockFn].
 ///
 /// Used to tell trait implementations whether to do perform their own evaluation of a call.
@@ -175,62 +177,6 @@ where
     unimock.handle_error(eval::eval(unimock, inputs, mutation))
 }
 
-/// The DefaultImplDelegator is a struct
-/// used for implementing only non-default methods of traits.
-///
-/// It is used as part of the infrastructure for supporting default implementation fallbacks in Unimock.
-pub struct DefaultImplDelegator {
-    pub(crate) unimock: Unimock,
-}
-
-impl DefaultImplDelegator {
-    /// Construct a default impl delegator from a unimock instance.
-    ///
-    /// This method exists as a helper in case of type inference problems with `From<T>`.
-    pub fn __from_unimock(unimock: Unimock) -> Self {
-        Self { unimock }
-    }
-
-    /// Construct a default impl delegator from a unimock instance.
-    ///
-    /// This method exists as a helper in case of type inference problems with `From<T>`.
-    pub fn __cast_unimock_default_impl_delegator<T: From<Self>>(self) -> T {
-        self.into()
-    }
-}
-
-impl From<Unimock> for DefaultImplDelegator {
-    fn from(unimock: Unimock) -> Self {
-        Self { unimock }
-    }
-}
-
-impl AsRef<Unimock> for DefaultImplDelegator {
-    fn as_ref(&self) -> &Unimock {
-        &self.unimock
-    }
-}
-
-impl AsMut<Unimock> for DefaultImplDelegator {
-    fn as_mut(&mut self) -> &mut Unimock {
-        &mut self.unimock
-    }
-}
-
-#[cfg(feature = "mock-core")]
-impl core::fmt::Display for DefaultImplDelegator {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        <Unimock as core::fmt::Display>::fmt(&self.unimock, f)
-    }
-}
-
-#[cfg(feature = "mock-core")]
-impl core::fmt::Debug for DefaultImplDelegator {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        <Unimock as core::fmt::Debug>::fmt(&self.unimock, f)
-    }
-}
-
 /// Clone a Unimock instance
 pub fn clone_unimock(unimock: &Unimock) -> Unimock {
     unimock.clone()
@@ -307,6 +253,7 @@ pub mod lib {
     pub use ::std::collections::BTreeMap;
     pub use ::std::collections::BTreeSet;
     pub use ::std::format;
+    pub use ::std::rc::Rc;
     pub use ::std::string::String;
     pub use ::std::string::ToString;
     pub use ::std::sync::Arc;
@@ -322,6 +269,7 @@ pub mod lib {
     pub use ::alloc::collections::BTreeMap;
     pub use ::alloc::collections::BTreeSet;
     pub use ::alloc::format;
+    pub use ::alloc::rc::Rc;
     pub use ::alloc::string::String;
     pub use ::alloc::string::ToString;
     pub use ::alloc::sync::Arc;
