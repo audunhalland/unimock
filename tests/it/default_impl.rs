@@ -53,8 +53,8 @@ mod default_impl_borrowed {
 mod default_impl_mut {
     use unimock::*;
 
-    #[unimock(api = DefaultBodyMock)]
-    trait DefaultBody {
+    #[unimock(api = MutDefaultBodyMock)]
+    trait MutDefaultBody {
         fn core(&mut self, arg: i32) -> i32;
 
         fn default_body(&mut self, arg: i32) -> i32 {
@@ -67,7 +67,7 @@ mod default_impl_mut {
         assert_eq!(
             777,
             Unimock::new(
-                DefaultBodyMock::default_body
+                MutDefaultBodyMock::default_body
                     .next_call(matching!(21))
                     .answers(|_| 777)
             )
@@ -80,11 +80,34 @@ mod default_impl_mut {
         assert_eq!(
             666,
             Unimock::new(
-                DefaultBodyMock::core
+                MutDefaultBodyMock::core
                     .next_call(matching!(42))
                     .answers(|_| 666)
             )
             .default_body(21)
+        );
+    }
+
+    // Requires polonius_the_crab
+    #[unimock(api = MutDefaultBodyBorrowMock)]
+    trait MutDefaultBodyBorrow {
+        fn borrow_ret(&mut self, arg: i32) -> &i32;
+
+        fn default_borrow_ret(&mut self, arg: i32) -> &i32 {
+            self.borrow_ret(arg * 2)
+        }
+    }
+
+    #[test]
+    fn mut_return_borrow() {
+        assert_eq!(
+            &666,
+            Unimock::new(
+                MutDefaultBodyBorrowMock::borrow_ret
+                    .next_call(matching!(42))
+                    .answers(|_| 666)
+            )
+            .default_borrow_ret(21)
         );
     }
 }
