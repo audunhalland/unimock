@@ -343,14 +343,21 @@ fn def_method_impl(
     let self_to_delegator = SelfToDelegator(&receiver);
     let eval_generic_args = util::Generics::fn_args(trait_info, Some(method), InferImplTrait(true));
 
-    let has_impl_trait_future = matches!(
+    let must_async_wrap = matches!(
         method.output_structure.wrapping,
-        output::OutputWrapping::ImplTraitFuture(_)
+        output::OutputWrapping::RpitFuture(_) | output::OutputWrapping::AssociatedFuture(_)
     );
 
     let trait_path = &trait_info.trait_path;
     let method_ident = &method_sig.ident;
     let opt_dot_await = method.opt_dot_await();
+    let track_caller = if method.method.sig.asyncness.is_none() {
+        Some(quote! {
+            #[track_caller]
+        })
+    } else {
+        None
+    };
 
     let body = match kind {
         MethodImplKind::Mock => {
@@ -577,7 +584,7 @@ fn def_method_impl(
         _ => body,
     };
 
-    let body = if has_impl_trait_future {
+    let body = if must_async_wrap {
         quote_spanned! { span=>
             async move { #body }
         }
@@ -587,7 +594,7 @@ fn def_method_impl(
 
     quote_spanned! { span=>
         #(#mirrored_attrs)*
-        #[track_caller]
+        #track_caller
         #[allow(unused)]
         #method_sig {
             #body

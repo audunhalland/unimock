@@ -6,13 +6,14 @@ use syn::spanned::Spanned;
 use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
-use super::util::{DotAwait, GenericParamsWithBounds, IsGeneric, IsTypeGeneric};
+use super::util::{DotAwait, GenericParamsWithBounds, IsGeneric, IsTypeGeneric, RpitFuture};
 use super::Attr;
 use super::{output, util};
 
 use crate::doc;
 use crate::doc::SynDoc;
 use crate::unimock::path_to_string;
+use crate::unimock::util::find_future_bound;
 
 pub struct MockMethod<'t> {
     pub method: &'t syn::TraitItemFn,
@@ -76,7 +77,7 @@ impl<'t> MockMethod<'t> {
         if self.method.sig.asyncness.is_some()
             || matches!(
                 self.output_structure.wrapping,
-                output::OutputWrapping::ImplTraitFuture(_)
+                output::OutputWrapping::AssociatedFuture(_)
             )
         {
             Some(DotAwait)
@@ -286,8 +287,12 @@ pub fn extract_methods<'s>(
             let is_type_generic =
                 IsTypeGeneric(is_trait_type_generic.0 || adapt_sig_result.is_type_generic.0);
 
-            let output_structure =
-                output::determine_output_structure(&adapted_sig, item_trait, attr);
+            let output_structure = output::determine_output_structure(
+                &adapted_sig,
+                adapt_sig_result.rpit_future,
+                item_trait,
+                attr,
+            );
 
             let mirrored_attr_indexes = method
                 .attrs
@@ -534,6 +539,7 @@ struct AdaptSigResult {
     is_generic: IsGeneric,
     is_type_generic: IsTypeGeneric,
     impl_trait_idents: HashSet<String>,
+    rpit_future: Option<RpitFuture>,
 }
 
 // TODO: Rewrite impl Trait to normal param
@@ -543,14 +549,28 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
     std::mem::swap(&mut sig.generics, &mut generics);
 
     struct ImplTraitConverter<'s> {
+        /// state
+        cur_is_return: bool,
+
+        /// output
         generics: &'s mut syn::Generics,
         impl_trait_idents: &'s mut HashSet<String>,
         impl_trait_count: usize,
+        rpit_future: Option<RpitFuture>,
     }
 
     impl<'s> syn::visit_mut::VisitMut for ImplTraitConverter<'s> {
         fn visit_type_mut(&mut self, ty: &mut syn::Type) {
             if let syn::Type::ImplTrait(impl_trait) = ty {
+                if let Some(future_bound) = find_future_bound(impl_trait.bounds.iter()) {
+                    if self.cur_is_return {
+                        self.rpit_future = Some(RpitFuture {
+                            output: future_bound.output.clone(),
+                        });
+                        return;
+                    }
+                }
+
                 let generic_ident = quote::format_ident!("ImplTrait{}", self.impl_trait_count);
 
                 self.impl_trait_idents.insert(generic_ident.to_string());
@@ -571,14 +591,24 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
                 self.impl_trait_count += 1;
             }
         }
+
+        fn visit_return_type_mut(&mut self, i: &mut syn::ReturnType) {
+            self.cur_is_return = true;
+            syn::visit_mut::visit_return_type_mut(self, i);
+            self.cur_is_return = false;
+        }
     }
 
     let mut converter = ImplTraitConverter {
+        cur_is_return: false,
         generics: &mut generics,
         impl_trait_idents: &mut impl_trait_idents,
         impl_trait_count: 0,
+        rpit_future: None,
     };
     converter.visit_signature_mut(sig);
+
+    let rpit_future = converter.rpit_future;
 
     // write back generics
     std::mem::swap(&mut generics, &mut sig.generics);
@@ -594,6 +624,7 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
         is_generic: IsGeneric(!sig.generics.params.is_empty()),
         is_type_generic,
         impl_trait_idents,
+        rpit_future,
     }
 }
 
