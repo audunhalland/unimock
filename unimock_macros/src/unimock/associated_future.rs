@@ -10,7 +10,7 @@ pub fn def_associated_future(
 ) -> Option<proc_macro2::TokenStream> {
     let method = method?;
     let associated_type = match &method.output_structure.wrapping {
-        output::OutputWrapping::ImplTraitFuture(trait_item_type) => trait_item_type,
+        output::OutputWrapping::AssociatedFuture(trait_item_type) => trait_item_type,
         _ => return None,
     };
 

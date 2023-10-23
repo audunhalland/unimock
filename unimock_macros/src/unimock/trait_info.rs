@@ -40,7 +40,7 @@ impl<'t> TraitInfo<'t> {
             }
             matches!(
                 method.output_structure.wrapping,
-                OutputWrapping::ImplTraitFuture(_)
+                OutputWrapping::AssociatedFuture(_)
             )
         });
 

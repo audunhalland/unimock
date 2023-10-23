@@ -1,6 +1,7 @@
 use super::{method::MockMethod, trait_info::TraitInfo, Attr};
 
 use quote::*;
+use syn::TypeParamBound;
 
 #[derive(Clone, Copy)]
 pub struct IsGeneric(pub bool);
@@ -435,4 +436,49 @@ pub fn replace_self_ty_with_path(mut ty: syn::Type, replacement_path: &syn::Path
     replacer.visit_type_mut(&mut ty);
 
     ty
+}
+
+pub struct FutureBound<'s> {
+    pub future_ident: &'s syn::Ident,
+    pub output: &'s syn::AssocType,
+}
+
+pub fn find_future_bound<'s>(
+    iterator: impl Iterator<Item = &'s TypeParamBound>,
+) -> Option<FutureBound<'s>> {
+    fn search(bound: &TypeParamBound) -> Option<FutureBound<'_>> {
+        let trait_bound = match bound {
+            syn::TypeParamBound::Trait(trait_bound) => trait_bound,
+            _ => return None,
+        };
+        let last_segment = trait_bound.path.segments.last()?;
+        if last_segment.ident != "Future" {
+            return None;
+        };
+
+        let generic_arguments = match &last_segment.arguments {
+            syn::PathArguments::AngleBracketed(bracketed) => Some(&bracketed.args),
+            _ => return None,
+        }?;
+        let output_assoc = generic_arguments
+            .iter()
+            .filter_map(|generic_argument| match generic_argument {
+                syn::GenericArgument::AssocType(assoc_type) if assoc_type.ident == "Output" => {
+                    Some(assoc_type)
+                }
+                _ => None,
+            })
+            .next()?;
+
+        Some(FutureBound {
+            future_ident: &last_segment.ident,
+            output: output_assoc,
+        })
+    }
+
+    iterator.filter_map(search).next()
+}
+
+pub struct RpitFuture {
+    pub output: syn::AssocType,
 }

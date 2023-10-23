@@ -2,7 +2,10 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse_quote, visit_mut::VisitMut};
 
-use super::{util, Attr};
+use super::{
+    util::{self, find_future_bound, RpitFuture},
+    Attr,
+};
 
 pub struct OutputStructure {
     pub wrapping: OutputWrapping,
@@ -46,7 +49,8 @@ impl OutputStructure {
 
 pub enum OutputWrapping {
     None,
-    ImplTraitFuture(syn::TraitItemType),
+    RpitFuture(syn::Type),
+    AssociatedFuture(syn::TraitItemType),
 }
 
 pub enum OutputOwnership {
@@ -75,6 +79,7 @@ impl OutputOwnership {
 
 pub fn determine_output_structure(
     sig: &syn::Signature,
+    rpit_future: Option<RpitFuture>,
     item_trait: &syn::ItemTrait,
     attr: &Attr,
 ) -> OutputStructure {
@@ -85,7 +90,7 @@ pub fn determine_output_structure(
             response_ty: AssociatedInnerType::Unit,
             output_ty: AssociatedInnerType::Unit,
         },
-        syn::ReturnType::Type(_, ty) => match ty.as_ref() {
+        syn::ReturnType::Type(_, output_ty) => match output_ty.as_ref() {
             syn::Type::Reference(type_reference) => {
                 let mut inner_ty = *type_reference.elem.clone();
                 inner_ty = util::self_type_to_unimock(inner_ty, item_trait, attr);
@@ -104,17 +109,31 @@ pub fn determine_output_structure(
                     ),
                 }
             }
-            syn::Type::Path(path)
-                if path.qself.is_none()
-                    && is_self_segment(path.path.segments.first())
-                    && (path.path.segments.len() == 2) =>
+            syn::Type::Path(output_path)
+                if output_path.qself.is_none()
+                    && is_self_segment(output_path.path.segments.first())
+                    && (output_path.path.segments.len() == 2) =>
             {
-                determine_associated_future_structure(sig, &path.path, item_trait, attr)
+                determine_associated_future_structure(sig, &output_path.path, item_trait, attr)
                     .unwrap_or_else(|| {
-                        determine_owned_or_mixed_output_structure(sig, ty, item_trait, attr)
+                        determine_owned_or_mixed_output_structure(sig, output_ty, item_trait, attr)
                     })
             }
-            _ => determine_owned_or_mixed_output_structure(sig, ty, item_trait, attr),
+            _ => {
+                if let Some(rpit_future) = rpit_future {
+                    let mut output_structure = determine_owned_or_mixed_output_structure(
+                        sig,
+                        &rpit_future.output.ty,
+                        item_trait,
+                        attr,
+                    );
+
+                    output_structure.wrapping = OutputWrapping::RpitFuture(rpit_future.output.ty);
+                    output_structure
+                } else {
+                    determine_owned_or_mixed_output_structure(sig, output_ty, item_trait, attr)
+                }
+            }
         },
     }
 }
@@ -122,15 +141,15 @@ pub fn determine_output_structure(
 /// Determine output structure that is not a reference nor a future
 pub fn determine_owned_or_mixed_output_structure(
     sig: &syn::Signature,
-    ty: &syn::Type,
+    output_ty: &syn::Type,
     item_trait: &syn::ItemTrait,
     attr: &Attr,
 ) -> OutputStructure {
     let prefix = &attr.prefix;
 
-    let ty = util::self_type_to_unimock(ty.clone(), item_trait, attr);
+    let output_ty = util::self_type_to_unimock(output_ty.clone(), item_trait, attr);
 
-    let mut inner_ty = ty.clone();
+    let mut inner_ty = output_ty.clone();
     let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
 
     let ownership = if borrow_info.has_input_lifetime {
@@ -191,7 +210,7 @@ pub fn determine_owned_or_mixed_output_structure(
         }
         (ownership, inner_ty) => {
             let response_ty = AssociatedInnerType::new_static(inner_ty, &borrow_info);
-            let output_ty = AssociatedInnerType::new_gat(ty, &borrow_info, &ownership);
+            let output_ty = AssociatedInnerType::new_gat(output_ty, &borrow_info, &ownership);
 
             OutputStructure {
                 wrapping: OutputWrapping::None,
@@ -232,45 +251,10 @@ fn determine_associated_future_structure(
             _ => None,
         })
         .next()?;
-    let future_bound = assoc_ty
-        .bounds
-        .iter()
-        .filter_map(|bound| match bound {
-            syn::TypeParamBound::Lifetime(_) => None,
-            syn::TypeParamBound::Trait(trait_bound) => {
-                let is_future = trait_bound
-                    .path
-                    .segments
-                    .iter()
-                    .any(|segment| segment.ident == "Future");
-
-                if is_future {
-                    Some(trait_bound)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        })
-        .next()?;
-    let last_future_bound_segment = future_bound.path.segments.last()?;
-    let generic_arguments = match &last_future_bound_segment.arguments {
-        syn::PathArguments::AngleBracketed(bracketed) => Some(&bracketed.args),
-        _ => None,
-    }?;
-    let output_binding = generic_arguments
-        .iter()
-        .filter_map(|generic_argument| match generic_argument {
-            syn::GenericArgument::AssocType(assoc_type) if assoc_type.ident == "Output" => {
-                Some(assoc_type)
-            }
-            _ => None,
-        })
-        .next()?;
-
+    let future_bound = find_future_bound(assoc_ty.bounds.iter())?;
     let mut future_output_structure =
-        determine_owned_or_mixed_output_structure(sig, &output_binding.ty, item_trait, attr);
-    future_output_structure.wrapping = OutputWrapping::ImplTraitFuture(assoc_ty.clone());
+        determine_owned_or_mixed_output_structure(sig, &future_bound.output.ty, item_trait, attr);
+    future_output_structure.wrapping = OutputWrapping::AssociatedFuture(assoc_ty.clone());
 
     Some(future_output_structure)
 }
