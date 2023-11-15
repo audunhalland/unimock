@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [0.5.6] - 2023-11-15
 ### Fixed
 - Proper `no_std` support by disabling default features in `once_cell`. ([#35](https://github.com/audunhalland/unimock/pull/35))
 
