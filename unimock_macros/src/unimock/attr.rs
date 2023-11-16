@@ -9,6 +9,7 @@ pub struct Attr {
     /// Module to put the MockFn in
     pub mock_api: MockApi,
     pub associated_types: HashMap<String, syn::TraitItemType>,
+    pub associated_consts: HashMap<String, syn::TraitItemConst>,
     unmocks: Option<WithSpan<Vec<Unmock>>>,
     pub mirror: Option<syn::Path>,
     pub input_lifetime: syn::Lifetime,
@@ -48,6 +49,7 @@ impl syn::parse::Parse for Attr {
         let mut prefix: Option<syn::Path> = None;
         let mut mock_api = MockApi::Hidden;
         let mut associated_types = HashMap::default();
+        let mut associated_consts = HashMap::default();
         let mut unmocks = None;
         let mut debug = false;
         let mut mirror = None;
@@ -57,6 +59,10 @@ impl syn::parse::Parse for Attr {
                 let trait_item_type: syn::TraitItemType = input.parse()?;
 
                 associated_types.insert(trait_item_type.ident.to_string(), trait_item_type);
+            } else if input.peek(syn::token::Const) {
+                let trait_item_const: syn::TraitItemConst = input.parse()?;
+
+                associated_consts.insert(trait_item_const.ident.to_string(), trait_item_const);
             } else {
                 let keyword: syn::Ident = input.parse()?;
                 match keyword.to_string().as_str() {
@@ -120,6 +126,7 @@ impl syn::parse::Parse for Attr {
             prefix: prefix.unwrap_or_else(|| syn::parse_quote! { ::unimock }),
             mock_api,
             associated_types,
+            associated_consts,
             unmocks,
             mirror,
             input_lifetime: syn::Lifetime::new("'__i", proc_macro2::Span::call_site()),
