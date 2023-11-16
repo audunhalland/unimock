@@ -993,6 +993,34 @@ mod associated_type {
     }
 }
 
+mod associated_const {
+    use unimock::*;
+
+    #[unimock(api = AssocConstMock, const FOO: i32 = 42;)]
+    pub trait Assoc {
+        const FOO: i32;
+    }
+}
+
+mod associated_type_and_const {
+    use unimock::*;
+
+    #[unimock(api = AssocMock, type Foo = i32; const FOO: &'static str = "it works!"; type Bar = i32; const BAR: bool = true;)]
+    pub trait Assoc {
+        type Foo;
+        type Bar;
+
+        const FOO: &'static str;
+        const BAR: bool;
+
+        fn assoc_ret(&self) -> Self::Foo;
+        fn assoc_ref_ret(&self) -> &Self::Foo;
+        fn assoc_mixed_ret(&self) -> Option<&Self::Foo>;
+        fn assoc_arg(&self, arg: Self::Foo) -> bool;
+        fn assoc_ref_arg(&self, arg: &Self::Foo) -> bool;
+    }
+}
+
 mod no_verify_in_drop {
     use unimock::*;
 

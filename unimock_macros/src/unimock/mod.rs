@@ -96,6 +96,24 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         })
         .collect::<Vec<_>>();
 
+    let attr_associated_consts = trait_info
+        .input_trait
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::TraitItem::Const(trait_item_const) => {
+                let ident = &trait_item_const.ident;
+                let ident_string = ident.to_string();
+                attr.associated_consts
+                    .get(&ident_string)
+                    .map(|trait_item_const| {
+                        quote! { #trait_item_const }
+                    })
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
     let (opt_mock_interface_public, opt_mock_interface_private, impl_doc) = match &attr.mock_api {
         MockApi::Hidden => (
             None,
@@ -159,6 +177,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #(#impl_attributes)*
             impl #generic_params #trait_path #generic_args for #prefix::private::DefaultImplDelegator #where_clause {
                 #(#attr_associated_types)*
+                #(#attr_associated_consts)*
                 #(#non_default_methods)*
             }
         })
@@ -181,6 +200,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #(#impl_attributes)*
             impl #generic_params #trait_path #generic_args for #prefix::Unimock #where_clause {
                 #(#attr_associated_types)*
+                #(#attr_associated_consts)*
                 #(#associated_futures)*
                 #(#method_impls)*
             }
