@@ -330,7 +330,7 @@
 //! #### What kinds of things can be mocked with unimock?
 //! * Traits with any number of methods
 //! * Traits with generic parameters, although these cannot be lifetime constrained (i.e. need to satisfy `T: 'static`).
-//! * Traits with associated types, using `#[unimock(type T = Foo;)]` syntax.
+//! * Traits with associated types and constants, using `#[unimock(type T = Foo; const FOO: T = value;)]` syntax.
 //! * Methods with any self receiver (`self`, `&self`, `&mut self` or arbitrary (e.g. `self: Rc<Self>`)).
 //! * Methods that take reference inputs.
 //! * Methods returning references to self.
@@ -380,6 +380,20 @@
 //!
 //! Working with associated types in a mock environment like Unimock has its limitations.
 //! The nature of associated types is that there is one type per implementation, and there is only one mock implementation, so the type must be chosen carefully.
+//!
+//! #### Associated constants
+//! Associated constants in traits may be specified using the `const` keyword in the unimock macro:
+//!
+//! ```rust
+//! # use unimock::*;
+//! #[unimock(api = TraitMock, const FOO: i32 = 42;)]
+//! trait Trait {
+//!     const FOO: i32;
+//! }
+//! ```
+//!
+//! Just like with associated types in Unimock, associated constants have the limitation where there is one value of the const per implementation,
+//! and there is only one mock implementation, so the value must be chosen carefully.
 //!
 //!
 //! ## Project goals
