@@ -309,8 +309,9 @@ fn def_mock_fn(
                 impl #module_scope #non_generic_ident {
                     pub fn with_types #generic_params(
                         self
-                    ) -> impl for<#input_lifetime> #prefix::MockFn<
+                    ) -> impl for<#input_lifetime, 'm> #prefix::MockFn<
                         Inputs<#input_lifetime> = #input_types_tuple,
+                        Mutation<'m> = #mutation,
                         Response = #response_associated_type,
                     >
                         #where_clause
