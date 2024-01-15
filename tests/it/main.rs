@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(clippy::disallowed_names)]
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
 mod basic;

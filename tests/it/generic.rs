@@ -300,3 +300,30 @@ mod self_type {
             Self: Sized;
     }
 }
+
+mod issue_37_mutation_with_generics {
+    use super::*;
+
+    trait Bound: 'static {}
+
+    pub struct MyFoo {
+        baz: u32,
+    }
+
+    #[unimock(api=MockMock)]
+    trait Mock {
+        fn func<T>(&self, nasty: T, foo: &mut MyFoo)
+        where
+            T: Bound;
+    }
+
+    #[test]
+    fn test() {
+        MockMock::func
+            .with_types::<()>()
+            .next_call(matching!())
+            .mutates(|foo, _| {
+                foo.baz += 1;
+            });
+    }
+}
