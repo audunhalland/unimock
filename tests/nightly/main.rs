@@ -6,7 +6,5 @@
 #![allow(clippy::disallowed_names)]
 
 mod associated_future;
-mod async_fn_in_trait;
-mod rpit_future;
 
 fn main() {}

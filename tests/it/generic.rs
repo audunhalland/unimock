@@ -113,10 +113,16 @@ mod combined {
     }
 }
 
-#[cfg(feature = "std")]
 mod async_generic {
     use super::*;
 
+    #[rustversion::since(1.75)]
+    #[unimock]
+    trait AsyncGenericBounds<I: Debug, O: Clone> {
+        async fn generic_bounds(&self, param: I) -> O;
+    }
+
+    #[cfg(feature = "std")]
     #[unimock]
     #[async_trait::async_trait]
     trait AsyncTraitGenericBounds<I: Debug, O: Clone> {
@@ -273,8 +279,14 @@ mod generic_combo {
             U: 'static;
     }
 
-    #[cfg(feature = "std")]
+    #[rustversion::since(1.75)]
     #[unimock(api=MockAsyncCombo)]
+    trait AsyncGenerics<T: 'static + Send> {
+        async fn ret<U: 'static + Send>(&self, u: U, a: impl Any + Send + 'static) -> T;
+    }
+
+    #[cfg(feature = "std")]
+    #[unimock(api=MockAsyncTraitCombo)]
     #[async_trait::async_trait]
     trait AsyncTraitGenerics<T: 'static + Send> {
         async fn ret<U: 'static + Send>(&self, u: U, a: impl Any + Send + 'static) -> T;

@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::disallowed_names)]
+#![allow(clippy::needless_lifetimes)]
+#![allow(clippy::manual_async_fn)]
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
 mod basic;
@@ -22,6 +24,9 @@ mod prefix;
 
 #[cfg(all(feature = "pretty-print", any(feature = "std", feature = "spin-lock")))]
 mod pretty_mismatches;
+
+#[cfg(feature = "std")]
+mod async_fn;
 
 #[cfg(all(feature = "mock-core", feature = "mock-std"))]
 mod std;

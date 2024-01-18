@@ -706,8 +706,42 @@ fn borrow_static_should_work_with_returns_static() {
     );
 }
 
-#[cfg(feature = "std")]
+#[rustversion::since(1.75)]
 mod async_argument_borrowing {
+    use super::*;
+
+    #[unimock(api=BorrowParamMock)]
+    trait BorrowParam {
+        async fn borrow_param<'a>(&self, arg: &'a str) -> &'a str;
+    }
+
+    #[cfg(feature = "std")]
+    #[tokio::test]
+    async fn test_argument_borrowing() {
+        let unimock = Unimock::new(
+            BorrowParamMock::borrow_param
+                .each_call(matching!(_))
+                .returns("foobar"),
+        );
+
+        assert_eq!("foobar", unimock.borrow_param("input").await);
+    }
+
+    #[cfg(feature = "std")]
+    #[tokio::test]
+    async fn test_argument_borrowing_works() {
+        let unimock = Unimock::new(
+            BorrowParamMock::borrow_param
+                .each_call(matching!(_))
+                .returns("foobar"),
+        );
+
+        unimock.borrow_param("input").await;
+    }
+}
+
+#[cfg(feature = "std")]
+mod async_trait_argument_borrowing {
     use super::*;
 
     #[unimock(api=BorrowParamMock)]
@@ -755,10 +789,18 @@ mod lifetime_constrained_output_type {
         fn borrow_sync_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
     }
 
+    #[rustversion::since(1.75)]
+    #[unimock]
+    trait BorrowAsync {
+        async fn borrow_async_elided(&self) -> Borrowing1<'_>;
+        async fn borrow_async_explicit<'a>(&'a self) -> Borrowing1<'a>;
+        async fn borrow_async_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
+    }
+
     #[cfg(feature = "std")]
     #[unimock]
     #[::async_trait::async_trait]
-    trait BorrowAsync {
+    trait BorrowAsyncTrait {
         async fn borrow_async_elided(&self) -> Borrowing1<'_>;
         async fn borrow_async_explicit<'a>(&'a self) -> Borrowing1<'a>;
         async fn borrow_async_explicit2<'a, 'b>(&'a self, arg: &'b str) -> Borrowing2<'a, 'b>;
