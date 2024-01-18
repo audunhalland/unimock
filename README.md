@@ -320,8 +320,8 @@ These mock APIs can be found in [mock].
 * Methods returning data borrowed from non-self arguments (these have to be converted to static reference, e.g. via [`Box::leak`](Box::leak)).
 * Methods returning a type containing lifetime parameters. For a mocked return they will have to be `'static`.
 * Generic methods using either explicit generic params or argument-position `impl Trait`.
-* Async methods when the trait is annotated with `#[async_trait]`.
-* Methods that return a future that is an associated type. Requires nightly.
+* Methods that are `async` or return `impl Future`.
+* `async_trait`-annotated traits.
 
 #### What kinds of traits or methods cannot be mocked?
 * Static methods, i.e. no `self` receiver. Static methods with a _default body_ are accepted though, but not mockable.
