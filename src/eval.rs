@@ -1,4 +1,3 @@
-use crate::build::AnswerContext;
 use crate::call_pattern::{
     CallPattern, DowncastResponder, DynResponder, PatIndex, PatternError, PatternResult,
 };
@@ -8,7 +7,7 @@ use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::mismatch::Mismatches;
 use crate::output::Output;
 use crate::private::lib::{String, Vec};
-use crate::private::{Evaluation, MismatchReporter};
+use crate::private::{ApplyClosure, Evaluation, MismatchReporter};
 use crate::state::SharedState;
 use crate::{debug, MockFnInfo, Unimock};
 use crate::{FallbackMode, MockFn};
@@ -28,7 +27,7 @@ struct EvalResponder<'u> {
 pub(crate) fn eval<'u, 'i, F: MockFn>(
     unimock: &'u Unimock,
     inputs: F::Inputs<'i>,
-    mutation: &mut F::Mutation<'_>,
+    _mutation: &mut F::Mutation<'_>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
         info: F::info(),
@@ -75,14 +74,36 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     ),
                 }
             }
-            DynResponder::Function(dyn_fn_responder) => {
+            DynResponder::InputsFn(dyn_fn_responder) => {
                 let fn_responder =
                     dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
                 let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                    (fn_responder.func)(inputs, AnswerContext { unimock, mutation }),
+                    (fn_responder.func)(inputs),
                     &unimock.value_chain,
                 );
                 Ok(Evaluation::Evaluated(output))
+            }
+            DynResponder::StaticApply(dyn_responder) => {
+                let apply_fn_responder =
+                    dyn_ctx.downcast_responder::<F, _>(dyn_responder, &eval_responder)?;
+                Ok(Evaluation::Apply(
+                    ApplyClosure {
+                        unimock,
+                        apply_fn: apply_fn_responder.apply_fn,
+                    },
+                    inputs,
+                ))
+            }
+            DynResponder::BoxedApply(dyn_responder) => {
+                let apply_fn_responder =
+                    dyn_ctx.downcast_responder::<F, _>(dyn_responder, &eval_responder)?;
+                Ok(Evaluation::Apply(
+                    ApplyClosure {
+                        unimock,
+                        apply_fn: apply_fn_responder.apply_fn.as_ref(),
+                    },
+                    inputs,
+                ))
             }
             DynResponder::Panic(msg) => Err(MockError::ExplicitPanic {
                 fn_call: dyn_ctx.fn_call(),

@@ -56,7 +56,7 @@ fn owned_output_works() {
             &Unimock::new(
                 OwnedMock::foo
                     .next_call(matching!(_, _))
-                    .answers(|(a, b)| format!("{a}{b}"))
+                    .applies(&|a, b| respond(format!("{a}{b}")))
                     .once()
             ),
             "a",
@@ -305,7 +305,7 @@ mod no_debug {
     fn can_match_a_non_debug_argument() {
         let unimock = Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
-                .answers(|_| PrimitiveEnum::Foo);
+                .applies(&|_, _| respond(PrimitiveEnum::Foo));
         }));
 
         match unimock.primitive(PrimitiveEnum::Bar, "") {
@@ -319,7 +319,7 @@ mod no_debug {
     fn should_format_non_debug_input_with_a_question_mark() {
         Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
-                .answers(|_| PrimitiveEnum::Foo);
+                .applies(&|_, _| respond(PrimitiveEnum::Foo));
         }))
         .primitive(PrimitiveEnum::Foo, "");
     }
@@ -408,7 +408,7 @@ fn various_borrowing() {
             &Unimock::new(
                 BorrowingMock::borrow
                     .next_call(matching!(_))
-                    .answers(|input| format!("{input}{input}"))
+                    .applies(&|input| respond(format!("{input}{input}")))
                     .once()
             ),
             "yo"
@@ -419,7 +419,7 @@ fn various_borrowing() {
         <Unimock as Borrowing>::borrow_static(&Unimock::new(
             BorrowingMock::borrow_static
                 .next_call(matching!(_))
-                .answers_leaked_ref(|_| "yoyoyo".to_string())
+                .applies(&|| respond_leaked_ref("yoyoyo".to_string()))
                 .once()
         ))
     );
@@ -908,7 +908,7 @@ fn non_sync_return() {
     let u = Unimock::new(
         NonSendMock::return_cell
             .next_call(matching!())
-            .answers(|_| Cell::new(42)),
+            .applies(&|| respond(Cell::new(42))),
     );
     assert_eq!(Cell::new(42), u.return_cell());
 }
@@ -929,10 +929,10 @@ mod mutated_args {
 
     #[test]
     fn can_mutate1() {
-        let u = Unimock::new(Mut1Mock::mut1_a.next_call(matching!(2, _, 21)).mutates(
-            |b, (a, _, c)| {
+        let u = Unimock::new(Mut1Mock::mut1_a.next_call(matching!(2, _, 21)).applies(
+            &|a, b, c| {
                 *b = a * c;
-                a + c
+                respond(a + c)
             },
         ));
 
@@ -951,7 +951,7 @@ mod mutated_args {
         }
     }
 
-    struct LifetimeArg<'a> {
+    pub struct LifetimeArg<'a> {
         data: PhantomData<&'a ()>,
     }
 
@@ -967,9 +967,9 @@ mod mutated_args {
         let u = Unimock::new(
             ImpossibleMutableLifetimeArgMock::mut_b_impossible
                 .next_call(matching!(2, _, _))
-                .mutates(|c, (a, _impossible, _phantom_mut)| {
+                .applies(&|a, _, c| {
                     *c *= a;
-                    *c + a
+                    respond(*c + a)
                 }),
         );
 
@@ -1006,10 +1006,10 @@ mod borrow_dyn {
         let u = Unimock::new((
             BorrowDynMock::borrow_dyn
                 .next_call(matching!())
-                .answers_ctx(|_, ctx| ctx.clone_instance()),
+                .applies(&respond_unimock),
             BorrowDynMock::borrow_dyn_opt
                 .next_call(matching!())
-                .answers(|_| None::<&dyn BorrowDyn>),
+                .applies(&|| respond(None::<&dyn BorrowDyn>)),
         ));
 
         let u2 = u.borrow_dyn();
@@ -1072,7 +1072,11 @@ mod no_verify_in_drop {
     }
 
     fn mock() -> Unimock {
-        Unimock::new(TraitMock::foo.next_call(matching!()).answers(|_| ()))
+        Unimock::new(
+            TraitMock::foo
+                .next_call(matching!())
+                .applies(&|| respond(())),
+        )
     }
 
     fn mock_no_verify_in_drop() -> Unimock {
@@ -1108,5 +1112,31 @@ mod debug_mut_arg {
     #[unimock(api = TestMock)]
     trait Test {
         fn f(&self, arg1: &mut Arg, arg2: &mut Arg);
+    }
+}
+
+mod apply_fn {
+    use unimock::*;
+
+    #[unimock(api = TraitMock)]
+    trait Trait {
+        fn foo(&self, a: &i32, b: &mut i32, c: &mut i32) -> i32;
+    }
+
+    #[test]
+    fn test() {
+        let u = Unimock::new(
+            TraitMock::foo
+                .next_call(matching!(42, _, _))
+                .applies(&|_, b, c| {
+                    *b += 1;
+                    *c += 1;
+                    respond(1337)
+                }),
+        );
+        let mut b = 0;
+        let mut c = 0;
+        assert_eq!(1337, u.foo(&42, &mut b, &mut c));
+        assert_eq!(1, b);
     }
 }

@@ -1,7 +1,6 @@
 use crate::private::lib::{Box, String, Vec};
 use core::any::Any;
 
-use crate::build;
 use crate::cell::{Cell, CloneCell, FactoryCell};
 use crate::debug;
 use crate::output::{Respond, ResponderError};
@@ -103,7 +102,9 @@ pub(crate) struct DynCallOrderResponder {
 pub(crate) enum DynResponder {
     Cell(DynCellResponder),
     Borrow(DynBorrowResponder),
-    Function(DynFunctionResponder),
+    InputsFn(DynInputsFnResponder),
+    StaticApply(DynStaticApplyResponder),
+    BoxedApply(DynBoxedApplyResponder),
     Panic(String),
     Unmock,
     CallDefaultImpl,
@@ -169,7 +170,9 @@ impl DynResponder {
 
 pub(crate) struct DynCellResponder(AnyBox);
 pub(crate) struct DynBorrowResponder(AnyBox);
-pub(crate) struct DynFunctionResponder(AnyBox);
+pub(crate) struct DynInputsFnResponder(AnyBox);
+pub(crate) struct DynStaticApplyResponder(AnyBox);
+pub(crate) struct DynBoxedApplyResponder(AnyBox);
 
 pub trait DowncastResponder<F: MockFn> {
     type Downcasted;
@@ -193,8 +196,24 @@ impl<F: MockFn> DowncastResponder<F> for DynBorrowResponder {
     }
 }
 
-impl<F: MockFn> DowncastResponder<F> for DynFunctionResponder {
-    type Downcasted = FunctionResponder<F>;
+impl<F: MockFn> DowncastResponder<F> for DynInputsFnResponder {
+    type Downcasted = InputsFnResponder<F>;
+
+    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
+        downcast_box(&self.0)
+    }
+}
+
+impl<F: MockFn> DowncastResponder<F> for DynStaticApplyResponder {
+    type Downcasted = StaticApplyResponder<F>;
+
+    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
+        downcast_box(&self.0)
+    }
+}
+
+impl<F: MockFn> DowncastResponder<F> for DynBoxedApplyResponder {
+    type Downcasted = BoxedApplyResponder<F>;
 
     fn downcast(&self) -> PatternResult<&Self::Downcasted> {
         downcast_box(&self.0)
@@ -209,13 +228,17 @@ pub(crate) struct BorrowResponder<F: MockFn> {
     pub borrowable: <F::Response as Respond>::Type,
 }
 
-pub(crate) struct FunctionResponder<F: MockFn> {
+pub(crate) struct InputsFnResponder<F: MockFn> {
     #[allow(clippy::type_complexity)]
-    pub func: Box<
-        dyn (Fn(F::Inputs<'_>, build::AnswerContext<'_, '_, '_, F>) -> <F::Response as Respond>::Type)
-            + Send
-            + Sync,
-    >,
+    pub func: Box<dyn (Fn(F::Inputs<'_>) -> <F::Response as Respond>::Type) + Send + Sync>,
+}
+
+pub(crate) struct StaticApplyResponder<F: MockFn> {
+    pub apply_fn: &'static F::ApplyFn,
+}
+
+pub(crate) struct BoxedApplyResponder<F: MockFn> {
+    pub apply_fn: Box<F::ApplyFn>,
 }
 
 impl<F: MockFn> CellResponder<F> {
@@ -233,9 +256,21 @@ where
     }
 }
 
-impl<F: MockFn> FunctionResponder<F> {
+impl<F: MockFn> InputsFnResponder<F> {
     pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::Function(DynFunctionResponder(Box::new(self)))
+        DynResponder::InputsFn(DynInputsFnResponder(Box::new(self)))
+    }
+}
+
+impl<F: MockFn> StaticApplyResponder<F> {
+    pub fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::StaticApply(DynStaticApplyResponder(Box::new(self)))
+    }
+}
+
+impl<F: MockFn> BoxedApplyResponder<F> {
+    pub fn into_dyn_responder(self) -> DynResponder {
+        DynResponder::BoxedApply(DynBoxedApplyResponder(Box::new(self)))
     }
 }
 

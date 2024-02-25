@@ -270,19 +270,22 @@ impl<'t> quote::ToTokens for TypedPhantomData<'t> {
     }
 }
 
-pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: &syn::Lifetime) -> syn::Type {
+pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: Option<&syn::Lifetime>) -> syn::Type {
     struct LifetimeReplace<'s> {
-        lifetime: &'s syn::Lifetime,
+        lifetime: Option<&'s syn::Lifetime>,
     }
 
     impl<'s> syn::visit_mut::VisitMut for LifetimeReplace<'s> {
         fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
-            reference.lifetime = Some(self.lifetime.clone());
+            reference.lifetime = self.lifetime.cloned();
             syn::visit_mut::visit_type_reference_mut(self, reference);
         }
 
         fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
-            *lifetime = self.lifetime.clone();
+            *lifetime = match self.lifetime {
+                Some(lt) => lt.clone(),
+                None => syn::Lifetime::new("'_", lifetime.span()),
+            };
             syn::visit_mut::visit_lifetime_mut(self, lifetime);
         }
     }

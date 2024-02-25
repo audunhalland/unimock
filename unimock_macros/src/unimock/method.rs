@@ -337,7 +337,7 @@ pub fn extract_methods<'s>(
                                 ident: pat_ident.ident.clone(),
                                 ty: util::substitute_lifetimes(
                                     type_ref.elem.as_ref().clone(),
-                                    &syn::parse_quote!('m),
+                                    Some(&syn::parse_quote!('m)),
                                 ),
                             })
                         }

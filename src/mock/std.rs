@@ -75,7 +75,7 @@ pub mod process {
     /// Unimock mock API for [std::process::Termination].
     #[allow(non_snake_case)]
     pub mod TerminationMock {
-        use crate::{output::Owned, MockFn};
+        use crate::{output::Owned, MockFn, Response};
 
         #[allow(non_camel_case_types)]
         /// MockFn for [`Termination::report() -> ExitCode`](std::process::Termination::report).
@@ -89,6 +89,7 @@ pub mod process {
             type Mutation<'m> = ();
             type Response = Owned<std::process::ExitCode>;
             type Output<'u> = Self::Response;
+            type ApplyFn = dyn Fn() -> Response<Self> + Send + Sync;
 
             fn info() -> crate::MockFnInfo {
                 let mut info = crate::MockFnInfo::new::<Self>().path("Termination", "report");
