@@ -248,12 +248,23 @@ impl ArgMatcher {
                     let doc_lit =
                         syn::LitStr::new(doc_string.as_str(), proc_macro2::Span::call_site());
 
+                    // If the matching! uses a literal, just format! the mismatch.
+                    // This is done to prevent a problem with `.unimock_try_debug()` for e.g. `&i32`:
+                    // The `&i32` as a mock argument will be `&&i32` in this context, and thus
+                    // autoref specialization runs into a problem.
+                    let mismatch_debug = match pat {
+                        syn::Pat::Lit(_) => quote! {
+                            Some(::unimock::private::lib::format!("{mismatch:?}"))
+                        },
+                        _ => quote! { mismatch.unimock_try_debug() },
+                    };
+
                     Some(quote! {
                         match #arg_expr {
                             #pat => {}
                             mismatch => {
                                 use ::unimock::private::{ProperDebug, NoDebug};
-                                reporter.pat_fail(#index, mismatch.unimock_try_debug(), Some(#doc_lit));
+                                reporter.pat_fail(#index, #mismatch_debug, Some(#doc_lit));
                             }
                         }
                     })
@@ -342,7 +353,7 @@ impl CompareMacro {
     }
 }
 
-fn concat_args_parenthesized<F>(args: &Vec<Arg>, f: F) -> proc_macro2::TokenStream
+fn concat_args_parenthesized<F>(args: &[Arg], f: F) -> proc_macro2::TokenStream
 where
     F: Fn(&Arg) -> proc_macro2::TokenStream,
 {
