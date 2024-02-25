@@ -303,12 +303,12 @@ mod no_debug {
 
     #[test]
     fn can_match_a_non_debug_argument() {
-        match Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
+        let unimock = Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
                 .answers(|_| PrimitiveEnum::Foo);
-        }))
-        .primitive(PrimitiveEnum::Bar, "")
-        {
+        }));
+
+        match unimock.primitive(PrimitiveEnum::Bar, "") {
             PrimitiveEnum::Foo => {}
             PrimitiveEnum::Bar => panic!(),
         }

@@ -42,3 +42,17 @@ fn matching_str_or() {
     );
     u.f("a".to_string());
 }
+
+mod debug_matching_literal_autoref_debug {
+    use unimock::*;
+
+    #[unimock(api = TestMock)]
+    trait Test {
+        fn f(&self, arg: &i32);
+    }
+
+    #[test]
+    fn test() {
+        TestMock::f.next_call(matching!(42)).returns_default();
+    }
+}
