@@ -201,15 +201,11 @@ impl MismatchReporter {
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
 #[track_caller]
-pub fn eval<'u, 'i, F>(
-    unimock: &'u Unimock,
-    inputs: F::Inputs<'i>,
-    mutation: &mut F::Mutation<'_>,
-) -> Evaluation<'u, 'i, F>
+pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation<'u, 'i, F>
 where
     F: MockFn + 'static,
 {
-    unimock.handle_error(eval::eval(unimock, inputs, mutation))
+    unimock.handle_error(eval::eval(unimock, inputs))
 }
 
 /// Clone a Unimock instance

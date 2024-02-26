@@ -1,7 +1,7 @@
 use super::{method::MockMethod, trait_info::TraitInfo, Attr};
 
 use quote::*;
-use syn::TypeParamBound;
+use syn::{visit_mut::VisitMut, TypeParamBound};
 
 #[derive(Clone, Copy)]
 pub struct IsGeneric(pub bool);
@@ -291,7 +291,6 @@ pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: Option<&syn::Lifetime>)
     }
 
     let mut replace = LifetimeReplace { lifetime };
-    use syn::visit_mut::VisitMut;
     replace.visit_type_mut(&mut ty);
 
     ty
@@ -328,10 +327,25 @@ pub fn self_type_to_unimock(
     }
 
     let mut sttu = SelfTypeToUnimock { item_trait, attr };
-    use syn::visit_mut::VisitMut;
     sttu.visit_type_mut(&mut ty);
 
     ty
+}
+
+pub fn contains_lifetime(mut ty: syn::Type) -> bool {
+    struct Visitor {
+        contains: bool,
+    }
+    impl syn::visit_mut::VisitMut for Visitor {
+        fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
+            self.contains = true;
+            syn::visit_mut::visit_lifetime_mut(self, lifetime);
+        }
+    }
+
+    let mut visitor = Visitor { contains: false };
+    visitor.visit_type_mut(&mut ty);
+    visitor.contains
 }
 
 pub struct DotAwait;
@@ -435,7 +449,6 @@ pub fn replace_self_ty_with_path(mut ty: syn::Type, replacement_path: &syn::Path
     }
 
     let mut replacer = Replacer { replacement_path };
-    use syn::visit_mut::VisitMut;
     replacer.visit_type_mut(&mut ty);
 
     ty

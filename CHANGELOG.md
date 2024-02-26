@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Changed
+- Unimock now supports very flexible argument mutation, instead of one hard-coded parameter.
+  A new `applies()` function-responder has been added, in favor of the old `answers()`, `answers_leaked_ref()`, `mutates()`.
+  The function passed to `applies()` API can mutate all its inputs freely.
+  The downside to this new mechanism is that its return type can't be generic (i.e. `Ret: IntoResponse`).
+  Flexible return types are still supported though, but now a response has to be created explicitly calling `unimock::respond(return_value)`.
 ### Fixed
 - Fix `matching!` against references to number literals ([#42](https://github.com/audunhalland/unimock/pull/42))
 

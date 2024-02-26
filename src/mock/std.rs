@@ -86,7 +86,6 @@ pub mod process {
 
         impl MockFn for report {
             type Inputs<'i> = ();
-            type Mutation<'m> = ();
             type Response = Owned<std::process::ExitCode>;
             type Output<'u> = Self::Response;
             type ApplyFn = dyn Fn() -> Response<Self> + Send + Sync;

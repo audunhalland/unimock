@@ -961,7 +961,7 @@ impl Drop for Unimock {
 impl std::process::Termination for Unimock {
     #[cfg(feature = "mock-std")]
     fn report(mut self) -> std::process::ExitCode {
-        match private::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ()) {
+        match private::eval::<mock::std::process::TerminationMock::report>(&self, ()) {
             private::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
             e => e.unwrap(&self),
         }
@@ -1006,14 +1006,6 @@ pub trait MockFn: Sized + 'static {
     /// * For a function with 1 parameter `T`, the type should be `T`.
     /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
     type Inputs<'i>;
-
-    /// A mutable parameter.
-    ///
-    /// Some methods are designed around a `&mut T` parameter, where the trait is supposed to
-    /// perform some mutable operation on this parameter. Unimock currently supports 1 such parameter.
-    ///
-    /// For methods without any mutable parameters, this type should be `()`.
-    type Mutation<'m>: ?Sized;
 
     /// A type that describes how the mocked function responds.
     ///
@@ -1152,25 +1144,8 @@ impl MockFnInfo {
     }
 }
 
-/// A type that indicates a mutated argument.
-///
-/// Unimock inputs cannot be mutated directly.
-/// To interact with a mutable reference argument, use [crate::build::DefineResponse::mutates].
-pub struct PhantomMut<T>(core::marker::PhantomData<T>);
-
-impl<T> Default for PhantomMut<T> {
-    fn default() -> Self {
-        Self(core::marker::PhantomData)
-    }
-}
-
-impl<T> Debug for PhantomMut<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "PhantomMut")
-    }
-}
-
 /// A marker type used when Unimock is unable to represent the user's type.
+#[derive(Debug)]
 pub struct Impossible;
 
 /// A clause represents a recipe for creating a unimock instance.

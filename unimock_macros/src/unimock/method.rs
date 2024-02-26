@@ -6,9 +6,11 @@ use syn::spanned::Spanned;
 use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
-use super::util::{DotAwait, GenericParamsWithBounds, IsGeneric, IsTypeGeneric, RpitFuture};
+use super::output;
+use super::util::{
+    contains_lifetime, DotAwait, GenericParamsWithBounds, IsGeneric, IsTypeGeneric, RpitFuture,
+};
 use super::Attr;
-use super::{output, util};
 
 use crate::doc;
 use crate::doc::SynDoc;
@@ -28,14 +30,7 @@ pub struct MockMethod<'t> {
     pub ident_lit: syn::LitStr,
     pub has_default_impl: bool,
     pub output_structure: output::OutputStructure,
-    pub mutated_arg: Option<MutatedArg>,
     mirrored_attr_indexes: Vec<usize>,
-}
-
-pub struct MutatedArg {
-    pub index: usize,
-    pub ident: syn::Ident,
-    pub ty: syn::Type,
 }
 
 pub struct Tupled(pub bool);
@@ -49,9 +44,8 @@ pub enum InputsSyntax {
     EvalParams,
 }
 
-pub enum ArgClass<'m, 't> {
+pub enum ArgClass<'t> {
     Receiver,
-    MutMutated(&'m MutatedArg, &'t syn::PatIdent),
     MutImpossible(&'t syn::PatIdent, &'t syn::Type),
     Other(&'t syn::PatIdent, &'t syn::Type),
     Unprocessable(&'t syn::PatType),
@@ -203,44 +197,26 @@ impl<'t> MockMethod<'t> {
         }]
     }
 
-    pub fn classify_arg(&self, arg: &'t syn::FnArg, index: usize) -> ArgClass<'_, 't> {
+    pub fn classify_arg(&self, arg: &'t syn::FnArg, index: usize) -> ArgClass<'t> {
         match arg {
             syn::FnArg::Receiver(_) => ArgClass::Receiver,
-            syn::FnArg::Typed(pat_type) => {
-                match (index, pat_type.pat.as_ref(), &self.mutated_arg) {
-                    (index, syn::Pat::Ident(pat_ident), Some(mutated_arg))
-                        if mutated_arg.index == index =>
-                    {
-                        ArgClass::MutMutated(mutated_arg, pat_ident)
+            syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
+                (_, syn::Pat::Ident(pat_ident)) => {
+                    if Self::is_mutable_reference_with_lifetimes_in_type(pat_type.ty.as_ref()) {
+                        ArgClass::MutImpossible(pat_ident, &pat_type.ty)
+                    } else {
+                        ArgClass::Other(pat_ident, &pat_type.ty)
                     }
-                    (_, syn::Pat::Ident(pat_ident), _) => {
-                        if Self::is_mutable_reference_with_lifetimes_in_type(pat_type.ty.as_ref()) {
-                            ArgClass::MutImpossible(pat_ident, &pat_type.ty)
-                        } else {
-                            ArgClass::Other(pat_ident, &pat_type.ty)
-                        }
-                    }
-                    _ => ArgClass::Unprocessable(pat_type),
                 }
-            }
+                _ => ArgClass::Unprocessable(pat_type),
+            },
         }
     }
 
     fn is_mutable_reference_with_lifetimes_in_type(ty: &syn::Type) -> bool {
         if let syn::Type::Reference(reference) = ty {
             if reference.mutability.is_some() {
-                let inner_type = reference.elem.as_ref();
-                if let syn::Type::Path(type_path) = inner_type {
-                    if let Some(last_segment) = type_path.path.segments.last() {
-                        if let syn::PathArguments::AngleBracketed(angle_bracketed) =
-                            &last_segment.arguments
-                        {
-                            return angle_bracketed.args.iter().any(|generic_argument| {
-                                matches!(generic_argument, syn::GenericArgument::Lifetime(_))
-                            });
-                        }
-                    }
-                }
+                return contains_lifetime(reference.elem.as_ref().clone());
             }
         }
 
@@ -323,28 +299,6 @@ pub fn extract_methods<'s>(
             let generic_params_with_bounds =
                 GenericParamsWithBounds::new(&adapted_sig.generics, false);
 
-            let mut mutated_arg = None;
-
-            // The last `&mut` arg becomes the mutated arg
-            for (index, fn_arg) in adapted_sig.inputs.iter().enumerate() {
-                if let syn::FnArg::Typed(syn::PatType { pat, ty, .. }) = fn_arg {
-                    if let (syn::Pat::Ident(pat_ident), syn::Type::Reference(type_ref)) =
-                        (pat.as_ref(), ty.as_ref())
-                    {
-                        if type_ref.mutability.is_some() {
-                            mutated_arg = Some(MutatedArg {
-                                index,
-                                ident: pat_ident.ident.clone(),
-                                ty: util::substitute_lifetimes(
-                                    type_ref.elem.as_ref().clone(),
-                                    Some(&syn::parse_quote!('m)),
-                                ),
-                            })
-                        }
-                    }
-                }
-            }
-
             Ok(Some(MockMethod {
                 method,
                 adapted_sig,
@@ -370,7 +324,6 @@ pub fn extract_methods<'s>(
                 ),
                 has_default_impl: method.default.is_some(),
                 output_structure,
-                mutated_arg,
                 mirrored_attr_indexes,
             }))
         })
@@ -500,23 +453,19 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
                     ArgClass::Receiver => {
                         continue;
                     }
-                    ArgClass::MutMutated(_, pat_ident) | ArgClass::MutImpossible(pat_ident, _) => {
-                        match self.syntax {
-                            InputsSyntax::FnPattern
-                            | InputsSyntax::FnParams
-                            | InputsSyntax::EvalPatternAll => pat_ident.to_tokens(tokens),
-                            InputsSyntax::EvalParams => {
-                                let prefix = &self.attr.prefix;
-                                quote! {
-                                    #prefix::PhantomMut::default()
-                                }
-                                .to_tokens(tokens)
+                    ArgClass::MutImpossible(pat_ident, _) => match self.syntax {
+                        InputsSyntax::FnPattern
+                        | InputsSyntax::FnParams
+                        | InputsSyntax::EvalPatternAll => pat_ident.to_tokens(tokens),
+                        InputsSyntax::EvalParams => {
+                            let prefix = &self.attr.prefix;
+                            quote! {
+                                #prefix::Impossible
                             }
-                            InputsSyntax::EvalPatternMutAsWildcard => {
-                                quote! { _ }.to_tokens(tokens)
-                            }
+                            .to_tokens(tokens)
                         }
-                    }
+                        InputsSyntax::EvalPatternMutAsWildcard => quote! { _ }.to_tokens(tokens),
+                    },
                     ArgClass::Other(pat_ident, _ty) => {
                         pat_ident.to_tokens(tokens);
                     }

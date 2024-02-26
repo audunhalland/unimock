@@ -27,7 +27,6 @@ struct EvalResponder<'u> {
 pub(crate) fn eval<'u, 'i, F: MockFn>(
     unimock: &'u Unimock,
     inputs: F::Inputs<'i>,
-    _mutation: &mut F::Mutation<'_>,
 ) -> MockResult<Evaluation<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
         info: F::info(),

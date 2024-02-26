@@ -914,7 +914,7 @@ fn non_sync_return() {
 }
 
 mod mutated_args {
-    use core::marker::PhantomData;
+    use core::any::Any;
 
     use unimock::*;
 
@@ -951,22 +951,22 @@ mod mutated_args {
         }
     }
 
-    pub struct LifetimeArg<'a> {
-        data: PhantomData<&'a ()>,
+    pub struct InvariantLifetimeArg<'a> {
+        _data: Option<&'a mut (dyn Any)>,
     }
 
     // A mutable argument with a lifetime is not possible to send into Unimock,
-    // so it should use `PhantomMut<Impossible>` for b.
+    // so it should use `Impossible` for b.
     #[unimock(api = ImpossibleMutableLifetimeArgMock)]
     trait ImpossibleMutableLifetimeArg {
-        fn mut_b_impossible(&self, a: i32, b: &mut LifetimeArg<'_>, c: &mut i32) -> i32;
+        fn mut_b_impossible(&self, a: i32, b: &mut InvariantLifetimeArg<'_>, c: &mut i32) -> i32;
     }
 
     #[test]
     fn can_mutate_with_lifetime_arg() {
         let u = Unimock::new(
             ImpossibleMutableLifetimeArgMock::mut_b_impossible
-                .next_call(matching!(2, _, _))
+                .next_call(matching!(2, _cannot_match_b, 21))
                 .applies(&|a, _, c| {
                     *c *= a;
                     respond(*c + a)
@@ -974,7 +974,7 @@ mod mutated_args {
         );
 
         let mut arg3 = 21;
-        let mut lifetime_arg = LifetimeArg { data: PhantomData };
+        let mut lifetime_arg = InvariantLifetimeArg { _data: None };
         assert_eq!(44, u.mut_b_impossible(2, &mut lifetime_arg, &mut arg3));
         assert_eq!(42, arg3);
     }

@@ -265,13 +265,6 @@ fn def_mock_fn(
             ty
         });
 
-    let mutation = if let Some(mutated_arg) = &method.mutated_arg {
-        let ty = &mutated_arg.ty;
-        quote! { #ty }
-    } else {
-        quote! { () }
-    };
-
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
     let gen_mock_fn_struct_item = |non_generic_ident: &syn::Ident| {
@@ -292,7 +285,6 @@ fn def_mock_fn(
         #(#mirrored_attrs)*
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = #input_types_tuple;
-            type Mutation<'m> = #mutation;
             type Response = #response_assoc_type;
             type Output<'u> = #output_assoc_type;
             type ApplyFn = dyn Fn(#(#apply_fn_params),*) -> #prefix::Response<Self> + Send + Sync;
@@ -323,9 +315,8 @@ fn def_mock_fn(
                 impl #module_scope #non_generic_ident {
                     pub fn with_types #generic_params(
                         self
-                    ) -> impl for<#input_lifetime, 'm> #prefix::MockFn<
+                    ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = #input_types_tuple,
-                        Mutation<'m> = #mutation,
                         Response = #response_assoc_type,
                         ApplyFn = <#mock_fn_ident #generic_args as #prefix::MockFn>::ApplyFn,
                     >
@@ -430,12 +421,6 @@ fn def_method_impl(
                 method.inputs_destructuring(InputsSyntax::EvalParams, Tupled(true), attr);
             let fn_params =
                 method.inputs_destructuring(InputsSyntax::FnParams, Tupled(false), attr);
-            let mutated_param = if let Some(mutated_arg) = &method.mutated_arg {
-                let ident = &mutated_arg.ident;
-                quote! { #ident }
-            } else {
-                quote! { &mut () }
-            };
 
             let default_delegator_call = if method.method.default.is_some() {
                 let delegator_path = quote! {
@@ -522,7 +507,7 @@ fn def_method_impl(
 
                     let polonius = quote_spanned! { span=>
                         #prefix::polonius::_polonius!(|#self_ref| -> #polonius_return_type {
-                            match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
+                            match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params) {
                                 #answer_arm
                                 #unmock_arm
                                 #default_impl_delegate_arm_polonius
@@ -576,7 +561,7 @@ fn def_method_impl(
                     };
 
                     quote_spanned! { span=>
-                        match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params, #mutated_param) {
+                        match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params) {
                             #answer_arm
                             #unmock_arm
                             #default_impl_delegate_arm
@@ -692,14 +677,8 @@ impl InputTypesTuple {
                 .filter_map(
                     |(index, input)| match mock_method.classify_arg(input, index) {
                         ArgClass::Receiver => None,
-                        ArgClass::MutMutated(mutated_arg, _) => {
-                            let mutated_ty = &mutated_arg.ty;
-                            Some(syn::parse_quote!(
-                                #prefix::PhantomMut<&#input_lifetime #mutated_ty>
-                            ))
-                        }
                         ArgClass::MutImpossible(..) => Some(syn::parse_quote!(
-                            #prefix::PhantomMut<#prefix::Impossible>
+                            #prefix::Impossible
                         )),
                         ArgClass::Other(_, ty) => Some(ty.clone()),
                         ArgClass::Unprocessable(_) => None,
