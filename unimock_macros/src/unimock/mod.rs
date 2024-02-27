@@ -74,7 +74,11 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
         .filter_map(Option::as_ref)
         .map(|def| &def.impl_details);
     let generic_params = util::Generics::trait_params(&trait_info, None);
-    let generic_args = util::Generics::trait_args(&trait_info, None, InferImplTrait(false));
+    let generic_args = util::Generics::trait_args(
+        &trait_info.input_trait.generics,
+        None,
+        InferImplTrait(false),
+    );
 
     let attr_associated_types = trait_info
         .input_trait
@@ -240,7 +244,11 @@ fn def_mock_fn(
     let input_types_tuple = InputTypesTuple::new(method, trait_info, attr);
 
     let generic_params = util::Generics::fn_params(trait_info, Some(method));
-    let generic_args = util::Generics::fn_args(trait_info, Some(method), InferImplTrait(false));
+    let generic_args = util::Generics::fn_args(
+        &trait_info.input_trait.generics,
+        Some(method),
+        InferImplTrait(false),
+    );
     let where_clause = &trait_info.input_trait.generics.where_clause;
 
     let doc_attrs = if matches!(attr.mock_api, attr::MockApi::Hidden) {
@@ -249,8 +257,12 @@ fn def_mock_fn(
         method.mockfn_doc_attrs(&trait_info.trait_path)
     };
 
-    let response_assoc_type = method.output_structure.response_associated_type(prefix);
-    let output_assoc_type = method.output_structure.output_associated_type(prefix);
+    let response_assoc_type = method
+        .output_structure
+        .response_associated_type(prefix, trait_info, attr);
+    let output_assoc_type = method
+        .output_structure
+        .output_associated_type(prefix, trait_info, attr);
     let apply_fn_params = method
         .adapted_sig
         .inputs
@@ -261,7 +273,7 @@ fn def_mock_fn(
         })
         .map(|mut ty| {
             ty = util::substitute_lifetimes(ty, None);
-            ty = util::self_type_to_unimock(ty, trait_info.input_trait, attr);
+            ty = util::self_type_to_unimock(ty, trait_info, attr);
             ty
         });
 
@@ -303,7 +315,7 @@ fn def_mock_fn(
         // the trait is generic
         let phantoms_tuple = util::MockFnPhantomsTuple { trait_info, method };
         let untyped_phantoms =
-            iter_generic_type_params(trait_info, method).map(|_| util::UntypedPhantomData);
+            iter_generic_type_params(trait_info, method).map(|_| util::PhantomDataConstructor);
         let module_scope = match &attr.mock_api {
             MockApi::MockMod(ident) => Some(quote_spanned! { span=> #ident:: }),
             _ => None,
@@ -368,7 +380,11 @@ fn def_method_impl(
     let receiver = method.receiver();
     let self_ref = SelfReference(&receiver);
     let self_to_delegator = SelfToDelegator(&receiver);
-    let eval_generic_args = util::Generics::fn_args(trait_info, Some(method), InferImplTrait(true));
+    let eval_generic_args = util::Generics::fn_args(
+        &trait_info.input_trait.generics,
+        Some(method),
+        InferImplTrait(true),
+    );
 
     let must_async_wrap = matches!(
         method.output_structure.wrapping,
@@ -609,8 +625,9 @@ fn def_method_impl(
                 }
                 _ => panic!("BUG: Incompatible receiver for default delegator"),
             };
+            let generic_params = util::Generics::trait_params(trait_info, None);
             quote! {
-                <#prefix::Unimock as #trait_path>::#method_ident(
+                <#prefix::Unimock as #trait_path #generic_params>::#method_ident(
                     #unimock_accessor,
                     #inputs_destructuring
                 )
@@ -686,7 +703,7 @@ impl InputTypesTuple {
                 )
                 .map(|mut ty| {
                     ty = util::substitute_lifetimes(ty, Some(input_lifetime));
-                    ty = util::self_type_to_unimock(ty, trait_info.input_trait, attr);
+                    ty = util::self_type_to_unimock(ty, trait_info, attr);
                     ty
                 })
                 .collect::<Vec<_>>(),

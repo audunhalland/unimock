@@ -7,9 +7,7 @@ use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
 use super::output;
-use super::util::{
-    contains_lifetime, DotAwait, GenericParamsWithBounds, IsGeneric, IsTypeGeneric, RpitFuture,
-};
+use super::util::{contains_lifetime, DotAwait, IsGeneric, IsTypeGeneric, RpitFuture};
 use super::Attr;
 
 use crate::doc;
@@ -23,7 +21,6 @@ pub struct MockMethod<'t> {
     pub non_receiver_arg_count: usize,
     pub is_generic: IsGeneric,
     pub is_type_generic: IsTypeGeneric,
-    pub generic_params_with_bounds: GenericParamsWithBounds,
     pub impl_trait_idents: HashSet<String>,
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
@@ -296,16 +293,12 @@ pub fn extract_methods<'s>(
                 })
                 .count();
 
-            let generic_params_with_bounds =
-                GenericParamsWithBounds::new(&adapted_sig.generics, false);
-
             Ok(Some(MockMethod {
                 method,
                 adapted_sig,
                 non_receiver_arg_count,
                 is_generic: adapt_sig_result.is_generic,
                 is_type_generic: adapt_sig_result.is_type_generic,
-                generic_params_with_bounds,
                 impl_trait_idents: adapt_sig_result.impl_trait_idents,
                 non_generic_mock_entry_ident: if is_type_generic.0 {
                     Some(generate_mock_fn_ident(
