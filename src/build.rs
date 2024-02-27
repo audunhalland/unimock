@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use crate::call_pattern::*;
 use crate::clause::{self};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{IntoCloneResponder, IntoOnceResponder, IntoResponse, Respond, StaticRef};
+use crate::output::{IntoCloneResponder, IntoOnceResponder, Respond};
 use crate::private::lib::vec;
 use crate::property::*;
 use crate::Clause;
@@ -253,94 +253,28 @@ macro_rules! define_response_common_impl {
                 <F::Response as Respond>::Type: Default,
             {
                 self.wrapper.push_responder(
-                    FunctionResponder::<F> {
-                        func: crate::private::lib::Box::new(|_, _| Default::default()),
+                    InputsFnResponder::<F> {
+                        func: crate::private::lib::Box::new(|_| Default::default()),
                     }
                     .into_dyn_responder(),
                 );
+                self.quantify()
+            }
+
+            /// Specify the response of the call pattern by applying the given function that can then compute it based on input parameters.
+            pub fn applies(mut self, apply_fn: &'static F::ApplyFn) -> Quantify<'p, F, O> {
+                self.wrapper
+                    .push_responder(StaticApplyResponder::<F> { apply_fn }.into_dyn_responder());
                 self.quantify()
             }
 
             /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
-            pub fn answers<C, R>(mut self, func: C) -> Quantify<'p, F, O>
-            where
-                C: (Fn(F::Inputs<'_>) -> R) + Send + Sync + 'static,
-                R: IntoResponse<F::Response>,
-            {
-                self.wrapper.push_responder(
-                    FunctionResponder::<F> {
-                        func: crate::private::lib::Box::new(move |inputs, _ctx| {
-                            func(inputs).into_response()
-                        }),
-                    }
-                    .into_dyn_responder(),
-                );
-                self.quantify()
-            }
-
-            /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
-            ///
-            /// This variant passes an [AnswerContext] as the second parameter.
-            pub fn answers_ctx<C, R>(mut self, func: C) -> Quantify<'p, F, O>
-            where
-                C: (Fn(F::Inputs<'_>, AnswerContext<'_, '_, '_, F>) -> R) + Send + Sync + 'static,
-                R: IntoResponse<F::Response>,
-            {
-                self.wrapper.push_responder(
-                    FunctionResponder::<F> {
-                        func: crate::private::lib::Box::new(move |inputs, ctx| {
-                            func(inputs, ctx).into_response()
-                        }),
-                    }
-                    .into_dyn_responder(),
-                );
-                self.quantify()
-            }
-
-            /// Specify the response of the call pattern by invoking the given closure that supports mutating _one_ `&mut` parameter from the mocked signature.
-            pub fn mutates<C, R>(mut self, func: C) -> Quantify<'p, F, O>
-            where
-                C: (Fn(&mut F::Mutation<'_>, F::Inputs<'_>) -> R) + Send + Sync + 'static,
-                R: IntoResponse<F::Response>,
-            {
-                self.wrapper.push_responder(
-                    FunctionResponder::<F> {
-                        func: crate::private::lib::Box::new(move |inputs, ctx| {
-                            func(ctx.mutation, inputs).into_response()
-                        }),
-                    }
-                    .into_dyn_responder(),
-                );
-                self.quantify()
-            }
-
-            /// Specify the response of the call pattern to be a static reference to leaked memory.
-            ///
-            /// The value may be based on the value of input parameters.
-            ///
-            /// This version will produce a new memory leak for _every invocation_ of the answer function.
-            ///
-            /// This method should only be used when computing a reference based
-            /// on input parameters is necessary, which should not be a common use case.
-            pub fn answers_leaked_ref<C, R, T>(mut self, func: C) -> Quantify<'p, F, O>
-            where
-                F: MockFn<Response = StaticRef<T>>,
-                C: (Fn(F::Inputs<'_>) -> R) + Send + Sync + 'static,
-                R: core::borrow::Borrow<T> + 'static,
-                T: 'static,
-            {
-                use crate::private::lib::Box;
-                self.wrapper.push_responder(
-                    FunctionResponder::<F> {
-                        func: Box::new(move |inputs, _| {
-                            let value = func(inputs);
-                            let leaked_ref = Box::leak(Box::new(value));
-
-                            <R as core::borrow::Borrow<T>>::borrow(leaked_ref)
-                        }),
-                    }
-                    .into_dyn_responder(),
-                );
+            pub fn applies_closure(
+                mut self,
+                apply_fn: crate::private::lib::Box<F::ApplyFn>,
+            ) -> Quantify<'p, F, O> {
+                self.wrapper
+                    .push_responder(BoxedApplyResponder::<F> { apply_fn }.into_dyn_responder());
                 self.quantify()
             }
 
@@ -593,20 +527,5 @@ where
 {
     fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String> {
         sink.push(F::info(), self.wrapper.into_owned())
-    }
-}
-
-/// AnswerContext represents known information in the current mocking context.
-pub struct AnswerContext<'u, 'm0, 'm1, F: MockFn> {
-    pub(crate) unimock: &'u Unimock,
-
-    /// The mutation of the currently executing mock function.
-    pub mutation: &'m0 mut F::Mutation<'m1>,
-}
-
-impl<'u, 'm0, 'm1, F: MockFn> AnswerContext<'u, 'm0, 'm1, F> {
-    /// Construct a new unimock instance as a clone of the one currently in the context.
-    pub fn clone_instance(&self) -> Unimock {
-        self.unimock.clone()
     }
 }

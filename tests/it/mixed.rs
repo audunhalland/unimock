@@ -180,7 +180,7 @@ fn mixed_tuple_clone_combinatorics_many() {
     let u = Unimock::new(
         MixedTupleMock::tuple4
             .each_call(matching!())
-            .answers(|_| (clone::Nope, clone::Nope, clone::Sure, clone::Sure)),
+            .applies(&|| respond((clone::Nope, clone::Nope, clone::Sure, clone::Sure))),
     );
 
     for _ in 0..3 {

@@ -49,6 +49,9 @@ pub(crate) enum MockError {
     NoDefaultImpl {
         info: MockFnInfo,
     },
+    NotApplied {
+        info: MockFnInfo,
+    },
     ExplicitPanic {
         fn_call: debug::FnActualCall,
         pattern: debug::CallPatternDebug,
@@ -124,6 +127,13 @@ impl core::fmt::Display for MockError {
                 write!(
                     f,
                     "{path} has not been set up with default implementation delegation.",
+                    path = info.path
+                )
+            }
+            Self::NotApplied { info } => {
+                write!(
+                    f,
+                    "{path} did not apply the function, this is a bug.",
                     path = info.path
                 )
             }

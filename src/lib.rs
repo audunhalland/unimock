@@ -99,24 +99,22 @@
 //! ### Mutating inputs
 //! Many traits uses the argument mutation pattern, where there are one or more `&mut` parameters.
 //!
-//! Due to [various limitations](https://github.com/rust-lang/rust/issues/100013) in Rust's type system, Unimock needs to use a little workaround to get this working correctly.
-//! Unimock supports mutating _one parameter_, and it's not handled as part of the method's regular [`Inputs`](crate::MockFn::Inputs), but instead represented as a separate [`Mutation`](crate::MockFn::Mutation) type.
-//! If a method contains more than one `&mut` parameter (besides `&mut self`), the _last one_ is currently automatically selected as the mutation.
-//!
-//! To access the `&mut` mutation, the [`.mutates`](crate::build::DefineResponse::mutates) combinator is used, as demonstrated in this [Display](core::fmt::Display) mock:
+//! To access the `&mut` parameters, a function is applied to the call pattern using [`applies`](crate::build::DefineResponse::applies):
 //!
 //! ```rust
 //! # use unimock::*;
 //! let mocked = Unimock::new(
 //!     mock::core::fmt::DisplayMock::fmt
 //!         .next_call(matching!(_))
-//!         .mutates(|f, _| write!(f, "mutation!"))
+//!         .applies(&|f| respond(write!(f, "mutation!")))
 //! );
 //!
 //! assert_eq!("mutation!", format!("{mocked}"));
 //! ```
 //!
-//! Note that the `.mutates` closure also specifies the return value, in this case [core::fmt::Result].
+//! The applied function also specifies the response, which is constructed by calling [respond].
+//! In the `fmt` case, the return type is [core::fmt::Result].
+//! The respond function helps with automatic type conversion and automatic borrowing.
 //!
 //! ## Combining setup clauses
 //! `Unimock::new()` accepts as argument anything that implements [Clause].
@@ -144,10 +142,10 @@
 //!         &Unimock::new((
 //!             FooMock::foo
 //!                 .some_call(matching!(_))
-//!                 .answers(|arg| arg * 3),
+//!                 .applies(&|arg| respond(arg * 3)),
 //!             BarMock::bar
 //!                 .some_call(matching!((arg) if *arg > 20))
-//!                 .answers(|arg| arg * 2),
+//!                 .applies(&|arg| respond(arg * 2)),
 //!         )),
 //!         7
 //!     )
@@ -161,10 +159,10 @@
 //!         &Unimock::new((
 //!             FooMock::foo.stub(|each| {
 //!                 each.call(matching!(1337)).returns(1024);
-//!                 each.call(matching!(_)).answers(|arg| arg * 3);
+//!                 each.call(matching!(_)).applies(&|arg| respond(arg * 3));
 //!             }),
 //!             BarMock::bar.stub(|each| {
-//!                 each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
+//!                 each.call(matching!((arg) if *arg > 20)).applies(&|arg| respond(arg * 2));
 //!             }),
 //!         )),
 //!         7
@@ -402,7 +400,7 @@
 //! Sometimes this fact can lead to less than optimal ergonomics.
 //!
 //! For example, in order to use `.returns(value)`, the value must (generally) implement `Clone`, `Send`, `Sync` and `'static`.
-//! If it's not all of those things, the slightly longer `.answers(|_| value)` can be used instead.
+//! If it's not all of those things, the slightly longer `.applies(&|_| respond(value))` can be used instead.
 //!
 //! #### Keep the amount of generated code to a minimum
 //! The unimock API is mainly built around generics and traits, instead of being macro-generated.
@@ -483,7 +481,8 @@ use once_cell::sync::OnceCell;
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
 use debug::TraitMethodPath;
-use private::{DefaultImplDelegator, Matching};
+use output::{IntoResponse, Respond, StaticRef};
+use private::{lib::Box, DefaultImplDelegator, Matching};
 
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
@@ -962,7 +961,7 @@ impl Drop for Unimock {
 impl std::process::Termination for Unimock {
     #[cfg(feature = "mock-std")]
     fn report(mut self) -> std::process::ExitCode {
-        match private::eval::<mock::std::process::TerminationMock::report>(&self, (), &mut ()) {
+        match private::eval::<mock::std::process::TerminationMock::report>(&self, ()) {
             private::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
             e => e.unwrap(&self),
         }
@@ -1008,14 +1007,6 @@ pub trait MockFn: Sized + 'static {
     /// * For a function with N parameters, the type should be the tuple `(T1, T2, ..)`.
     type Inputs<'i>;
 
-    /// A mutable parameter.
-    ///
-    /// Some methods are designed around a `&mut T` parameter, where the trait is supposed to
-    /// perform some mutable operation on this parameter. Unimock currently supports 1 such parameter.
-    ///
-    /// For methods without any mutable parameters, this type should be `()`.
-    type Mutation<'m>: ?Sized;
-
     /// A type that describes how the mocked function responds.
     ///
     /// The Respond trait describes a type used internally to store a response value.
@@ -1027,6 +1018,9 @@ pub trait MockFn: Sized + 'static {
 
     /// A type that describes the mocked function's actual output type.
     type Output<'u>: output::Output<'u, Self::Response>;
+
+    /// The function type used for function application on a call pattern.
+    type ApplyFn: ?Sized + Send + Sync;
 
     /// Static information about the mocked method
     fn info() -> MockFnInfo;
@@ -1150,25 +1144,8 @@ impl MockFnInfo {
     }
 }
 
-/// A type that indicates a mutated argument.
-///
-/// Unimock inputs cannot be mutated directly.
-/// To interact with a mutable reference argument, use [crate::build::DefineResponse::mutates].
-pub struct PhantomMut<T>(core::marker::PhantomData<T>);
-
-impl<T> Default for PhantomMut<T> {
-    fn default() -> Self {
-        Self(core::marker::PhantomData)
-    }
-}
-
-impl<T> Debug for PhantomMut<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "PhantomMut")
-    }
-}
-
 /// A marker type used when Unimock is unable to represent the user's type.
+#[derive(Debug)]
 pub struct Impossible;
 
 /// A clause represents a recipe for creating a unimock instance.
@@ -1217,3 +1194,43 @@ pub trait Clause {
 // Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods
 #[doc(hidden)]
 pub struct Responder(call_pattern::DynResponder);
+
+/// A mocked response
+pub struct Response<F: MockFn>(ResponseInner<F>);
+
+enum ResponseInner<F: MockFn> {
+    Response(<F::Response as Respond>::Type),
+    Unimock(&'static dyn Fn(Unimock) -> <F::Response as Respond>::Type),
+}
+
+/// Turn a value into a mock function response.
+pub fn respond<F, T>(input: T) -> Response<F>
+where
+    F: MockFn,
+    T: IntoResponse<<F as MockFn>::Response>,
+{
+    Response(ResponseInner::Response(input.into_response()))
+}
+
+/// Make a response that is a static reference to leaked memory.
+///
+/// This method should only be used when computing a reference based
+/// on input parameters is necessary, which should not be a common use case.
+pub fn respond_leaked_ref<F, T, R>(input: T) -> Response<F>
+where
+    F: MockFn<Response = StaticRef<R>>,
+    T: core::borrow::Borrow<R> + 'static,
+    R: 'static,
+{
+    let response = <T as core::borrow::Borrow<R>>::borrow(Box::leak(Box::new(input)));
+    Response(ResponseInner::Response(response))
+}
+
+/// Respond with the unimock instance itself.
+pub fn respond_unimock<F>() -> Response<F>
+where
+    F: MockFn,
+    Unimock: IntoResponse<<F as MockFn>::Response>,
+{
+    Response(ResponseInner::Unimock(&|unimock| unimock.into_response()))
+}

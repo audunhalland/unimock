@@ -1,3 +1,5 @@
+use core::ops::Deref;
+
 use crate::call_pattern::InputIndex;
 use crate::debug;
 use crate::mismatch::{Mismatch, MismatchKind};
@@ -17,6 +19,8 @@ pub use crate::default_impl_delegator::*;
 pub enum Evaluation<'u, 'i, F: MockFn> {
     /// Function evaluated to its output.
     Evaluated(<F::Output<'u> as Output<'u, F::Response>>::Type),
+    /// Function should be applied
+    Apply(ApplyClosure<'u, F>, F::Inputs<'i>),
     /// Function not yet evaluated, should be unmocked.
     Unmocked(F::Inputs<'i>),
     /// Function not yet evaluated, should call default implementation.
@@ -30,11 +34,42 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
     pub fn unwrap(self, unimock: &Unimock) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
         let error = match self {
             Self::Evaluated(output) => return output,
+            Self::Apply(..) => error::MockError::NotApplied { info: F::info() },
             Self::Unmocked(_) => error::MockError::CannotUnmock { info: F::info() },
             Self::CallDefaultImpl(_) => error::MockError::NoDefaultImpl { info: F::info() },
         };
 
         unimock.induce_panic(error)
+    }
+}
+
+#[doc(hidden)]
+pub struct ApplyClosure<'u, F: MockFn> {
+    pub(crate) unimock: &'u Unimock,
+    pub(crate) apply_fn: &'u F::ApplyFn,
+}
+
+impl<'u, F: MockFn> Deref for ApplyClosure<'u, F> {
+    type Target = F::ApplyFn;
+
+    fn deref(&self) -> &Self::Target {
+        self.apply_fn
+    }
+}
+
+impl<'u, F: MockFn> ApplyClosure<'u, F> {
+    pub fn __to_output(
+        &self,
+        response: Response<F>,
+    ) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
+        let response = match response.0 {
+            ResponseInner::Response(response) => response,
+            ResponseInner::Unimock(func) => func(self.unimock.clone()),
+        };
+        <F::Output<'u> as output::Output<'u, <F as MockFn>::Response>>::from_response(
+            response,
+            &self.unimock.value_chain,
+        )
     }
 }
 
@@ -166,15 +201,11 @@ impl MismatchReporter {
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
 #[track_caller]
-pub fn eval<'u, 'i, F>(
-    unimock: &'u Unimock,
-    inputs: F::Inputs<'i>,
-    mutation: &mut F::Mutation<'_>,
-) -> Evaluation<'u, 'i, F>
+pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation<'u, 'i, F>
 where
     F: MockFn + 'static,
 {
-    unimock.handle_error(eval::eval(unimock, inputs, mutation))
+    unimock.handle_error(eval::eval(unimock, inputs))
 }
 
 /// Clone a Unimock instance

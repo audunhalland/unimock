@@ -334,8 +334,9 @@ mod issue_37_mutation_with_generics {
         MockMock::func
             .with_types::<()>()
             .next_call(matching!())
-            .mutates(|foo, _| {
+            .applies(&|_, foo| {
                 foo.baz += 1;
+                respond(())
             });
     }
 }
