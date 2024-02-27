@@ -340,3 +340,16 @@ mod issue_37_mutation_with_generics {
             });
     }
 }
+
+mod generics_and_associated_type {
+    use super::*;
+
+    // the macro has to write the response type as:
+    // `type Response = Owned<Option<<Unimock as Mock<T>>::Assoc>>`
+    #[unimock(api=MockMock, type Assoc = ();)]
+    trait Mock<T> {
+        type Assoc;
+
+        fn func<U: 'static>(&self) -> Option<Self::Assoc>;
+    }
+}

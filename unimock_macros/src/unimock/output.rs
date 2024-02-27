@@ -3,7 +3,8 @@ use quote::quote;
 use syn::{parse_quote, visit_mut::VisitMut};
 
 use super::{
-    util::{self, find_future_bound, RpitFuture},
+    trait_info::TraitInfo,
+    util::{find_future_bound, self_type_to_unimock, RpitFuture},
     Attr,
 };
 
@@ -15,12 +16,24 @@ pub struct OutputStructure {
 }
 
 impl OutputStructure {
-    pub fn response_associated_type(&self, prefix: &syn::Path) -> proc_macro2::TokenStream {
-        self.render_associated_type(prefix, &self.response_ty)
+    pub fn response_associated_type(
+        &self,
+        prefix: &syn::Path,
+        trait_info: &TraitInfo,
+        attr: &Attr,
+    ) -> proc_macro2::TokenStream {
+        let response_ty = self.response_ty.self_type_to_unimock(trait_info, attr);
+        self.render_associated_type(prefix, &response_ty)
     }
 
-    pub fn output_associated_type(&self, prefix: &syn::Path) -> proc_macro2::TokenStream {
-        self.render_associated_type(prefix, &self.output_ty)
+    pub fn output_associated_type(
+        &self,
+        prefix: &syn::Path,
+        trait_info: &TraitInfo,
+        attr: &Attr,
+    ) -> proc_macro2::TokenStream {
+        let output_ty = self.output_ty.self_type_to_unimock(trait_info, attr);
+        self.render_associated_type(prefix, &output_ty)
     }
 
     fn render_associated_type(
@@ -93,8 +106,6 @@ pub fn determine_output_structure(
         syn::ReturnType::Type(_, output_ty) => match output_ty.as_ref() {
             syn::Type::Reference(type_reference) => {
                 let mut inner_ty = *type_reference.elem.clone();
-                inner_ty = util::self_type_to_unimock(inner_ty, item_trait, attr);
-
                 let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
                 let ownership = determine_reference_ownership(sig, type_reference);
 
@@ -116,7 +127,7 @@ pub fn determine_output_structure(
             {
                 determine_associated_future_structure(sig, &output_path.path, item_trait, attr)
                     .unwrap_or_else(|| {
-                        determine_owned_or_mixed_output_structure(sig, output_ty, item_trait, attr)
+                        determine_owned_or_mixed_output_structure(sig, output_ty, attr)
                     })
             }
             _ => {
@@ -124,14 +135,13 @@ pub fn determine_output_structure(
                     let mut output_structure = determine_owned_or_mixed_output_structure(
                         sig,
                         &rpit_future.output.ty,
-                        item_trait,
                         attr,
                     );
 
                     output_structure.wrapping = OutputWrapping::RpitFuture(rpit_future.output.ty);
                     output_structure
                 } else {
-                    determine_owned_or_mixed_output_structure(sig, output_ty, item_trait, attr)
+                    determine_owned_or_mixed_output_structure(sig, output_ty, attr)
                 }
             }
         },
@@ -142,14 +152,13 @@ pub fn determine_output_structure(
 pub fn determine_owned_or_mixed_output_structure(
     sig: &syn::Signature,
     output_ty: &syn::Type,
-    item_trait: &syn::ItemTrait,
     attr: &Attr,
 ) -> OutputStructure {
     let prefix = &attr.prefix;
 
-    let output_ty = util::self_type_to_unimock(output_ty.clone(), item_trait, attr);
-
+    let output_ty = output_ty.clone();
     let mut inner_ty = output_ty.clone();
+
     let borrow_info = ReturnTypeAnalyzer::analyze_borrows(sig, &mut inner_ty);
 
     let ownership = if borrow_info.has_input_lifetime {
@@ -253,7 +262,7 @@ fn determine_associated_future_structure(
         .next()?;
     let future_bound = find_future_bound(assoc_ty.bounds.iter())?;
     let mut future_output_structure =
-        determine_owned_or_mixed_output_structure(sig, &future_bound.output.ty, item_trait, attr);
+        determine_owned_or_mixed_output_structure(sig, &future_bound.output.ty, attr);
     future_output_structure.wrapping = OutputWrapping::AssociatedFuture(assoc_ty.clone());
 
     Some(future_output_structure)
@@ -359,6 +368,13 @@ impl AssociatedInnerType {
             }
         } else {
             Self::SameAsResponse
+        }
+    }
+
+    fn self_type_to_unimock(&self, trait_info: &TraitInfo, attr: &Attr) -> Self {
+        match self {
+            Self::Typed(ty) => Self::Typed(self_type_to_unimock(ty.clone(), trait_info, attr)),
+            other => other.clone(),
         }
     }
 }
