@@ -1,4 +1,4 @@
-use unimock::private::lib::{vec, Vec};
+use unimock::alloc::{vec, Vec};
 use unimock::*;
 
 #[derive(Eq, PartialEq)]

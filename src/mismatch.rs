@@ -1,6 +1,6 @@
 use core::fmt::Display;
 
-use crate::private::lib::{vec, BTreeSet, Box, String, Vec};
+use crate::alloc::{vec, BTreeSet, Box, String, Vec};
 use crate::{
     call_pattern::{InputIndex, PatIndex},
     private::MismatchReporter,

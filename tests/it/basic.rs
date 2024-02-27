@@ -1,4 +1,4 @@
-use unimock::private::lib::{format, String, ToString};
+use unimock::alloc::{format, String, ToString};
 use unimock::*;
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
@@ -449,7 +449,7 @@ mod custom_api_module {
 
 mod flattened_module {
     mod basic {
-        use unimock::private::lib::String;
+        use unimock::alloc::String;
         use unimock::*;
 
         #[unimock(api=[Foo, Bar])]
@@ -466,7 +466,7 @@ mod flattened_module {
     }
 
     mod generics {
-        use unimock::private::lib::String;
+        use unimock::alloc::String;
         use unimock::*;
 
         #[unimock(api=[Foo, Bar])]
@@ -586,7 +586,7 @@ fn newtype() {
 
 #[test]
 fn borrow_intricate_lifetimes() {
-    use unimock::private::lib::{Box, String};
+    use unimock::alloc::{Box, String};
 
     pub struct I<'s>(core::marker::PhantomData<&'s ()>);
     pub struct O<'s>(&'s String);
@@ -842,7 +842,7 @@ mod lifetime_constrained_output_type {
 }
 
 mod slice_matching {
-    use unimock::private::lib::{vec, String, Vec};
+    use unimock::alloc::{vec, String, Vec};
 
     use super::*;
 

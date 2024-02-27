@@ -1,4 +1,4 @@
-use crate::private::lib::{Arc, ToString, Vec};
+use crate::alloc::{Arc, ToString, Vec};
 use crate::{error::MockError, Unimock};
 
 #[track_caller]

@@ -1,4 +1,4 @@
-use crate::private::lib::Box;
+use crate::alloc::Box;
 
 pub(crate) trait Cell<T: ?Sized + 'static>: Send + Sync {
     fn try_take(&self) -> Option<Box<T>>;

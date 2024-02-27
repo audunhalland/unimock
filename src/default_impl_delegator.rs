@@ -1,7 +1,7 @@
 use core::pin::Pin;
 
-use crate::private::lib::{Arc, Rc};
-use crate::{private, Unimock};
+use crate::alloc::{Arc, Box, Rc};
+use crate::Unimock;
 
 /// The DefaultImplDelegator is a struct
 /// used for implementing only non-default methods of traits.
@@ -98,9 +98,9 @@ impl<'u> DelegateToDefaultImpl for Pin<&'u mut Unimock> {
         let unimock = self.get_mut();
         let unimock_clone = unimock.clone();
 
-        unimock.default_impl_delegator_cell.get_or_init(|| {
-            private::lib::Box::new(DefaultImplDelegator::__from_unimock(unimock_clone))
-        });
+        unimock
+            .default_impl_delegator_cell
+            .get_or_init(|| Box::new(DefaultImplDelegator::__from_unimock(unimock_clone)));
 
         let delegator = unimock.default_impl_delegator_cell.get_mut().unwrap();
 

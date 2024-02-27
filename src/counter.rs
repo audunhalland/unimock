@@ -1,5 +1,5 @@
+use crate::alloc::{format, Vec};
 use crate::error::MockError;
-use crate::private::lib::{format, Vec};
 use crate::{debug, MockFnInfo};
 
 use core::{fmt::Display, sync::atomic::AtomicUsize};

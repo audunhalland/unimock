@@ -254,7 +254,7 @@ impl ArgMatcher {
                     // autoref specialization runs into a problem.
                     let mismatch_debug = match pat {
                         syn::Pat::Lit(_) => quote! {
-                            Some(::unimock::private::lib::format!("{mismatch:?}"))
+                            Some(::unimock::alloc::format!("{mismatch:?}"))
                         },
                         _ => quote! { mismatch.unimock_try_debug() },
                     };

@@ -1,15 +1,15 @@
 use core::marker::PhantomData;
 
+use crate::alloc::vec;
 use crate::call_pattern::*;
 use crate::fn_mocker::PatternMatchMode;
 use crate::output::{IntoCloneResponder, IntoOnceResponder};
-use crate::private::lib::vec;
 use crate::property::*;
 use crate::*;
 
 pub(crate) mod dyn_builder {
+    use crate::alloc::{vec, Vec};
     use crate::output::ResponderError;
-    use crate::private::lib::{vec, Vec};
     use crate::Responder;
 
     use crate::{
@@ -110,7 +110,7 @@ pub(crate) mod dyn_builder {
     }
 }
 
-use crate::private::lib::{String, ToString, Vec};
+use crate::alloc::{String, ToString, Vec};
 use dyn_builder::*;
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
@@ -252,7 +252,7 @@ macro_rules! define_response_common_impl {
             {
                 self.wrapper.push_responder(
                     InputsFnResponder::<F> {
-                        func: crate::private::lib::Box::new(|_| Default::default()),
+                        func: crate::alloc::Box::new(|_| Default::default()),
                     }
                     .into_dyn_responder(),
                 );
@@ -269,7 +269,7 @@ macro_rules! define_response_common_impl {
             /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
             pub fn applies_closure(
                 mut self,
-                apply_fn: crate::private::lib::Box<F::ApplyFn>,
+                apply_fn: crate::alloc::Box<F::ApplyFn>,
             ) -> Quantify<'p, F, O> {
                 self.wrapper
                     .push_responder(BoxedApplyResponder::<F> { apply_fn }.into_dyn_responder());

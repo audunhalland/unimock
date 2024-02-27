@@ -1,10 +1,10 @@
 use core::any::TypeId;
 use core::sync::atomic::AtomicUsize;
 
+use crate::alloc::{vec, BTreeMap, Vec};
 use crate::debug;
 use crate::error;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::private::lib::{vec, BTreeMap, Vec};
 use crate::private::MutexIsh;
 use crate::FallbackMode;
 

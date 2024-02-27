@@ -1,8 +1,8 @@
-use crate::private::lib::String;
+use crate::alloc::String;
 use crate::*;
 
 pub(crate) mod term {
-    use crate::private::lib::String;
+    use crate::alloc::String;
 
     use crate::{build::dyn_builder::DynCallPatternBuilder, MockFnInfo};
 

@@ -1,3 +1,4 @@
+use crate::alloc::{Box, String};
 use crate::call_pattern::{
     CallPattern, DowncastResponder, DynResponder, PatIndex, PatternError, PatternResult,
 };
@@ -6,7 +7,6 @@ use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::mismatch::Mismatches;
 use crate::output::Output;
-use crate::private::lib::{Box, String};
 use crate::private::{ApplyClosure, Evaluation, MismatchReporter};
 use crate::state::SharedState;
 use crate::{debug, MockFnInfo, Unimock};

@@ -431,8 +431,22 @@
 #[cfg(feature = "std")]
 extern crate std;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
+#[doc(hidden)]
+pub mod alloc {
+    extern crate alloc;
+
+    pub use alloc::boxed::Box;
+    pub use alloc::collections::btree_map::Entry;
+    pub use alloc::collections::BTreeMap;
+    pub use alloc::collections::BTreeSet;
+    pub use alloc::format;
+    pub use alloc::rc::Rc;
+    pub use alloc::string::String;
+    pub use alloc::string::ToString;
+    pub use alloc::sync::Arc;
+    pub use alloc::vec;
+    pub use alloc::vec::Vec;
+}
 
 /// Builder pattern types used for defining mocked behaviour.
 pub mod build;
@@ -481,11 +495,12 @@ use core::panic::UnwindSafe;
 
 use once_cell::sync::OnceCell;
 
+use alloc::Box;
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
 use debug::TraitMethodPath;
 use output::{IntoResponse, Respond, StaticRef};
-use private::{lib::Box, DefaultImplDelegator, Matching};
+use private::{DefaultImplDelegator, Matching};
 
 ///
 /// Autogenerate mocks for all methods in the annotated traits, and `impl` it for [Unimock].
@@ -736,13 +751,13 @@ enum FallbackMode {
 /// Therefore, Unimock should always be cloned before sending off to another thread.
 ///
 pub struct Unimock {
-    shared_state: private::lib::Arc<state::SharedState>,
+    shared_state: alloc::Arc<state::SharedState>,
 
     // A value chain for "dumping" owned return values that
     // a function signature needs to *borrow* instead.
     value_chain: value_chain::ValueChain,
 
-    default_impl_delegator_cell: OnceCell<private::lib::Box<DefaultImplDelegator>>,
+    default_impl_delegator_cell: OnceCell<alloc::Box<DefaultImplDelegator>>,
 
     original_instance: bool,
     torn_down: bool,
@@ -846,7 +861,7 @@ impl Unimock {
 
     #[track_caller]
     fn from_assembler(
-        assembler_result: Result<MockAssembler, private::lib::String>,
+        assembler_result: Result<MockAssembler, alloc::String>,
         fallback_mode: FallbackMode,
     ) -> Self {
         let fn_mockers = match assembler_result {
@@ -855,10 +870,7 @@ impl Unimock {
         };
 
         Self {
-            shared_state: private::lib::Arc::new(state::SharedState::new(
-                fn_mockers,
-                fallback_mode,
-            )),
+            shared_state: alloc::Arc::new(state::SharedState::new(fn_mockers, fallback_mode)),
             value_chain: Default::default(),
             default_impl_delegator_cell: Default::default(),
             original_instance: true,
@@ -885,7 +897,7 @@ impl Unimock {
             });
         }
 
-        let msg = private::lib::format!("{error}");
+        let msg = alloc::format!("{error}");
 
         self.shared_state.panic_reasons.locked(move |reasons| {
             reasons.push(error);
@@ -912,18 +924,17 @@ impl Clone for Unimock {
 
 impl AsRef<DefaultImplDelegator> for Unimock {
     fn as_ref(&self) -> &DefaultImplDelegator {
-        let delegator = self.default_impl_delegator_cell.get_or_init(|| {
-            private::lib::Box::new(DefaultImplDelegator::__from_unimock(self.clone()))
-        });
+        let delegator = self
+            .default_impl_delegator_cell
+            .get_or_init(|| alloc::Box::new(DefaultImplDelegator::__from_unimock(self.clone())));
         delegator.as_ref()
     }
 }
 
 impl AsMut<DefaultImplDelegator> for Unimock {
     fn as_mut(&mut self) -> &mut DefaultImplDelegator {
-        self.default_impl_delegator_cell.get_or_init(|| {
-            private::lib::Box::new(DefaultImplDelegator::__from_unimock(self.clone()))
-        });
+        self.default_impl_delegator_cell
+            .get_or_init(|| alloc::Box::new(DefaultImplDelegator::__from_unimock(self.clone())));
         self.default_impl_delegator_cell.get_mut().unwrap()
     }
 }
@@ -1030,10 +1041,8 @@ pub trait MockFn: Sized + 'static {
 
     /// Compute some debug representation of the inputs.
     #[allow(unused)]
-    fn debug_inputs(
-        inputs: &Self::Inputs<'_>,
-    ) -> private::lib::Box<[Option<private::lib::String>]> {
-        private::lib::Box::new([])
+    fn debug_inputs(inputs: &Self::Inputs<'_>) -> alloc::Box<[Option<alloc::String>]> {
+        alloc::Box::new([])
     }
 
     /// Create a stubbing clause by grouping calls.
@@ -1190,7 +1199,7 @@ pub struct Impossible;
 #[must_use]
 pub trait Clause {
     #[doc(hidden)]
-    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), private::lib::String>;
+    fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), alloc::String>;
 }
 
 // Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods

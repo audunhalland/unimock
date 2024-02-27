@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use crate::private::lib::Box;
+use crate::alloc::Box;
 use crate::{call_pattern::DynResponder, value_chain::ValueChain, MockFn, Responder};
 
 #[derive(Debug)]
@@ -293,7 +293,7 @@ mod mixed_option {
 }
 
 mod mixed_vec {
-    use crate::private::lib::Vec;
+    use crate::alloc::Vec;
 
     use super::*;
 

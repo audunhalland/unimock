@@ -1,4 +1,4 @@
-use unimock::private::lib::{String, ToString};
+use unimock::alloc::{String, ToString};
 use unimock::*;
 
 #[test]

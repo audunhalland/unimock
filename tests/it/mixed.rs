@@ -1,6 +1,6 @@
 use core::task::Poll;
 
-use unimock::private::lib::{vec, ToString, Vec};
+use unimock::alloc::{vec, ToString, Vec};
 use unimock::*;
 
 mod clone {

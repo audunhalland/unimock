@@ -1,4 +1,4 @@
-use crate::private::lib::Vec;
+use crate::alloc::Vec;
 use core::any::Any;
 
 use crate::cell::{Cell, CloneCell, FactoryCell};
@@ -292,7 +292,7 @@ fn find_responder_by_call_index(
 
 #[cfg(test)]
 mod tests {
-    use crate::private::lib::vec;
+    use crate::alloc::vec;
 
     use super::*;
 

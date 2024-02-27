@@ -1,6 +1,6 @@
+use crate::alloc::Vec;
 use crate::call_pattern::PatIndex;
 use crate::error::MockError;
-use crate::private::lib::Vec;
 use crate::*;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
