@@ -9,3 +9,19 @@
 mod associated_future;
 
 fn main() {}
+
+trait AsyncTest {
+    fn test(self);
+}
+
+#[cfg(feature = "std")]
+impl<F: core::future::Future<Output = ()>> AsyncTest for F {
+    #[track_caller]
+    fn test(self) {
+        tokio_1::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed building the Runtime")
+            .block_on(self)
+    }
+}

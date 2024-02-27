@@ -513,28 +513,33 @@ mod flattened_module {
 mod async_trait {
     use unimock::*;
 
+    use crate::AsyncTest;
+
     #[unimock(api=AsyncMock)]
     #[::async_trait::async_trait]
     trait Async {
         async fn func(&self, arg: i32) -> String;
     }
 
-    #[tokio::test]
-    async fn test_async_trait() {
-        async fn takes_async(a: &impl Async, arg: i32) -> String {
-            a.func(arg).await
-        }
+    #[test]
+    fn test_async_trait() {
+        async {
+            async fn takes_async(a: &impl Async, arg: i32) -> String {
+                a.func(arg).await
+            }
 
-        assert_eq!(
-            "42",
-            takes_async(
-                &Unimock::new(AsyncMock::func.stub(|each| {
-                    each.call(matching!(_)).returns("42");
-                })),
-                21
-            )
-            .await
-        );
+            assert_eq!(
+                "42",
+                takes_async(
+                    &Unimock::new(AsyncMock::func.stub(|each| {
+                        each.call(matching!(_)).returns("42");
+                    })),
+                    21
+                )
+                .await
+            );
+        }
+        .test();
     }
 }
 
@@ -704,7 +709,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:680 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:685 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
@@ -744,32 +749,44 @@ mod async_argument_borrowing {
     }
 
     #[cfg(feature = "std")]
-    #[tokio::test]
-    async fn test_argument_borrowing() {
-        let unimock = Unimock::new(
-            BorrowParamMock::borrow_param
-                .each_call(matching!(_))
-                .returns("foobar"),
-        );
+    #[test]
+    fn test_argument_borrowing() {
+        use crate::AsyncTest;
 
-        assert_eq!("foobar", unimock.borrow_param("input").await);
+        async {
+            let unimock = Unimock::new(
+                BorrowParamMock::borrow_param
+                    .each_call(matching!(_))
+                    .returns("foobar"),
+            );
+
+            assert_eq!("foobar", unimock.borrow_param("input").await);
+        }
+        .test()
     }
 
     #[cfg(feature = "std")]
-    #[tokio::test]
-    async fn test_argument_borrowing_works() {
-        let unimock = Unimock::new(
-            BorrowParamMock::borrow_param
-                .each_call(matching!(_))
-                .returns("foobar"),
-        );
+    #[test]
+    fn test_argument_borrowing_works() {
+        use crate::AsyncTest;
 
-        unimock.borrow_param("input").await;
+        async {
+            let unimock = Unimock::new(
+                BorrowParamMock::borrow_param
+                    .each_call(matching!(_))
+                    .returns("foobar"),
+            );
+
+            unimock.borrow_param("input").await;
+        }
+        .test()
     }
 }
 
 #[cfg(feature = "std")]
 mod async_trait_argument_borrowing {
+    use crate::AsyncTest;
+
     use super::*;
 
     #[unimock(api=BorrowParamMock)]
@@ -778,26 +795,32 @@ mod async_trait_argument_borrowing {
         async fn borrow_param<'a>(&self, arg: &'a str) -> &'a str;
     }
 
-    #[tokio::test]
-    async fn test_argument_borrowing() {
-        let unimock = Unimock::new(
-            BorrowParamMock::borrow_param
-                .each_call(matching!(_))
-                .returns("foobar"),
-        );
+    #[test]
+    fn test_argument_borrowing() {
+        async {
+            let unimock = Unimock::new(
+                BorrowParamMock::borrow_param
+                    .each_call(matching!(_))
+                    .returns("foobar"),
+            );
 
-        assert_eq!("foobar", unimock.borrow_param("input").await);
+            assert_eq!("foobar", unimock.borrow_param("input").await);
+        }
+        .test()
     }
 
-    #[tokio::test]
-    async fn test_argument_borrowing_works() {
-        let unimock = Unimock::new(
-            BorrowParamMock::borrow_param
-                .each_call(matching!(_))
-                .returns("foobar"),
-        );
+    #[test]
+    fn test_argument_borrowing_works() {
+        async {
+            let unimock = Unimock::new(
+                BorrowParamMock::borrow_param
+                    .each_call(matching!(_))
+                    .returns("foobar"),
+            );
 
-        unimock.borrow_param("input").await;
+            unimock.borrow_param("input").await;
+        }
+        .test()
     }
 }
 

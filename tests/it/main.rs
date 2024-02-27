@@ -4,6 +4,8 @@
 #![allow(clippy::needless_lifetimes)]
 #![allow(clippy::manual_async_fn)]
 
+use core::future::Future;
+
 #[cfg(any(feature = "std", feature = "spin-lock"))]
 mod basic;
 
@@ -32,6 +34,25 @@ mod async_fn;
 #[cfg(all(feature = "mock-core", feature = "mock-std"))]
 mod std;
 
+#[cfg(all(feature = "mock-tokio-1", feature = "std"))]
+mod test_mock_tokio;
+
 mod unmock;
 
 fn main() {}
+
+trait AsyncTest {
+    fn test(self);
+}
+
+#[cfg(feature = "std")]
+impl<F: Future<Output = ()>> AsyncTest for F {
+    #[track_caller]
+    fn test(self) {
+        tokio_1::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed building the Runtime")
+            .block_on(self)
+    }
+}

@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The function passed to `applies()` API can mutate all its inputs freely.
   The downside to this new mechanism is that its return type can't be generic (i.e. `Ret: IntoResponse`).
   Flexible return types are still supported though, but now a response has to be created explicitly calling `unimock::respond(return_value)`.
+### Added
+- Mocks for `tokio-3` and `futures-0-3` async read/write traits
 ### Fixed
 - Fix `matching!` against references to number literals ([#42](https://github.com/audunhalland/unimock/pull/42))
 
