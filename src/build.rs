@@ -1,12 +1,10 @@
 use core::marker::PhantomData;
 
 use crate::call_pattern::*;
-use crate::clause::{self};
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{IntoCloneResponder, IntoOnceResponder, Respond};
+use crate::output::{IntoCloneResponder, IntoOnceResponder};
 use crate::private::lib::vec;
 use crate::property::*;
-use crate::Clause;
 use crate::*;
 
 pub(crate) mod dyn_builder {
@@ -281,7 +279,8 @@ macro_rules! define_response_common_impl {
             /// Prevent this call pattern from succeeding by explicitly panicking with a custom message.
             pub fn panics(mut self, message: impl Into<String>) -> Quantify<'p, F, O> {
                 let message = message.into();
-                self.wrapper.push_responder(DynResponder::Panic(message));
+                self.wrapper
+                    .push_responder(DynResponder::Panic(message.into()));
                 self.quantify()
             }
 

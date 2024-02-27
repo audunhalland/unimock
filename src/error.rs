@@ -1,4 +1,4 @@
-use crate::private::lib::String;
+use crate::private::lib::{Box, String};
 use crate::{debug, mismatch::Mismatches, MockFnInfo};
 
 pub(crate) type MockResult<T> = Result<T, MockError>;
@@ -55,7 +55,7 @@ pub(crate) enum MockError {
     ExplicitPanic {
         fn_call: debug::FnActualCall,
         pattern: debug::CallPatternDebug,
-        msg: String,
+        msg: Box<str>,
     },
 }
 

@@ -1,30 +1,42 @@
 use core::fmt::Display;
 
-use crate::private::lib::{vec, BTreeSet, String, Vec};
+use crate::private::lib::{vec, BTreeSet, Box, String, Vec};
 use crate::{
     call_pattern::{InputIndex, PatIndex},
     private::MismatchReporter,
 };
 
-#[derive(Clone)]
-pub(crate) struct Mismatches {
+pub(crate) struct MismatchesBuilder {
     mismatches: Vec<(PatIndex, InputIndex, Mismatch)>,
 }
 
-impl Mismatches {
-    pub fn new() -> Self {
-        Self { mismatches: vec![] }
-    }
-
+impl MismatchesBuilder {
     pub fn collect_from_reporter(&mut self, pat_index: PatIndex, reporter: MismatchReporter) {
         for (input_index, mismatch) in reporter.mismatches {
             self.mismatches.push((pat_index, input_index, mismatch));
         }
     }
 
+    pub fn build(self) -> Mismatches {
+        Mismatches {
+            mismatches: self.mismatches.into(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct Mismatches {
+    mismatches: Box<[(PatIndex, InputIndex, Mismatch)]>,
+}
+
+impl Mismatches {
+    pub fn builder() -> MismatchesBuilder {
+        MismatchesBuilder { mismatches: vec![] }
+    }
+
     fn has_unique_pat_index(&self) -> bool {
         let mut pat_indexes = BTreeSet::new();
-        for (pat_index, _, _) in &self.mismatches {
+        for (pat_index, _, _) in self.mismatches.iter() {
             pat_indexes.insert(pat_index.0);
         }
 
@@ -40,7 +52,7 @@ impl Display for Mismatches {
 
         let is_unique_pat = self.has_unique_pat_index();
 
-        for (pat_index, input_index, mismatch) in &self.mismatches {
+        for (pat_index, input_index, mismatch) in self.mismatches.iter() {
             let Mismatch {
                 kind,
                 actual,

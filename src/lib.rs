@@ -423,10 +423,13 @@
 //! It is assumed that code is quicker (and perhaps more fun) to read and write when it resembles real language.
 //!
 
+#![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![cfg_attr(feature = "unstable-doc-cfg", feature(doc_auto_cfg))]
-#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "std")]
+extern crate std;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -1027,8 +1030,10 @@ pub trait MockFn: Sized + 'static {
 
     /// Compute some debug representation of the inputs.
     #[allow(unused)]
-    fn debug_inputs(inputs: &Self::Inputs<'_>) -> private::lib::Vec<Option<private::lib::String>> {
-        private::lib::vec![]
+    fn debug_inputs(
+        inputs: &Self::Inputs<'_>,
+    ) -> private::lib::Box<[Option<private::lib::String>]> {
+        private::lib::Box::new([])
     }
 
     /// Create a stubbing clause by grouping calls.
@@ -1125,12 +1130,9 @@ impl MockFnInfo {
     }
 
     /// Set the path of the method
-    pub const fn path(self, trait_ident: &'static str, method_ident: &'static str) -> Self {
+    pub const fn path(self, path: &'static [&'static str; 2]) -> Self {
         Self {
-            path: TraitMethodPath {
-                trait_ident,
-                method_ident,
-            },
+            path: TraitMethodPath::from_path(path),
             ..self
         }
     }

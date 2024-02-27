@@ -6,7 +6,7 @@ use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::mismatch::Mismatches;
 use crate::output::Output;
-use crate::private::lib::{String, Vec};
+use crate::private::lib::{Box, String};
 use crate::private::{ApplyClosure, Evaluation, MismatchReporter};
 use crate::state::SharedState;
 use crate::{debug, MockFnInfo, Unimock};
@@ -123,7 +123,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
 struct DynCtx<'u, 's> {
     info: MockFnInfo,
     shared_state: &'u SharedState,
-    input_debugger: &'s dyn Fn() -> Vec<Option<String>>,
+    input_debugger: &'s dyn Fn() -> Box<[Option<String>]>,
 }
 
 impl<'u, 's> DynCtx<'u, 's> {
@@ -164,16 +164,16 @@ impl<'u, 's> DynCtx<'u, 's> {
             },
             None => match self.shared_state.fallback_mode {
                 FallbackMode::Error => {
-                    let mut mismatches = Mismatches::new();
+                    let mut builder = Mismatches::builder();
                     for (pat_index, call_pattern) in fn_mocker.call_patterns.iter().enumerate() {
                         let mut mismatch_reporter = MismatchReporter::new_enabled();
                         let _ = match_inputs(call_pattern, Some(&mut mismatch_reporter));
-                        mismatches.collect_from_reporter(PatIndex(pat_index), mismatch_reporter);
+                        builder.collect_from_reporter(PatIndex(pat_index), mismatch_reporter);
                     }
 
                     Err(MockError::NoMatchingCallPatterns {
                         fn_call: self.fn_call(),
-                        mismatches,
+                        mismatches: builder.build(),
                     })
                 }
                 FallbackMode::Unmock => Ok(EvalResult::Unmock),
@@ -219,14 +219,14 @@ impl<'u, 's> DynCtx<'u, 's> {
                 if !match_inputs(pattern, Some(&mut mismatch_reporter))
                     .map_err(|err| self.map_pattern_error(err, fn_mocker, pat_index))?
                 {
-                    let mut mismatches = Mismatches::new();
-                    mismatches.collect_from_reporter(pat_index, mismatch_reporter);
+                    let mut builder = Mismatches::builder();
+                    builder.collect_from_reporter(pat_index, mismatch_reporter);
 
                     return Err(MockError::InputsNotMatchedInCallOrder {
                         fn_call: self.fn_call(),
                         actual_call_order: error::CallOrder(ordered_call_index),
                         pattern: fn_mocker.debug_pattern(pat_index),
-                        mismatches,
+                        mismatches: builder.build(),
                     });
                 }
 
@@ -275,7 +275,7 @@ impl<'u, 's> DynCtx<'u, 's> {
         }
     }
 
-    fn debug_inputs(&self) -> Vec<Option<String>> {
+    fn debug_inputs(&self) -> Box<[Option<String>]> {
         (self.input_debugger)()
     }
 }

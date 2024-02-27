@@ -23,6 +23,7 @@ pub mod error {
 #[cfg(feature = "mock-std")]
 pub mod io {
     use std::io::{IoSlice, IoSliceMut, Result, SeekFrom};
+    use std::{string::String, vec::Vec};
 
     use unimock_macros::unimock;
 
@@ -76,6 +77,7 @@ pub mod process {
     #[allow(non_snake_case)]
     pub mod TerminationMock {
         use crate::{output::Owned, MockFn, Response};
+        use std::{boxed::Box, string::String};
 
         #[allow(non_camel_case_types)]
         /// MockFn for [`Termination::report() -> ExitCode`](std::process::Termination::report).
@@ -91,13 +93,13 @@ pub mod process {
             type ApplyFn = dyn Fn() -> Response<Self> + Send + Sync;
 
             fn info() -> crate::MockFnInfo {
-                let mut info = crate::MockFnInfo::new::<Self>().path("Termination", "report");
+                let mut info = crate::MockFnInfo::new::<Self>().path(&["Termination", "report"]);
                 info.partial_by_default = true;
                 info
             }
 
-            fn debug_inputs(_: &Self::Inputs<'_>) -> Vec<Option<String>> {
-                vec![]
+            fn debug_inputs(_: &Self::Inputs<'_>) -> Box<[Option<String>]> {
+                Box::new([])
             }
         }
     }

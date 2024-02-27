@@ -1,12 +1,11 @@
 use core::ops::Deref;
 
 use crate::call_pattern::InputIndex;
-use crate::debug;
 use crate::mismatch::{Mismatch, MismatchKind};
 use crate::output::Output;
 use crate::{call_pattern::MatchingFn, *};
 
-use lib::{Box, String, Vec};
+use lib::{String, Vec};
 
 pub use crate::default_impl_delegator::*;
 

@@ -1,12 +1,12 @@
 use core::fmt::Display;
 
-use crate::private::lib::{Box, String, Vec};
+use crate::private::lib::{Box, String};
 use crate::{call_pattern::PatIndex, MockFnInfo};
 
 #[derive(Clone)]
 pub(crate) struct FnActualCall {
     pub info: MockFnInfo,
-    pub inputs_debug: Vec<Option<String>>,
+    pub inputs_debug: Box<[Option<String>]>,
 }
 
 impl core::fmt::Display for FnActualCall {
@@ -29,22 +29,32 @@ impl core::fmt::Display for FnActualCall {
 
 #[derive(Clone, Copy)]
 pub(crate) struct TraitMethodPath {
-    pub trait_ident: &'static str,
-    pub method_ident: &'static str,
+    path: &'static [&'static str; 2],
+}
+
+impl TraitMethodPath {
+    pub const fn from_path(path: &'static [&'static str; 2]) -> Self {
+        Self { path }
+    }
+
+    pub fn trait_ident(&self) -> &'static str {
+        self.path[0]
+    }
+
+    pub fn method_ident(&self) -> &'static str {
+        self.path[1]
+    }
 }
 
 impl Default for TraitMethodPath {
     fn default() -> Self {
-        Self {
-            trait_ident: "?",
-            method_ident: "?",
-        }
+        Self { path: &["?", "?"] }
     }
 }
 
 impl Display for TraitMethodPath {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}::{}", self.trait_ident, self.method_ident)
+        write!(f, "{}::{}", self.trait_ident(), self.method_ident())
     }
 }
 

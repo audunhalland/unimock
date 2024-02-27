@@ -18,7 +18,7 @@ pub(crate) fn teardown_report(unimock: &mut Unimock) -> std::process::ExitCode {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(errors) => {
             for error in errors {
-                eprintln!("unimock MockError: {error}");
+                std::eprintln!("unimock MockError: {error}");
             }
             std::process::ExitCode::FAILURE
         }

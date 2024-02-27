@@ -303,7 +303,7 @@ fn def_mock_fn(
 
             fn info() -> #prefix::MockFnInfo {
                 #prefix::MockFnInfo::new::<Self>()
-                    .path(#trait_ident_lit, #method_ident_lit)
+                    .path(&[#trait_ident_lit, #method_ident_lit])
                     #info_set_default_impl
             }
 

@@ -1,9 +1,8 @@
-use crate::private::lib::{Box, String, Vec};
+use crate::private::lib::Vec;
 use core::any::Any;
 
 use crate::cell::{Cell, CloneCell, FactoryCell};
-use crate::debug;
-use crate::output::{Respond, ResponderError};
+use crate::output::ResponderError;
 use crate::private::MismatchReporter;
 use crate::*;
 
@@ -105,7 +104,7 @@ pub(crate) enum DynResponder {
     InputsFn(DynInputsFnResponder),
     StaticApply(DynStaticApplyResponder),
     BoxedApply(DynBoxedApplyResponder),
-    Panic(String),
+    Panic(Box<str>),
     Unmock,
     CallDefaultImpl,
 }
@@ -293,7 +292,7 @@ fn find_responder_by_call_index(
 
 #[cfg(test)]
 mod tests {
-    use crate::private::lib::{vec, ToString};
+    use crate::private::lib::vec;
 
     use super::*;
 
@@ -302,17 +301,17 @@ mod tests {
         let responders = vec![
             DynCallOrderResponder {
                 response_index: 0,
-                responder: DynResponder::Panic("0".to_string()),
+                responder: DynResponder::Panic("0".into()),
             },
             DynCallOrderResponder {
                 response_index: 5,
-                responder: DynResponder::Panic("5".to_string()),
+                responder: DynResponder::Panic("5".into()),
             },
         ];
 
         fn find_msg(responders: &[DynCallOrderResponder], call_index: usize) -> Option<&str> {
             find_responder_by_call_index(responders, call_index).map(|responder| match responder {
-                DynResponder::Panic(msg) => msg.as_str(),
+                DynResponder::Panic(msg) => msg.as_ref(),
                 _ => panic!(),
             })
         }
