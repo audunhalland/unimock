@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(unused)]
 #![allow(clippy::disallowed_names)]
 #![allow(clippy::needless_lifetimes)]
 #![allow(clippy::manual_async_fn)]

@@ -12,17 +12,21 @@ fn all_the_auto_trait_goodies() {
     assert_implements_niceness::<Unimock>();
 }
 
-#[test]
-fn noarg_works() {
+mod noarg_works {
+    use super::*;
+
     #[unimock(api=NoArgMock)]
     trait NoArg {
         fn no_arg(&self) -> i32;
     }
 
-    assert_eq!(
-        1_000_000,
-        Unimock::new(NoArgMock::no_arg.next_call(matching!()).returns(1_000_000)).no_arg()
-    );
+    #[test]
+    fn test() {
+        assert_eq!(
+            1_000_000,
+            Unimock::new(NoArgMock::no_arg.next_call(matching!()).returns(1_000_000)).no_arg()
+        );
+    }
 }
 
 mod trailing_comma_in_args {
@@ -39,8 +43,9 @@ mod trailing_comma_in_args {
     }
 }
 
-#[test]
-fn owned_output_works() {
+mod owned_output {
+    use super::*;
+
     #[unimock(api=OwnedMock)]
     trait Owned {
         fn foo(&self, a: String, b: String) -> String;
@@ -50,39 +55,42 @@ fn owned_output_works() {
         o.foo(a.into(), b.into())
     }
 
-    assert_eq!(
-        "ab",
-        takes_owned(
-            &Unimock::new(
-                OwnedMock::foo
-                    .next_call(matching!(_, _))
-                    .applies(&|a, b| respond(format!("{a}{b}")))
-                    .once()
-            ),
-            "a",
-            "b",
-        )
-    );
-    assert_eq!(
-        "lol",
-        takes_owned(
-            &Unimock::new(OwnedMock::foo.stub(|each| {
-                each.call(matching!(_, _)).returns("lol");
-            })),
-            "a",
-            "b",
-        )
-    );
-    assert_eq!(
-        "",
-        takes_owned(
-            &Unimock::new(OwnedMock::foo.stub(|each| {
-                each.call(matching!("a", "b")).returns_default();
-            })),
-            "a",
-            "b",
-        )
-    );
+    #[test]
+    fn test() {
+        assert_eq!(
+            "ab",
+            takes_owned(
+                &Unimock::new(
+                    OwnedMock::foo
+                        .next_call(matching!(_, _))
+                        .applies(&|a, b| respond(format!("{a}{b}")))
+                        .once()
+                ),
+                "a",
+                "b",
+            )
+        );
+        assert_eq!(
+            "lol",
+            takes_owned(
+                &Unimock::new(OwnedMock::foo.stub(|each| {
+                    each.call(matching!(_, _)).returns("lol");
+                })),
+                "a",
+                "b",
+            )
+        );
+        assert_eq!(
+            "",
+            takes_owned(
+                &Unimock::new(OwnedMock::foo.stub(|each| {
+                    each.call(matching!("a", "b")).returns_default();
+                })),
+                "a",
+                "b",
+            )
+        );
+    }
 }
 
 #[cfg(feature = "std")]
@@ -346,8 +354,9 @@ fn should_debug_reference_to_debug_implementing_type() {
     }
 }
 
-#[test]
-fn should_be_able_to_borrow_a_returns_value() {
+mod should_be_able_to_borrow_a_returns_value {
+    use super::*;
+
     #[derive(Eq, PartialEq, Debug, Clone)]
     pub struct Ret(i32);
 
@@ -356,19 +365,23 @@ fn should_be_able_to_borrow_a_returns_value() {
         fn borrows_ret(&self) -> &Ret;
     }
 
-    assert_eq!(
-        &Ret(42),
-        Unimock::new(
-            BorrowsRetMock::borrows_ret
-                .each_call(matching!())
-                .returns(Ret(42))
-        )
-        .borrows_ret()
-    );
+    #[test]
+    fn test() {
+        assert_eq!(
+            &Ret(42),
+            Unimock::new(
+                BorrowsRetMock::borrows_ret
+                    .each_call(matching!())
+                    .returns(Ret(42))
+            )
+            .borrows_ret()
+        );
+    }
 }
 
-#[test]
-fn various_borrowing() {
+mod various_borrowing {
+    use super::*;
+
     #[unimock(api=BorrowingMock)]
     trait Borrowing {
         fn borrow(&self, input: String) -> &String;
@@ -378,51 +391,54 @@ fn various_borrowing() {
         t.borrow(input.to_string()).as_str()
     }
 
-    assert_eq!(
-        "foo",
-        get_str(
-            &Unimock::new(
-                BorrowingMock::borrow
+    #[test]
+    fn test() {
+        assert_eq!(
+            "foo",
+            get_str(
+                &Unimock::new(
+                    BorrowingMock::borrow
+                        .next_call(matching!(_))
+                        .returns("foo".to_string())
+                        .once()
+                ),
+                ""
+            )
+        );
+        assert_eq!(
+            "foo",
+            get_str(
+                &Unimock::new(
+                    BorrowingMock::borrow
+                        .next_call(matching!(_))
+                        .returns("foo".to_string())
+                        .once()
+                ),
+                ""
+            )
+        );
+        assert_eq!(
+            "yoyo",
+            get_str(
+                &Unimock::new(
+                    BorrowingMock::borrow
+                        .next_call(matching!(_))
+                        .applies(&|input| respond(format!("{input}{input}")))
+                        .once()
+                ),
+                "yo"
+            )
+        );
+        assert_eq!(
+            "yoyoyo",
+            <Unimock as Borrowing>::borrow_static(&Unimock::new(
+                BorrowingMock::borrow_static
                     .next_call(matching!(_))
-                    .returns("foo".to_string())
+                    .applies(&|| respond_leaked_ref("yoyoyo".to_string()))
                     .once()
-            ),
-            ""
-        )
-    );
-    assert_eq!(
-        "foo",
-        get_str(
-            &Unimock::new(
-                BorrowingMock::borrow
-                    .next_call(matching!(_))
-                    .returns("foo".to_string())
-                    .once()
-            ),
-            ""
-        )
-    );
-    assert_eq!(
-        "yoyo",
-        get_str(
-            &Unimock::new(
-                BorrowingMock::borrow
-                    .next_call(matching!(_))
-                    .applies(&|input| respond(format!("{input}{input}")))
-                    .once()
-            ),
-            "yo"
-        )
-    );
-    assert_eq!(
-        "yoyoyo",
-        <Unimock as Borrowing>::borrow_static(&Unimock::new(
-            BorrowingMock::borrow_static
-                .next_call(matching!(_))
-                .applies(&|| respond_leaked_ref("yoyoyo".to_string()))
-                .once()
-        ))
-    );
+            ))
+        );
+    }
 }
 
 mod custom_api_module {
@@ -436,7 +452,7 @@ mod custom_api_module {
     }
 
     #[test]
-    #[should_panic = "Single::func: Expected Single::func(_) at tests/it/basic.rs:443 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."]
+    #[should_panic = "Single::func: Expected Single::func(_) at tests/it/basic.rs:459 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."]
     fn test_without_module() {
         Unimock::new(
             FakeSingle::func
@@ -550,8 +566,9 @@ mod cow {
     }
 }
 
-#[test]
-fn newtype() {
+mod newtype {
+    use super::*;
+
     #[derive(Clone)]
     pub struct MyString(pub String);
 
@@ -576,16 +593,20 @@ fn newtype() {
         t.func(arg)
     }
 
-    let _ = takes(
-        &Unimock::new(NewtypeStringMock::func.stub(|each| {
-            each.call(matching!("input")).returns("output");
-        })),
-        "input".into(),
-    );
+    #[test]
+    fn test() {
+        let _ = takes(
+            &Unimock::new(NewtypeStringMock::func.stub(|each| {
+                each.call(matching!("input")).returns("output");
+            })),
+            "input".into(),
+        );
+    }
 }
 
-#[test]
-fn borrow_intricate_lifetimes() {
+mod borrow_intricate_lifetimes {
+    use super::*;
+
     use unimock::alloc::{Box, String};
 
     pub struct I<'s>(core::marker::PhantomData<&'s ()>);
@@ -600,17 +621,21 @@ fn borrow_intricate_lifetimes() {
         i.foo(&I(core::marker::PhantomData));
     }
 
-    let u = Unimock::new(
-        IntricateMock::foo
-            .next_call(matching!(I(_)))
-            .returns(O(Box::leak(Box::new("leaked".to_string())))),
-    );
+    #[test]
+    fn test() {
+        let u = Unimock::new(
+            IntricateMock::foo
+                .next_call(matching!(I(_)))
+                .returns(O(Box::leak(Box::new("leaked".to_string())))),
+        );
 
-    takes_intricate(&u);
+        takes_intricate(&u);
+    }
 }
 
-#[test]
-fn clause_helpers() {
+mod clause_helpers {
+    use super::*;
+
     #[unimock(api=FooMock)]
     trait Foo {
         fn m1(&self) -> i32;
@@ -632,11 +657,14 @@ fn clause_helpers() {
         )
     }
 
-    let deps = Unimock::new((
-        setup_foo_bar(),
-        BazMock::m3.each_call(matching!(_)).returns(3),
-    ));
-    assert_eq!(6, deps.m1() + deps.m2() + deps.m3());
+    #[test]
+    fn test() {
+        let deps = Unimock::new((
+            setup_foo_bar(),
+            BazMock::m3.each_call(matching!(_)).returns(3),
+        ));
+        assert_eq!(6, deps.m1() + deps.m2() + deps.m3());
+    }
 }
 
 mod responders_in_series {
@@ -676,7 +704,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:652 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:680 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());
@@ -872,8 +900,9 @@ mod slice_matching {
     }
 }
 
-#[test]
-fn eval_name_clash() {
+mod eval_name_clash {
+    use super::*;
+
     #[unimock(api = Mock, unmock_with=[unmock])]
     trait Trait {
         fn tralala(&self, eval: i32);
@@ -882,8 +911,9 @@ fn eval_name_clash() {
     fn unmock(_: &impl core::any::Any, _: i32) {}
 }
 
-#[test]
-fn fn_cfg_attrs() {
+mod fn_cfg_attrs {
+    use super::*;
+
     #[unimock(api = TraitMock)]
     trait Trait {
         fn a(&self) -> i32;
@@ -892,12 +922,15 @@ fn fn_cfg_attrs() {
         fn b(&self) -> NonExistentType;
     }
 
-    let u = Unimock::new(TraitMock::a.each_call(matching!()).returns(0));
-    u.a();
+    #[test]
+    fn test() {
+        let u = Unimock::new(TraitMock::a.each_call(matching!()).returns(0));
+        u.a();
+    }
 }
 
-#[test]
-fn non_sync_return() {
+mod non_sync_return {
+    use super::*;
     use core::cell::Cell;
 
     #[unimock(api = NonSendMock)]
@@ -905,12 +938,15 @@ fn non_sync_return() {
         fn return_cell(&self) -> Cell<i32>;
     }
 
-    let u = Unimock::new(
-        NonSendMock::return_cell
-            .next_call(matching!())
-            .applies(&|| respond(Cell::new(42))),
-    );
-    assert_eq!(Cell::new(42), u.return_cell());
+    #[test]
+    fn test() {
+        let u = Unimock::new(
+            NonSendMock::return_cell
+                .next_call(matching!())
+                .applies(&|| respond(Cell::new(42))),
+        );
+        assert_eq!(Cell::new(42), u.return_cell());
+    }
 }
 
 mod mutated_args {

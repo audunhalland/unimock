@@ -1,4 +1,5 @@
 #![cfg(feature = "nightly-tests")]
+#![allow(unused)]
 #![allow(incomplete_features)]
 #![feature(type_alias_impl_trait)]
 #![feature(closure_track_caller)]

@@ -79,8 +79,9 @@ mod unmock_simple {
     }
 }
 
-#[test]
-fn unmock_recursion() {
+mod unmock_recursion {
+    use super::*;
+
     #[unimock(api=FactorialMock, unmock_with=[my_factorial])]
     trait Factorial {
         fn factorial(&self, input: u32) -> u32;
@@ -90,19 +91,23 @@ fn unmock_recursion() {
         f.factorial(input - 1) * input
     }
 
-    assert_eq!(
-        120,
-        Unimock::new(FactorialMock::factorial.stub(|each| {
-            each.call(matching!(0 | 1)).returns(1u32);
-            each.call(matching!(_)).unmocked();
-        }))
-        .factorial(5)
-    );
+    #[test]
+    fn test() {
+        assert_eq!(
+            120,
+            Unimock::new(FactorialMock::factorial.stub(|each| {
+                each.call(matching!(0 | 1)).returns(1u32);
+                each.call(matching!(_)).unmocked();
+            }))
+            .factorial(5)
+        );
+    }
 }
 
 #[cfg(feature = "std")]
-#[tokio::test]
-async fn unmock_async() {
+mod unmock_async {
+    use super::*;
+
     #[unimock(api=AsyncFactorialMock, unmock_with=[my_factorial])]
     #[::async_trait::async_trait]
     trait AsyncFactorial {
@@ -113,28 +118,31 @@ async fn unmock_async() {
         f.factorial(input - 1).await * input
     }
 
-    assert_eq!(
-        120,
-        Unimock::new_partial(
-            AsyncFactorialMock::factorial
-                .each_call(matching!(1))
-                .returns(1_u32)
-        )
-        .factorial(5)
-        .await,
-        "works using spy"
-    );
+    #[tokio::test]
+    async fn test() {
+        assert_eq!(
+            120,
+            Unimock::new_partial(
+                AsyncFactorialMock::factorial
+                    .each_call(matching!(1))
+                    .returns(1_u32)
+            )
+            .factorial(5)
+            .await,
+            "works using spy"
+        );
 
-    assert_eq!(
-        120,
-        Unimock::new(AsyncFactorialMock::factorial.stub(|each| {
-            each.call(matching!((input) if *input <= 1)).returns(1_u32);
-            each.call(matching!(_)).unmocked();
-        }))
-        .factorial(5)
-        .await,
-        "works using mock"
-    );
+        assert_eq!(
+            120,
+            Unimock::new(AsyncFactorialMock::factorial.stub(|each| {
+                each.call(matching!((input) if *input <= 1)).returns(1_u32);
+                each.call(matching!(_)).unmocked();
+            }))
+            .factorial(5)
+            .await,
+            "works using mock"
+        );
+    }
 }
 
 mod unmock_with_custom_args {

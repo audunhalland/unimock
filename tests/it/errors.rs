@@ -117,39 +117,47 @@ fn multithread_error_reporting_works() {
 }
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
-#[test]
-#[should_panic(
-    expected = "Foo::foo(2): Cannot return value more than once from Foo::foo(_) at tests/it/errors.rs:130, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
-)]
-fn should_complain_when_returning_unquantified_value_more_then_once() {
+mod should_complain_when_returning_unquantified_value_more_then_once {
+    use super::*;
+
     #[unimock(api=FooMock)]
     trait Foo {
         fn foo(&self, arg: i32) -> i32;
     }
 
-    let unimock = Unimock::new(FooMock::foo.some_call(matching!(_)).returns(42));
+    #[test]
+    #[should_panic(
+        expected = "Foo::foo(2): Cannot return value more than once from Foo::foo(_) at tests/it/errors.rs:133, because of missing Clone bound. Try using `.each_call()` or explicitly quantifying the response."
+    )]
+    fn test() {
+        let unimock = Unimock::new(FooMock::foo.some_call(matching!(_)).returns(42));
 
-    assert_eq!(42, unimock.foo(1));
-    unimock.foo(2);
+        assert_eq!(42, unimock.foo(1));
+        unimock.foo(2);
+    }
 }
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
-#[test]
-#[should_panic(
-    expected = "Foo::foo: Expected Foo::foo(2) at tests/it/errors.rs:149 to match exactly 1 call, but it actually matched no calls."
-)]
-fn should_require_both_calls_2_some_call() {
+mod should_require_both_calls_2_some_call {
+    use super::*;
+
     #[unimock(api=FooMock)]
     trait Foo {
         fn foo(&self, arg: i32) -> i32;
     }
 
-    let unimock = Unimock::new((
-        FooMock::foo.some_call(matching!(1)).returns(42),
-        FooMock::foo.some_call(matching!(2)).returns(1337),
-    ));
+    #[test]
+    #[should_panic(
+        expected = "Foo::foo: Expected Foo::foo(2) at tests/it/errors.rs:156 to match exactly 1 call, but it actually matched no calls."
+    )]
+    fn test() {
+        let unimock = Unimock::new((
+            FooMock::foo.some_call(matching!(1)).returns(42),
+            FooMock::foo.some_call(matching!(2)).returns(1337),
+        ));
 
-    assert_eq!(42, unimock.foo(1));
+        assert_eq!(42, unimock.foo(1));
+    }
 }
 
 #[cfg(feature = "std")]

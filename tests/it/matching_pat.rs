@@ -3,8 +3,9 @@ use unimock::*;
 
 /// Regression test for compile error:
 /// Matching on an AsRef<str> type that also implements Debug
-#[test]
-fn matching_str_newtype_with_debug() {
+mod matching_str_newtype_with_debug {
+    use super::*;
+
     #[derive(Debug)]
     pub struct Email(String);
 
@@ -19,28 +20,35 @@ fn matching_str_newtype_with_debug() {
         fn take(&self, email: &Email);
     }
 
-    let u = Unimock::new(
-        TakesEmailMock::take
-            .next_call(matching!("foo@bar"))
-            .returns(()),
-    );
+    #[test]
+    fn test() {
+        let u = Unimock::new(
+            TakesEmailMock::take
+                .next_call(matching!("foo@bar"))
+                .returns(()),
+        );
 
-    <Unimock as TakesEmail>::take(&u, &Email("foo@bar".to_string()));
+        <Unimock as TakesEmail>::take(&u, &Email("foo@bar".to_string()));
+    }
 }
 
-#[test]
-fn matching_str_or() {
+mod matching_str_or {
+    use super::*;
+
     #[unimock(api = StringInputMock)]
     trait StringInput {
         fn f(&self, s: String);
     }
 
-    let u = Unimock::new(
-        StringInputMock::f
-            .each_call(matching!("a" | "b"))
-            .returns(()),
-    );
-    u.f("a".to_string());
+    #[test]
+    fn test() {
+        let u = Unimock::new(
+            StringInputMock::f
+                .each_call(matching!("a" | "b"))
+                .returns(()),
+        );
+        u.f("a".to_string());
+    }
 }
 
 mod debug_matching_literal_autoref_debug {
