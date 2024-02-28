@@ -3,6 +3,8 @@ use unimock::*;
 
 use core::any::Any;
 
+use crate::AsyncTest;
+
 mod unmock_simple {
     use super::*;
 
@@ -66,7 +68,7 @@ mod unmock_simple {
 
     #[test]
     #[should_panic(
-        expected = "Spyable::concat: Expected Spyable::concat(\"\", \"\") at tests/it/unmock.rs:73 to match at least 1 call, but it actually matched no calls."
+        expected = "Spyable::concat: Expected Spyable::concat(\"\", \"\") at tests/it/unmock.rs:75 to match at least 1 call, but it actually matched no calls."
     )]
     fn unmatched_pattern_still_panics() {
         Unimock::new(SpyableMock::concat.stub(|each| {
@@ -118,30 +120,33 @@ mod unmock_async {
         f.factorial(input - 1).await * input
     }
 
-    #[tokio::test]
-    async fn test() {
-        assert_eq!(
-            120,
-            Unimock::new_partial(
-                AsyncFactorialMock::factorial
-                    .each_call(matching!(1))
-                    .returns(1_u32)
-            )
-            .factorial(5)
-            .await,
-            "works using spy"
-        );
+    #[test]
+    fn test() {
+        async {
+            assert_eq!(
+                120,
+                Unimock::new_partial(
+                    AsyncFactorialMock::factorial
+                        .each_call(matching!(1))
+                        .returns(1_u32)
+                )
+                .factorial(5)
+                .await,
+                "works using spy"
+            );
 
-        assert_eq!(
-            120,
-            Unimock::new(AsyncFactorialMock::factorial.stub(|each| {
-                each.call(matching!((input) if *input <= 1)).returns(1_u32);
-                each.call(matching!(_)).unmocked();
-            }))
-            .factorial(5)
-            .await,
-            "works using mock"
-        );
+            assert_eq!(
+                120,
+                Unimock::new(AsyncFactorialMock::factorial.stub(|each| {
+                    each.call(matching!((input) if *input <= 1)).returns(1_u32);
+                    each.call(matching!(_)).unmocked();
+                }))
+                .factorial(5)
+                .await,
+                "works using mock"
+            );
+        }
+        .test()
     }
 }
 

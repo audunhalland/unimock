@@ -1,3 +1,4 @@
+use crate::AsyncTest;
 use unimock::*;
 
 mod without_unmock {
@@ -12,13 +13,17 @@ mod without_unmock {
         fn without_unmock<'a>(&'a self, arg: i32) -> Self::Fut<'a>;
     }
 
-    #[tokio::test]
-    async fn should_mock_without_unmock() {
-        let unimock = Unimock::new(FooMock::without_unmock.each_call(matching!(10)).returns(20));
+    #[test]
+    fn should_mock_without_unmock() {
+        async {
+            let unimock =
+                Unimock::new(FooMock::without_unmock.each_call(matching!(10)).returns(20));
 
-        let answer = unimock.without_unmock(10).await;
+            let answer = unimock.without_unmock(10).await;
 
-        assert_eq!(20, answer);
+            assert_eq!(20, answer);
+        }
+        .test()
     }
 }
 
@@ -38,13 +43,16 @@ mod with_unmock {
         arg * 2
     }
 
-    #[tokio::test]
-    async fn should_mock_with_unmock() {
-        let test = Unimock::new(FooMock::with_unmock.each_call(matching!(42)).unmocked());
+    #[test]
+    fn should_mock_with_unmock() {
+        async {
+            let test = Unimock::new(FooMock::with_unmock.each_call(matching!(42)).unmocked());
 
-        let answer = test.with_unmock(42).await;
+            let answer = test.with_unmock(42).await;
 
-        assert_eq!(84, answer);
+            assert_eq!(84, answer);
+        }
+        .test()
     }
 }
 
@@ -96,20 +104,23 @@ mod reference_argument_works_with_explicit_lifetime {
         deps.return_ref(input).await
     }
 
-    #[tokio::test]
-    async fn test_return_ref() {
-        let return_self = TestReturnSelf {
-            value: "val".into(),
-        };
-        assert_eq!(Ok("val"), wrap_return_ref(&return_self, "lol").await);
+    #[test]
+    fn test_return_ref() {
+        async {
+            let return_self = TestReturnSelf {
+                value: "val".into(),
+            };
+            assert_eq!(Ok("val"), wrap_return_ref(&return_self, "lol").await);
 
-        let u = Unimock::new(
-            ReturnRefMock::return_ref
-                .next_call(matching!("foo"))
-                .returns(Ok("bar")),
-        );
+            let u = Unimock::new(
+                ReturnRefMock::return_ref
+                    .next_call(matching!("foo"))
+                    .returns(Ok("bar")),
+            );
 
-        assert_eq!(Ok("bar"), wrap_return_ref(&u, "foo").await);
+            assert_eq!(Ok("bar"), wrap_return_ref(&u, "foo").await);
+        }
+        .test()
     }
 }
 
