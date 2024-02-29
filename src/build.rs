@@ -447,7 +447,10 @@ where
     }
 
     /// Expect this call pattern to be matched at least the specified number of times.
-    pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast> {
+    pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
+    where
+        O: Ordering<Kind = InAnyOrder>,
+    {
         self.wrapper.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
             wrapper: self.wrapper,
