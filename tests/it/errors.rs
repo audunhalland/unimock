@@ -187,7 +187,7 @@ fn no_default_impl() {
     let u = Unimock::new(
         SingleArgMock::method1
             .next_call(matching!())
-            .default_implementation(),
+            .applies_default_impl(),
     );
     u.method1("");
 }

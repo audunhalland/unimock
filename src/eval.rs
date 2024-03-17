@@ -1,13 +1,11 @@
 use crate::alloc::{Box, String};
-use crate::call_pattern::{
-    CallPattern, DowncastResponder, DynResponder, PatIndex, PatternError, PatternResult,
-};
+use crate::call_pattern::{CallPattern, PatIndex, PatternError, PatternResult};
 use crate::error::{self};
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::mismatch::Mismatches;
-use crate::output::Output;
 use crate::private::{ApplyClosure, Evaluation, MismatchReporter};
+use crate::responder::{DowncastResponder, DynResponder};
 use crate::state::SharedState;
 use crate::{debug, MockFnInfo, Unimock};
 use crate::{FallbackMode, MockFn};
@@ -36,51 +34,19 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
 
     match dyn_ctx.eval_dyn(&|pattern, reporter| pattern.match_inputs::<F>(&inputs, reporter))? {
         EvalResult::Responder(eval_responder) => match eval_responder.dyn_responder {
-            DynResponder::Cell(dyn_cell_responder) => match dyn_ctx
-                .downcast_responder::<F, _>(dyn_cell_responder, &eval_responder)?
-                .cell
-                .try_take()
-            {
-                Some(response) => {
-                    let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                        *response,
-                        &unimock.value_chain,
-                    );
-
-                    Ok(Evaluation::Evaluated(output))
+            DynResponder::Return(dyn_return_responder) => {
+                match dyn_ctx
+                    .downcast_responder::<F, _>(dyn_return_responder, &eval_responder)?
+                    .get_output()
+                {
+                    Some(output) => Ok(Evaluation::Evaluated(output)),
+                    None => Err(MockError::CannotReturnValueMoreThanOnce {
+                        fn_call: dyn_ctx.fn_call(),
+                        pattern: eval_responder
+                            .fn_mocker
+                            .debug_pattern(eval_responder.pat_index),
+                    }),
                 }
-                None => Err(MockError::CannotReturnValueMoreThanOnce {
-                    fn_call: dyn_ctx.fn_call(),
-                    pattern: eval_responder
-                        .fn_mocker
-                        .debug_pattern(eval_responder.pat_index),
-                }),
-            },
-            DynResponder::Borrow(dyn_borrow_responder) => {
-                let borrow_responder =
-                    dyn_ctx.downcast_responder::<F, _>(dyn_borrow_responder, &eval_responder)?;
-                let output_result =
-                    <F::Output<'u> as Output<'u, F::Response>>::try_from_borrowed_response(
-                        &borrow_responder.borrowable,
-                    );
-
-                match output_result {
-                    Ok(output) => Ok(Evaluation::Evaluated(output)),
-                    Err(sig_err) => panic!(
-                        "BUG: Signature error in {}: {:?}",
-                        dyn_ctx.fn_call(),
-                        sig_err
-                    ),
-                }
-            }
-            DynResponder::InputsFn(dyn_fn_responder) => {
-                let fn_responder =
-                    dyn_ctx.downcast_responder::<F, _>(dyn_fn_responder, &eval_responder)?;
-                let output = <F::Output<'u> as Output<'u, F::Response>>::from_response(
-                    (fn_responder.func)(inputs),
-                    &unimock.value_chain,
-                );
-                Ok(Evaluation::Evaluated(output))
             }
             DynResponder::StaticApply(dyn_responder) => {
                 let apply_fn_responder =
@@ -112,7 +78,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                 msg: msg.clone(),
             }),
             DynResponder::Unmock => Ok(Evaluation::Unmocked(inputs)),
-            DynResponder::CallDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),
+            DynResponder::ApplyDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),
         },
         EvalResult::Unmock => Ok(Evaluation::Unmocked(inputs)),
         EvalResult::CallDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),

@@ -115,7 +115,7 @@ mod reference_argument_works_with_explicit_lifetime {
             let u = Unimock::new(
                 ReturnRefMock::return_ref
                     .next_call(matching!("foo"))
-                    .returns(Ok("bar")),
+                    .returns(Ok::<_, ()>("bar")),
             );
 
             assert_eq!(Ok("bar"), wrap_return_ref(&u, "foo").await);

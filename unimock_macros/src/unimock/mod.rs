@@ -257,12 +257,9 @@ fn def_mock_fn(
         method.mockfn_doc_attrs(&trait_info.trait_path)
     };
 
-    let response_assoc_type = method
+    let output_kind_assoc_type = method
         .output_structure
-        .response_associated_type(prefix, trait_info, attr);
-    let output_assoc_type = method
-        .output_structure
-        .output_associated_type(prefix, trait_info, attr);
+        .output_kind_assoc_type(prefix, trait_info, attr);
     let apply_fn_params = method
         .adapted_sig
         .inputs
@@ -297,9 +294,8 @@ fn def_mock_fn(
         #(#mirrored_attrs)*
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = #input_types_tuple;
-            type Response = #response_assoc_type;
-            type Output<'u> = #output_assoc_type;
-            type ApplyFn = dyn Fn(#(#apply_fn_params),*) -> #prefix::Response<Self> + Send + Sync;
+            type OutputKind = #output_kind_assoc_type;
+            type ApplyFn = dyn Fn(#(#apply_fn_params),*) -> #prefix::Respond<Self> + Send + Sync;
 
             fn info() -> #prefix::MockFnInfo {
                 #prefix::MockFnInfo::new::<Self>()
@@ -329,7 +325,7 @@ fn def_mock_fn(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = #input_types_tuple,
-                        Response = #response_assoc_type,
+                        OutputKind = #output_kind_assoc_type,
                         ApplyFn = <#mock_fn_ident #generic_args as #prefix::MockFn>::ApplyFn,
                     >
                         #where_clause

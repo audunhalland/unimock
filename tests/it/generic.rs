@@ -345,7 +345,7 @@ mod generics_and_associated_type {
     use super::*;
 
     // the macro has to write the response type as:
-    // `type Response = Owned<Option<<Unimock as Mock<T>>::Assoc>>`
+    // `type OutputKind = Owned<Option<<Unimock as Mock<T>>::Assoc>>`
     #[unimock(api=MockMock, type Assoc = ();)]
     trait Mock<T> {
         type Assoc;

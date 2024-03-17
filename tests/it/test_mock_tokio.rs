@@ -16,9 +16,7 @@ fn test_tokio_read() {
                     buf.put_slice(&[1, 2, 3]);
 
                     // Can return Poll::Ready explicitly.
-                    // unfortunately this requires a type annotation
-                    // as type inference goes bonkers.
-                    respond::<AsyncReadMock::poll_read, _>(Poll::Ready(Ok(())))
+                    respond(Poll::Ready(Ok(())))
                 }),
             AsyncReadMock::poll_read
                 .next_call(matching!())

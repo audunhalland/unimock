@@ -76,7 +76,7 @@ pub mod process {
     /// Unimock mock API for [std::process::Termination].
     #[allow(non_snake_case)]
     pub mod TerminationMock {
-        use crate::{output::Owned, MockFn, Response};
+        use crate::{output::Owning, MockFn, Respond};
         use std::{boxed::Box, string::String};
 
         #[allow(non_camel_case_types)]
@@ -88,9 +88,8 @@ pub mod process {
 
         impl MockFn for report {
             type Inputs<'i> = ();
-            type Response = Owned<std::process::ExitCode>;
-            type Output<'u> = Self::Response;
-            type ApplyFn = dyn Fn() -> Response<Self> + Send + Sync;
+            type OutputKind = Owning<std::process::ExitCode>;
+            type ApplyFn = dyn Fn() -> Respond<Self> + Send + Sync;
 
             fn info() -> crate::MockFnInfo {
                 let mut info = crate::MockFnInfo::new::<Self>().path(&["Termination", "report"]);

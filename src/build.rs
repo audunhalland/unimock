@@ -1,21 +1,26 @@
 use core::marker::PhantomData;
 
 use crate::alloc::vec;
+use crate::alloc::{String, ToString, Vec};
 use crate::call_pattern::*;
 use crate::fn_mocker::PatternMatchMode;
-use crate::output::{IntoCloneResponder, IntoOnceResponder};
+use crate::output::{IntoReturn, IntoReturnOnce, Return, ReturnDefault};
 use crate::property::*;
+use crate::responder::{Applier, BoxedApplier, DynResponder, IntoReturner};
 use crate::*;
+use dyn_builder::*;
 
 pub(crate) mod dyn_builder {
     use crate::alloc::{vec, Vec};
-    use crate::output::ResponderError;
-    use crate::Responder;
+    use crate::output::OutputError;
+    use crate::responder::Returner;
+    use crate::MockFn;
 
     use crate::{
-        call_pattern::{DynCallOrderResponder, DynInputMatcher, DynResponder},
+        call_pattern::{DynCallOrderResponder, DynInputMatcher},
         counter,
         fn_mocker::PatternMatchMode,
+        responder::DynResponder,
     };
 
     // note: appears in public trait signatures
@@ -25,7 +30,7 @@ pub(crate) mod dyn_builder {
         pub(crate) responders: Vec<DynCallOrderResponder>,
         pub(crate) count_expectation: counter::CallCountExpectation,
         pub(crate) current_response_index: usize,
-        pub(crate) responder_error: Option<ResponderError>,
+        pub(crate) responder_error: Option<OutputError>,
     }
 
     impl DynCallPatternBuilder {
@@ -73,9 +78,12 @@ pub(crate) mod dyn_builder {
             }
         }
 
-        pub fn push_responder_result(&mut self, result: Result<Responder, ResponderError>) {
+        pub fn push_returner_result<F: MockFn>(
+            &mut self,
+            result: Result<Returner<F>, OutputError>,
+        ) {
             match result {
-                Ok(responder) => self.push_responder(responder.0),
+                Ok(responder) => self.push_responder(responder.into_dyn_responder()),
                 Err(error) => {
                     let dyn_builder = self.inner_mut();
                     if dyn_builder.responder_error.is_none() {
@@ -109,9 +117,6 @@ pub(crate) mod dyn_builder {
         }
     }
 }
-
-use crate::alloc::{String, ToString, Vec};
-use dyn_builder::*;
 
 /// Builder for defining a series of cascading call patterns on a specific [MockFn].
 pub struct Each<F: MockFn> {
@@ -176,20 +181,38 @@ pub struct DefineResponse<'p, F: MockFn, O: Ordering> {
     ordering: O,
 }
 
-impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O>
-where
-    <F::Response as Respond>::Type: Send + Sync,
-{
+impl<'p, F: MockFn, O: Ordering> DefineResponse<'p, F, O> {
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it.
     ///
+    /// The value can be anything that can be converted [Into] the mock function output.
+    ///
     /// Unless explicitly configured on the returned [QuantifyReturnValue], the return value specified here
     ///     can be returned only once, because this method does not require a [Clone] bound.
     /// To be able to return this value multiple times, quantify it explicitly.
+    ///
+    /// # Example
+    /// Using `returns(&str)` for a method that outputs `String`:
+    /// ```
+    /// # use unimock::*;
+    /// #[unimock(api=TraitMock)]
+    /// trait Trait {
+    ///     fn func(&self) -> String;
+    /// }
+    ///
+    /// let u = Unimock::new(
+    ///     TraitMock::func
+    ///         .next_call(matching!())
+    ///         .returns("hello")
+    /// );
+    ///
+    /// assert_eq!("hello", u.func());
+    /// ```
     pub fn returns<T>(self, value: T) -> QuantifyReturnValue<'p, F, T, O>
     where
-        T: IntoOnceResponder<F::Response>,
+        T: IntoReturnOnce<F::OutputKind>,
+        <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
     {
         QuantifyReturnValue {
             wrapper: self.wrapper,
@@ -215,9 +238,33 @@ where
     /// Specify the output of the call pattern by providing a value.
     /// The output type cannot contain non-static references.
     /// It must also be [Send] and [Sync] because unimock needs to store it, and [Clone] because it should be able to be returned multiple times.
-    pub fn returns<V: IntoCloneResponder<F::Response>>(mut self, value: V) -> Quantify<'p, F, O> {
+    ///
+    /// The value can be anything that can be converted [Into] the mock function output.
+    ///
+    /// # Example
+    /// ```
+    /// # use unimock::*;
+    /// #[unimock(api=TraitMock)]
+    /// trait Trait {
+    ///     fn get(&self) -> i32;
+    /// }
+    ///
+    /// let u = Unimock::new(
+    ///     TraitMock::get
+    ///         .each_call(matching!())
+    ///         .returns(13)
+    /// );
+    ///
+    /// assert_eq!(13, u.get());
+    /// assert_eq!(13, u.get());
+    /// ```
+    pub fn returns<T>(mut self, value: T) -> Quantify<'p, F, O>
+    where
+        T: IntoReturn<F::OutputKind>,
+        <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
+    {
         self.wrapper
-            .push_responder_result(value.into_clone_responder::<F>());
+            .push_returner_result(value.into_return().map(|r| r.into_returner()));
         self.quantify()
     }
 }
@@ -246,33 +293,134 @@ macro_rules! define_response_common_impl {
             }
 
             /// Specify the response of the call pattern by calling `Default::default()`.
+            ///
+            /// # Example
+            #[doc = concat!("\
+```
+# use unimock::*;
+#[unimock(api=TraitMock)]
+trait Trait {
+    fn get(&self) -> Option<String>;
+}
+
+let u = Unimock::new(
+    TraitMock::get
+        .next_call(matching!())
+        .returns_default()
+);
+
+assert_eq!(None, u.get());
+```
+",
+)]
             pub fn returns_default(mut self) -> Quantify<'p, F, O>
             where
-                <F::Response as Respond>::Type: Default,
+                F::OutputKind: Return,
+                <F::OutputKind as Return>::Type: ReturnDefault<F::OutputKind>,
+                <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
             {
-                self.wrapper.push_responder(
-                    InputsFnResponder::<F> {
-                        func: crate::alloc::Box::new(|_| Default::default()),
-                    }
-                    .into_dyn_responder(),
-                );
+                let default = <<F::OutputKind as Return>::Type as ReturnDefault<
+                                                                                F::OutputKind,
+                                                                            >>::return_default();
+                self.wrapper
+                    .push_returner_result(Ok(default.into_returner()));
                 self.quantify()
             }
 
+
             /// Specify the response of the call pattern by applying the given function that can then compute it based on input parameters.
+            ///
+            /// The applied function can also respond with types that don't implement [Send] and [Sync].
+            ///
+            /// # Example
+            #[doc = concat!("\
+```
+# use unimock::*;
+use std::cell::Cell;
+
+#[unimock(api=TraitMock)]
+trait Trait {
+    fn get_cell(&self, input: i32) -> Cell<i32>;
+}
+
+let u = Unimock::new(
+    TraitMock::get_cell
+        .next_call(matching!(84))
+        .applies(&|input| respond(Cell::new(input / 2)))
+);
+
+assert_eq!(Cell::new(42), u.get_cell(84));
+```
+",
+)]
+            /// # Parameter mutation
+            #[doc = concat!("\
+```
+# use unimock::*;
+use std::cell::Cell;
+
+#[unimock(api=TraitMock)]
+trait Trait {
+    fn mutate(&self, input: &mut i32);
+}
+
+let u = Unimock::new(
+    TraitMock::mutate
+        .next_call(matching!(41))
+        .applies(&|input| {
+            *input += 1;
+            respond(())
+        })
+);
+
+let mut number = 41;
+u.mutate(&mut number);
+assert_eq!(number, 42);
+```
+",
+)]
             pub fn applies(mut self, apply_fn: &'static F::ApplyFn) -> Quantify<'p, F, O> {
                 self.wrapper
-                    .push_responder(StaticApplyResponder::<F> { apply_fn }.into_dyn_responder());
+                    .push_responder(Applier::<F> { apply_fn }.into_dyn_responder());
                 self.quantify()
             }
 
             /// Specify the response of the call pattern by invoking the given closure that can then compute it based on input parameters.
+            #[doc = concat!("\
+```
+# use unimock::*;
+use std::sync::{Arc, Mutex};
+
+#[unimock(api=TraitMock)]
+trait Trait {
+    fn get(&self) -> i32;
+}
+
+let mutex: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+
+let u = Unimock::new(
+    TraitMock::get
+        .each_call(matching!())
+        .applies_closure({
+            let mutex = mutex.clone();
+            Box::new(move || {
+                respond(*mutex.lock().unwrap())
+            })
+        })
+);
+
+assert_eq!(0, u.get());
+*mutex.lock().unwrap() = 42;
+assert_eq!(42, u.get());
+```
+",
+            )]
             pub fn applies_closure(
                 mut self,
                 apply_fn: crate::alloc::Box<F::ApplyFn>,
             ) -> Quantify<'p, F, O> {
                 self.wrapper
-                    .push_responder(BoxedApplyResponder::<F> { apply_fn }.into_dyn_responder());
+                    .push_responder(BoxedApplier::<F> { apply_fn }.into_dyn_responder());
                 self.quantify()
             }
 
@@ -288,6 +436,32 @@ macro_rules! define_response_common_impl {
             ///
             /// For this to work, the mocked trait must be configured with an `unmock_with=[..]` parameter.
             /// If unimock doesn't find a way to unmock the function, this will panic when the function is called.
+            #[doc = concat!("\
+```
+# use unimock::*;
+#[unimock(api=FibMock, unmock_with=[my_fibonacci])]
+trait Fib {
+    fn fib(&self, input: i32) -> i32;
+}
+
+// note: no recursion guard:
+fn my_fibonacci(f: &impl Fib, input: i32) -> i32 {
+    f.fib(input - 1) + f.fib(input - 2)
+}
+
+let u = Unimock::new((
+    FibMock::fib
+        .each_call(matching!(1 | 2))
+        .returns(1),
+    FibMock::fib
+        .each_call(matching!(_))
+        .unmocked()
+));
+
+assert_eq!(55, u.fib(10));
+```
+",
+)]
             pub fn unmocked(mut self) -> Quantify<'p, F, O> {
                 self.wrapper.push_responder(DynResponder::Unmock);
                 self.quantify()
@@ -296,8 +470,38 @@ macro_rules! define_response_common_impl {
             /// Instruct this call pattern to invoke the method's default implementation.
             ///
             /// If the method has no default implementation, the method will panic when called.
-            pub fn default_implementation(mut self) -> Quantify<'p, F, O> {
-                self.wrapper.push_responder(DynResponder::CallDefaultImpl);
+            ///
+            /// It is not required to pre-register calls to a default-implemented methods like this,
+            /// but it's useful for _verifying_ that they are in fact called.
+            ///
+            /// # Example
+            #[doc = concat!("\
+```
+# use unimock::*;
+#[unimock(api=TraitMock)]
+trait Trait {
+    fn required(&self, input: i32) -> i32;
+    fn provided(&self) -> i32 {
+        self.required(0)
+    }
+}
+
+let u = Unimock::new((
+    TraitMock::provided
+        .next_call(matching!())
+        .applies_default_impl(),
+    // the above call delegates to the required method:
+    TraitMock::required
+        .next_call(matching!(0))
+        .returns(42)
+));
+
+assert_eq!(42, u.provided());
+```
+",
+            )]
+            pub fn applies_default_impl(mut self) -> Quantify<'p, F, O> {
+                self.wrapper.push_responder(DynResponder::ApplyDefaultImpl);
                 self.quantify()
             }
 
@@ -319,7 +523,8 @@ define_response_common_impl!(DefineMultipleResponses);
 pub struct QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoOnceResponder<F::Response>,
+    T: IntoReturnOnce<F::OutputKind>,
+    <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
 {
     pub(crate) wrapper: DynBuilderWrapper<'p>,
     return_value: Option<T>,
@@ -330,15 +535,24 @@ where
 impl<'p, F, T, O> QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoOnceResponder<F::Response>,
+    T: IntoReturnOnce<F::OutputKind>,
     O: Copy,
+    <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
 {
     /// Expect this call pattern to be matched exactly once.
     ///
     /// This is the only quantifier that works together with return values that don't implement [Clone].
-    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact> {
-        self.wrapper
-            .push_responder_result(self.return_value.take().unwrap().into_once_responder::<F>());
+    pub fn once(mut self) -> QuantifiedResponse<'p, F, O, Exact>
+    where
+        <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
+    {
+        self.wrapper.push_returner_result(
+            self.return_value
+                .take()
+                .unwrap()
+                .into_return_once()
+                .map(|r| r.into_returner()),
+        );
         self.wrapper.quantify(1, counter::Exactness::Exact);
         QuantifiedResponse {
             wrapper: self.wrapper.steal(),
@@ -351,13 +565,15 @@ where
     /// Expect this call pattern to be matched exactly the specified number of times.
     pub fn n_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, Exact>
     where
-        T: IntoCloneResponder<F::Response>,
+        T: IntoReturn<F::OutputKind>,
+        <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
     {
-        self.wrapper.push_responder_result(
+        self.wrapper.push_returner_result(
             self.return_value
                 .take()
                 .unwrap()
-                .into_clone_responder::<F>(),
+                .into_return()
+                .map(|r| r.into_returner()),
         );
         self.wrapper.quantify(times, counter::Exactness::Exact);
         QuantifiedResponse {
@@ -374,14 +590,16 @@ where
     /// Strictly ordered call patterns must have exact quantification.
     pub fn at_least_times(mut self, times: usize) -> QuantifiedResponse<'p, F, O, AtLeast>
     where
-        T: IntoCloneResponder<F::Response>,
+        T: IntoReturn<F::OutputKind>,
         O: Ordering<Kind = InAnyOrder>,
+        <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
     {
-        self.wrapper.push_responder_result(
+        self.wrapper.push_returner_result(
             self.return_value
                 .take()
                 .unwrap()
-                .into_clone_responder::<F>(),
+                .into_return()
+                .map(|r| r.into_returner()),
         );
         self.wrapper.quantify(times, counter::Exactness::AtLeast);
         QuantifiedResponse {
@@ -396,8 +614,9 @@ where
 impl<'p, F, T, O> Clause for QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoOnceResponder<F::Response>,
+    T: IntoReturnOnce<F::OutputKind>,
     O: Copy + Ordering,
+    <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
 {
     fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), String> {
         self.once().deconstruct(sink)
@@ -412,12 +631,13 @@ where
 impl<'p, F, T, O> Drop for QuantifyReturnValue<'p, F, T, O>
 where
     F: MockFn,
-    T: IntoOnceResponder<F::Response>,
+    T: IntoReturnOnce<F::OutputKind>,
+    <<F as MockFn>::OutputKind as Kind>::Return: IntoReturner<F>,
 {
     fn drop(&mut self) {
         if let Some(return_value) = self.return_value.take() {
             self.wrapper
-                .push_responder_result(return_value.into_once_responder::<F>());
+                .push_returner_result(return_value.into_return_once().map(|r| r.into_returner()));
         }
     }
 }

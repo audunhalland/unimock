@@ -1,3 +1,8 @@
+//! tests unimock support for borrowed generic parameters, e.g.:
+//!
+//! `Option<&T>`
+//! `Poll<Result<&T, E>>`
+
 use core::task::Poll;
 
 use unimock::alloc::{vec, ToString, Vec};
@@ -68,13 +73,13 @@ fn in_result() {
     let u = Unimock::new((
         InResultMock::bytes
             .next_call(matching!())
-            .returns(Ok(vec![42])),
+            .returns(Ok::<_, clone::Nope>(vec![42])),
         InResultMock::bytes
             .next_call(matching!())
             .returns(Err::<&[u8], _>(clone::Nope)),
         InResultMock::u32_clone
             .each_call(matching!())
-            .returns(Ok(42))
+            .returns(Ok::<_, clone::Sure>(42))
             .at_least_times(2),
     ));
 
@@ -89,7 +94,7 @@ fn in_result_clone_acrobatics() {
     let u = Unimock::new((
         InResultMock::ok_no_clone
             .each_call(matching!(true))
-            .returns(Ok(clone::Nope)),
+            .returns(Ok::<_, clone::Sure>(clone::Nope)),
         InResultMock::ok_no_clone
             .each_call(matching!(false))
             .returns(Err::<&clone::Nope, _>(clone::Sure)),
@@ -108,13 +113,13 @@ fn in_result_clone_acrobatics() {
 
 #[test]
 #[should_panic(
-    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/mixed.rs:116 to match exactly 1 call, but it actually matched 2 calls."
+    expected = "InResult::ok_no_clone: Expected InResult::ok_no_clone(_) at tests/it/mixed.rs:121 to match exactly 1 call, but it actually matched 2 calls."
 )]
 fn in_result_may_multi_respond_on_ok_no_clone() {
     let u = Unimock::new(
         InResultMock::ok_no_clone
             .some_call(matching!(_))
-            .returns(Ok(clone::Nope)),
+            .returns(Ok::<_, clone::Sure>(clone::Nope)),
     );
 
     assert_eq!(Ok(&clone::Nope), u.ok_no_clone(true));
@@ -202,7 +207,7 @@ fn in_poll() {
     let u = Unimock::new((
         InPollMock::poll_result
             .next_call(matching!())
-            .returns(Poll::Ready(Ok(42))),
+            .returns(Poll::Ready(Ok::<_, ()>(42))),
         InPollMock::poll_option
             .next_call(matching!())
             .returns(Poll::<Option<&i32>>::Pending),
@@ -210,4 +215,39 @@ fn in_poll() {
 
     assert_eq!(Poll::Ready(Ok(&42)), <Unimock as InPoll>::poll_result(&u));
     assert_eq!(Poll::Pending, <Unimock as InPoll>::poll_option(&u));
+}
+
+mod shallow {
+    use unimock::*;
+
+    trait Lol {
+        fn f(&self) -> Result<&u32, u32>;
+    }
+
+    struct Mock;
+
+    type MyResult<T> = Result<T, u32>;
+
+    impl MockFn for Mock {
+        type Inputs<'i> = ();
+        type OutputKind = unimock::output::Shallow<MyResult<&'static u32>>;
+        type ApplyFn = ();
+
+        fn info() -> MockFnInfo {
+            MockFnInfo::new::<Self>()
+        }
+    }
+
+    impl Lol for Unimock {
+        fn f(&self) -> Result<&u32, u32> {
+            unimock::private::eval::<Mock>(self, ()).unwrap(self)
+        }
+    }
+
+    #[test]
+    fn test() {
+        let u = Unimock::new(Mock.each_call(matching!()).returns(Ok::<_, u32>(42)));
+
+        assert_eq!(<Unimock as Lol>::f(&u), Ok(&42));
+    }
 }

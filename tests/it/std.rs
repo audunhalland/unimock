@@ -118,13 +118,13 @@ fn test_fmt_io_duplex_default_impl_explicit() {
             .applies(&|f| respond(write!(f, "hello {}", "unimock".to_string()))),
         WriteMock::write_all
             .next_call(matching!(eq!(b"hello ")))
-            .default_implementation(),
+            .applies_default_impl(),
         WriteMock::write
             .next_call(matching!(eq!(b"hello ")))
             .returns(Ok(6)),
         WriteMock::write_all
             .next_call(matching!(eq!(b"unimock")))
-            .default_implementation(),
+            .applies_default_impl(),
         WriteMock::write
             .next_call(matching!(eq!(b"unimock")))
             .returns(Ok("uni".len())),
