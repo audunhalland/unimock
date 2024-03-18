@@ -45,7 +45,7 @@ rustversion = "1"
 doctest = false
 
 [package.metadata.docs.rs]
-features = ["unstable-doc-cfg", "mock-core", "mock-std"]
+features = ["unstable-doc-cfg", "mock-core", "mock-std", "mock-futures-0-3", "mock-tokio-1"]
 
 [workspace]
 members = ["unimock_macros"]
