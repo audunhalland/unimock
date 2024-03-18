@@ -105,23 +105,21 @@ There are different constraints acting on return values based on how the clause 
 ### Mutating inputs
 Many traits uses the argument mutation pattern, where there are one or more `&mut` parameters.
 
-Due to [various limitations](https://github.com/rust-lang/rust/issues/100013) in Rust's type system, Unimock needs to use a little workaround to get this working correctly.
-Unimock supports mutating _one parameter_, and it's not handled as part of the method's regular `Inputs`, but instead represented as a separate `Mutation` type.
-If a method contains more than one `&mut` parameter (besides `&mut self`), the _last one_ is currently automatically selected as the mutation.
-
-To access the `&mut` mutation, the `.mutates` combinator is used, as demonstrated in this [Display](core::fmt::Display) mock:
+To access the `&mut` parameters, a function is applied to the call pattern using `applies`:
 
 ```rust
 let mocked = Unimock::new(
     mock::core::fmt::DisplayMock::fmt
         .next_call(matching!(_))
-        .mutates(|f, _| write!(f, "mutation!"))
+        .applies(&|f| respond(write!(f, "mutation!")))
 );
 
 assert_eq!("mutation!", format!("{mocked}"));
 ```
 
-Note that the `.mutates` closure also specifies the return value, in this case [core::fmt::Result].
+The applied function also specifies the response, which is constructed by calling [respond].
+In the `fmt` case, the return type is [core::fmt::Result].
+The respond function helps with automatic type conversion and automatic borrowing.
 
 ## Combining setup clauses
 `Unimock::new()` accepts as argument anything that implements [Clause].
@@ -148,10 +146,10 @@ assert_eq!(
         &Unimock::new((
             FooMock::foo
                 .some_call(matching!(_))
-                .answers(|arg| arg * 3),
+                .applies(&|arg| respond(arg * 3)),
             BarMock::bar
                 .some_call(matching!((arg) if *arg > 20))
-                .answers(|arg| arg * 2),
+                .applies(&|arg| respond(arg * 2)),
         )),
         7
     )
@@ -165,10 +163,10 @@ assert_eq!(
         &Unimock::new((
             FooMock::foo.stub(|each| {
                 each.call(matching!(1337)).returns(1024);
-                each.call(matching!(_)).answers(|arg| arg * 3);
+                each.call(matching!(_)).applies(&|arg| respond(arg * 3));
             }),
             BarMock::bar.stub(|each| {
-                each.call(matching!((arg) if *arg > 20)).answers(|arg| arg * 2);
+                each.call(matching!((arg) if *arg > 20)).applies(&|arg| respond(arg * 2));
             }),
         )),
         7
@@ -380,7 +378,7 @@ Unimock respects the memory safety and soundness provided by Rust.
 Sometimes this fact can lead to less than optimal ergonomics.
 
 For example, in order to use `.returns(value)`, the value must (generally) implement `Clone`, `Send`, `Sync` and `'static`.
-If it's not all of those things, the slightly longer `.answers(|_| value)` can be used instead.
+If it's not all of those things, the slightly longer `.applies(&|_| respond(value))` can be used instead.
 
 #### Keep the amount of generated code to a minimum
 The unimock API is mainly built around generics and traits, instead of being macro-generated.
