@@ -10,13 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A new `applies()` function-responder has been added, in favor of the old `answers()`, `answers_leaked_ref()`, `mutates()`.
   The function passed to `applies()` API can mutate all its inputs freely.
   The downside to this new mechanism is that its return type can't be generic (i.e. `Ret: IntoResponse`).
-  Flexible return types are still supported though, but now a response has to be created explicitly calling `unimock::respond(return_value)`.
+  Flexible return types are still supported though, but now a response has to be created explicitly calling `unimock::respond(return_value)`. ([#43](https://github.com/audunhalland/unimock/pull/43))
+- Output trait hierarchy (which allows safely mocking borrowed return values) rewritten to be more flexible and future-proof than previously ([#46](https://github.com/audunhalland/unimock/pull/46))
+- `default_implementation` renamed to `applies_default_impl`.
 ### Added
-- Mocks for `tokio-1` and `futures-0-3` async read/write traits
+- Mocks for `tokio-1` and `futures-0-3` async read/write traits ([#45](https://github.com/audunhalland/unimock/pull/45))
 ### Fixed
 - Fix `matching!` against references to number literals ([#42](https://github.com/audunhalland/unimock/pull/42))
 
-## [0.5.8]
+## [0.5.8] - 2024-01-15
 ### Fixed
 - Mutation when generics are involved. ([#38](https://github.com/audunhalland/unimock/pull/38))
 

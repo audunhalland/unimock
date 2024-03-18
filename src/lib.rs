@@ -450,8 +450,10 @@ pub mod alloc {
 
 /// Builder pattern types used for defining mocked behaviour.
 pub mod build;
+
 /// Function outputs.
 pub mod output;
+
 /// Traits and types used for describing the properties of various mock types.
 pub mod property;
 
@@ -477,7 +479,6 @@ mod default_impl_delegator;
 
 mod assemble;
 mod call_pattern;
-mod cell;
 mod clause;
 mod counter;
 mod debug;
@@ -485,9 +486,11 @@ mod error;
 mod eval;
 mod fn_mocker;
 mod mismatch;
+mod responder;
 mod state;
 mod teardown;
 
+use core::any::Any;
 use core::any::TypeId;
 use core::fmt::Debug;
 use core::panic::RefUnwindSafe;
@@ -499,7 +502,7 @@ use alloc::Box;
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
 use debug::TraitMethodPath;
-use output::{IntoResponse, Respond, StaticRef};
+use output::{static_ref::Reference, IntoRespond, Kind, StaticRef};
 use private::{DefaultImplDelegator, Matching};
 
 ///
@@ -1023,15 +1026,12 @@ pub trait MockFn: Sized + 'static {
 
     /// A type that describes how the mocked function responds.
     ///
-    /// The Respond trait describes a type used internally to store a response value.
+    /// The [Kind] trait describes a type used internally to store a response value.
     ///
     /// The response value is Unimock's internal representation of the function's return value between two points it time:
     /// 1. The user specifies it upfront as part of a Clause.
     /// 2. The conversion of this value into the mocked function's final output value.
-    type Response: output::Respond;
-
-    /// A type that describes the mocked function's actual output type.
-    type Output<'u>: output::Output<'u, Self::Response>;
+    type OutputKind: output::Kind;
 
     /// The function type used for function application on a call pattern.
     type ApplyFn: ?Sized + Send + Sync;
@@ -1202,46 +1202,110 @@ pub trait Clause {
     fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), alloc::String>;
 }
 
-// Hidden responder wrapper used in the Respond/RespondOnce traits hidden methods
-#[doc(hidden)]
-pub struct Responder(call_pattern::DynResponder);
-
 /// A mocked response
-pub struct Response<F: MockFn>(ResponseInner<F>);
+pub struct Respond<F: MockFn>(RespondInner<F>);
 
-enum ResponseInner<F: MockFn> {
-    Response(<F::Response as Respond>::Type),
-    Unimock(&'static dyn Fn(Unimock) -> <F::Response as Respond>::Type),
+enum RespondInner<F: MockFn> {
+    Respond(<F::OutputKind as Kind>::Respond),
+    Mocked(&'static dyn Fn(Unimock) -> <F::OutputKind as Kind>::Respond),
 }
 
 /// Turn a value into a mock function response.
-pub fn respond<F, T>(input: T) -> Response<F>
+///
+/// This function is used to produce a return value from within [applies](build::DefineResponse::applies)-functions.
+///
+/// # Example
+/// ```rust
+/// # use unimock::*;
+/// # use std::cell::Cell;
+/// #
+/// # #[unimock(api=TraitMock)]
+/// # trait Trait {
+/// #     fn method(&self) -> Cell<u32>;
+/// # }
+/// let u = Unimock::new(
+///     TraitMock::method
+///         .each_call(matching!())
+///         .applies(&|| respond(Cell::new(42)))
+/// );
+/// let cell = u.method();
+/// ```
+pub fn respond<F, T>(input: T) -> Respond<F>
 where
     F: MockFn,
-    T: IntoResponse<<F as MockFn>::Response>,
+    T: IntoRespond<<F as MockFn>::OutputKind>,
 {
-    Response(ResponseInner::Response(input.into_response()))
+    Respond(RespondInner::Respond(input.into_respond().unwrap()))
 }
 
 /// Make a response that is a static reference to leaked memory.
 ///
 /// This method should only be used when computing a reference based
 /// on input parameters is necessary, which should not be a common use case.
-pub fn respond_leaked_ref<F, T, R>(input: T) -> Response<F>
+///
+/// # Example
+/// ```rust
+/// use unimock::*;
+///
+/// #[unimock(api=TraitMock)]
+/// trait Trait {
+///     fn get_static(&self, input: i32) -> &'static i32;
+/// }
+///
+/// let u = Unimock::new(
+///     TraitMock::get_static
+///         .next_call(matching!(84))
+///         .applies(&|input| respond_leaked_ref(input / 2))
+/// );
+///
+/// assert_eq!(&42, u.get_static(84));
+/// ```
+pub fn respond_leaked_ref<F, T, R>(input: T) -> Respond<F>
 where
-    F: MockFn<Response = StaticRef<R>>,
+    F: MockFn<OutputKind = StaticRef<R>>,
     T: core::borrow::Borrow<R> + 'static,
-    R: 'static,
+    R: Send + Sync + 'static,
 {
-    let response = <T as core::borrow::Borrow<R>>::borrow(Box::leak(Box::new(input)));
-    Response(ResponseInner::Response(response))
+    let reference = <T as core::borrow::Borrow<R>>::borrow(Box::leak(Box::new(input)));
+    Respond(RespondInner::Respond(Reference(reference)))
 }
 
 /// Respond with the unimock instance itself.
-pub fn respond_unimock<F>() -> Response<F>
+///
+/// # Example
+/// ```rust
+/// use unimock::*;
+/// use std::borrow::Borrow;
+///
+/// #[unimock(api=ThisMock)]
+/// pub trait This: Send + Sync {
+///     fn this(&self) -> &dyn This;
+/// }
+///
+/// impl Borrow<dyn This + 'static> for Unimock {
+///     fn borrow(&self) -> &(dyn This + 'static) {
+///         self
+///     }
+/// }
+///
+/// let u = Unimock::new(
+///     ThisMock::this
+///         .next_call(matching!())
+///         .applies(&respond_mocked)
+///         .n_times(2)
+/// );
+///
+/// let this = u.this();
+/// this.this();
+/// ```
+pub fn respond_mocked<F>() -> Respond<F>
 where
     F: MockFn,
-    Unimock: IntoResponse<<F as MockFn>::Response>,
+    Unimock: IntoRespond<<F as MockFn>::OutputKind>,
 {
-    Response(ResponseInner::Unimock(&|unimock| unimock.into_response()))
+    Respond(RespondInner::Mocked(&|unimock| {
+        unimock.into_respond().unwrap()
+    }))
 }
+
+type AnyBox = Box<dyn Any + Send + Sync + 'static>;

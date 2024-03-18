@@ -2,7 +2,7 @@ use crate::alloc::{format, vec, BTreeMap, Entry, String, ToString};
 use crate::build::dyn_builder::DynCallPatternBuilder;
 use crate::call_pattern::CallPattern;
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
-use crate::output::ResponderError;
+use crate::output::OutputError;
 use crate::Clause;
 use crate::{clause, MockFnInfo};
 
@@ -37,8 +37,8 @@ impl clause::term::Sink for MockAssembler {
     fn push(&mut self, info: MockFnInfo, mut builder: DynCallPatternBuilder) -> Result<(), String> {
         if let Some(responder_error) = builder.responder_error.take() {
             return Err(match responder_error {
-                ResponderError::OwnershipRequired => "Ownership required".to_string(),
-                ResponderError::NoMutexApi => {
+                OutputError::OwnershipRequired => "Ownership required".to_string(),
+                OutputError::NoMutexApi => {
                     "No Mutex API available. Enable the `spin-lock` feature in `no_std` mode, or use the `.answers` API instead of `.returns`."
                         .to_string()
                 }

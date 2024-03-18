@@ -1,8 +1,6 @@
 use crate::alloc::Vec;
-use core::any::Any;
+use crate::responder::DynResponder;
 
-use crate::cell::{Cell, CloneCell, FactoryCell};
-use crate::output::ResponderError;
 use crate::private::MismatchReporter;
 use crate::*;
 
@@ -25,9 +23,7 @@ pub enum PatternError {
 
 pub type PatternResult<T> = Result<T, PatternError>;
 
-pub(crate) type AnyBox = Box<dyn Any + Send + Sync + 'static>;
-
-fn downcast_box<T: 'static>(any_box: &AnyBox) -> PatternResult<&T> {
+pub(crate) fn downcast_box<T: 'static>(any_box: &AnyBox) -> PatternResult<&T> {
     any_box.downcast_ref().ok_or(PatternError::Downcast)
 }
 
@@ -96,181 +92,6 @@ pub(crate) struct MatchingFn<F: MockFn>(
 pub(crate) struct DynCallOrderResponder {
     pub response_index: usize,
     pub responder: DynResponder,
-}
-
-pub(crate) enum DynResponder {
-    Cell(DynCellResponder),
-    Borrow(DynBorrowResponder),
-    InputsFn(DynInputsFnResponder),
-    StaticApply(DynStaticApplyResponder),
-    BoxedApply(DynBoxedApplyResponder),
-    Panic(Box<str>),
-    Unmock,
-    CallDefaultImpl,
-}
-
-impl DynResponder {
-    #[cfg(any(feature = "std", feature = "spin-lock"))]
-    pub fn new_cell<F: MockFn>(
-        response: <F::Response as Respond>::Type,
-    ) -> Result<Self, ResponderError>
-    where
-        <F::Response as Respond>::Type: Send + Sync + 'static,
-    {
-        let response = crate::private::MutexIsh::new(Some(response));
-        Ok(CellResponder::<F> {
-            cell: Box::new(FactoryCell::new(move || {
-                response.locked(|option| option.take())
-            })),
-        }
-        .into_dyn_responder())
-    }
-
-    #[cfg(not(any(feature = "std", feature = "spin-lock")))]
-    pub fn new_cell<F: MockFn>(_: <F::Response as Respond>::Type) -> Result<Self, ResponderError>
-    where
-        <F::Response as Respond>::Type: Send + Sync + 'static,
-    {
-        Err(ResponderError::NoMutexApi)
-    }
-
-    pub fn new_clone_cell<F: MockFn>(response: <F::Response as Respond>::Type) -> Self
-    where
-        <F::Response as Respond>::Type: Clone + Send + Sync + 'static,
-    {
-        CellResponder::<F> {
-            cell: Box::new(CloneCell(response)),
-        }
-        .into_dyn_responder()
-    }
-
-    pub fn new_clone_factory_cell<F: MockFn>(
-        clone_fn: impl Fn() -> Option<<F::Response as Respond>::Type> + Send + Sync + 'static,
-    ) -> Self
-    where
-        <F::Response as Respond>::Type: Send + Sync + 'static,
-    {
-        CellResponder::<F> {
-            cell: Box::new(FactoryCell::new(clone_fn)),
-        }
-        .into_dyn_responder()
-    }
-
-    pub fn new_borrow<F: MockFn>(response: <F::Response as Respond>::Type) -> Self
-    where
-        <F::Response as Respond>::Type: Send + Sync,
-    {
-        BorrowResponder::<F> {
-            borrowable: response,
-        }
-        .into_dyn_responder()
-    }
-}
-
-pub(crate) struct DynCellResponder(AnyBox);
-pub(crate) struct DynBorrowResponder(AnyBox);
-pub(crate) struct DynInputsFnResponder(AnyBox);
-pub(crate) struct DynStaticApplyResponder(AnyBox);
-pub(crate) struct DynBoxedApplyResponder(AnyBox);
-
-pub trait DowncastResponder<F: MockFn> {
-    type Downcasted;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted>;
-}
-
-impl<F: MockFn> DowncastResponder<F> for DynCellResponder {
-    type Downcasted = CellResponder<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
-impl<F: MockFn> DowncastResponder<F> for DynBorrowResponder {
-    type Downcasted = BorrowResponder<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
-impl<F: MockFn> DowncastResponder<F> for DynInputsFnResponder {
-    type Downcasted = InputsFnResponder<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
-impl<F: MockFn> DowncastResponder<F> for DynStaticApplyResponder {
-    type Downcasted = StaticApplyResponder<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
-impl<F: MockFn> DowncastResponder<F> for DynBoxedApplyResponder {
-    type Downcasted = BoxedApplyResponder<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
-pub(crate) struct CellResponder<F: MockFn> {
-    pub cell: Box<dyn Cell<<F::Response as Respond>::Type>>,
-}
-
-pub(crate) struct BorrowResponder<F: MockFn> {
-    pub borrowable: <F::Response as Respond>::Type,
-}
-
-pub(crate) struct InputsFnResponder<F: MockFn> {
-    #[allow(clippy::type_complexity)]
-    pub func: Box<dyn (Fn(F::Inputs<'_>) -> <F::Response as Respond>::Type) + Send + Sync>,
-}
-
-pub(crate) struct StaticApplyResponder<F: MockFn> {
-    pub apply_fn: &'static F::ApplyFn,
-}
-
-pub(crate) struct BoxedApplyResponder<F: MockFn> {
-    pub apply_fn: Box<F::ApplyFn>,
-}
-
-impl<F: MockFn> CellResponder<F> {
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::Cell(DynCellResponder(Box::new(self)))
-    }
-}
-
-impl<F: MockFn> BorrowResponder<F>
-where
-    <F::Response as Respond>::Type: Send + Sync,
-{
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::Borrow(DynBorrowResponder(Box::new(self)))
-    }
-}
-
-impl<F: MockFn> InputsFnResponder<F> {
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::InputsFn(DynInputsFnResponder(Box::new(self)))
-    }
-}
-
-impl<F: MockFn> StaticApplyResponder<F> {
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::StaticApply(DynStaticApplyResponder(Box::new(self)))
-    }
-}
-
-impl<F: MockFn> BoxedApplyResponder<F> {
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::BoxedApply(DynBoxedApplyResponder(Box::new(self)))
-    }
 }
 
 fn find_responder_by_call_index(

@@ -1,11 +1,10 @@
 use core::ops::Deref;
 
+use crate::alloc::{vec, String, Vec};
 use crate::call_pattern::InputIndex;
 use crate::mismatch::{Mismatch, MismatchKind};
-use crate::output::Output;
+use crate::output::{GetOutput, IntoOutput};
 use crate::{call_pattern::MatchingFn, *};
-
-use crate::alloc::{vec, String, Vec};
 
 pub use crate::default_impl_delegator::*;
 
@@ -17,7 +16,7 @@ pub use crate::default_impl_delegator::*;
 #[non_exhaustive]
 pub enum Evaluation<'u, 'i, F: MockFn> {
     /// Function evaluated to its output.
-    Evaluated(<F::Output<'u> as Output<'u, F::Response>>::Type),
+    Evaluated(<<F::OutputKind as Kind>::Return as GetOutput>::Output<'u>),
     /// Function should be applied
     Apply(ApplyClosure<'u, F>, F::Inputs<'i>),
     /// Function not yet evaluated, should be unmocked.
@@ -30,7 +29,10 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
     /// Unwrap the `Evaluated` variant, or panic.
     /// The unimock instance must be passed in order to register that an eventual panic happened.
     #[track_caller]
-    pub fn unwrap(self, unimock: &Unimock) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
+    pub fn unwrap(
+        self,
+        unimock: &Unimock,
+    ) -> <<F::OutputKind as Kind>::Return as GetOutput>::Output<'u> {
         let error = match self {
             Self::Evaluated(output) => return output,
             Self::Apply(..) => error::MockError::NotApplied { info: F::info() },
@@ -59,16 +61,14 @@ impl<'u, F: MockFn> Deref for ApplyClosure<'u, F> {
 impl<'u, F: MockFn> ApplyClosure<'u, F> {
     pub fn __to_output(
         &self,
-        response: Response<F>,
-    ) -> <F::Output<'u> as Output<'u, F::Response>>::Type {
-        let response = match response.0 {
-            ResponseInner::Response(response) => response,
-            ResponseInner::Unimock(func) => func(self.unimock.clone()),
-        };
-        <F::Output<'u> as output::Output<'u, <F as MockFn>::Response>>::from_response(
-            response,
-            &self.unimock.value_chain,
-        )
+        respond: crate::Respond<F>,
+    ) -> <<F::OutputKind as Kind>::Return as GetOutput>::Output<'u> {
+        match respond.0 {
+            RespondInner::Respond(response) => response.into_output(&self.unimock.value_chain),
+            RespondInner::Mocked(func) => {
+                func(self.unimock.clone()).into_output(&self.unimock.value_chain)
+            }
+        }
     }
 }
 

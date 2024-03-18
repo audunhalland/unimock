@@ -956,15 +956,15 @@ mod non_sync_return {
     use super::*;
     use core::cell::Cell;
 
-    #[unimock(api = NonSendMock)]
-    trait NonSend {
+    #[unimock(api = NonSyncMock)]
+    trait NonSync {
         fn return_cell(&self) -> Cell<i32>;
     }
 
     #[test]
     fn test() {
         let u = Unimock::new(
-            NonSendMock::return_cell
+            NonSyncMock::return_cell
                 .next_call(matching!())
                 .applies(&|| respond(Cell::new(42))),
         );
@@ -1065,7 +1065,7 @@ mod borrow_dyn {
         let u = Unimock::new((
             BorrowDynMock::borrow_dyn
                 .next_call(matching!())
-                .applies(&respond_unimock),
+                .applies(&respond_mocked),
             BorrowDynMock::borrow_dyn_opt
                 .next_call(matching!())
                 .applies(&|| respond(None::<&dyn BorrowDyn>)),
