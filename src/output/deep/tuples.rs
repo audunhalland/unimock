@@ -6,7 +6,6 @@ macro_rules! deep_tuples {
             impl<$($k: Kind),+> Kind for Deep<($($k),+,)>
             {
                 type Return = AsReturn<$($k),+,>;
-                type Respond = AsRespond<$($k),+,>;
             }
 
             impl<$($k: Return),+> Return for Deep<($($k),+,)>
@@ -17,7 +16,6 @@ macro_rules! deep_tuples {
             }
 
             pub struct AsReturn<$($k: Kind),+,>($($k::Return),+,);
-            pub struct AsRespond<$($k: Kind),+,>($($k::Respond),+,);
 
             impl<$($k),+> GetOutput for AsReturn<$($k),+,>
             where
@@ -27,17 +25,6 @@ macro_rules! deep_tuples {
 
                 fn output(&self) -> Option<Self::Output<'_>> {
                     Some(($(self.$i.output()?),+,))
-                }
-            }
-
-            impl<$($k),+> IntoOutput for AsRespond<$($k),+,>
-            where
-                $($k: Kind),+,
-            {
-                type Output<'u> = ($(<<$k as Kind>::Respond as IntoOutput>::Output<'u>),+,);
-
-                fn into_output(self, value_chain: &ValueChain) -> Self::Output<'_> {
-                    ($(self.$i.into_output(value_chain)),+,)
                 }
             }
 
@@ -60,16 +47,6 @@ macro_rules! deep_tuples {
             {
                 fn into_return(self) -> OutputResult<AsReturn<$($k),+,>> {
                     Ok(AsReturn($(self.$i.into_return()?),+,))
-                }
-            }
-
-            impl<$($k),+, $($t),+> IntoRespond<Deep<($($k),+,)>> for ($($t),+,)
-            where
-                $($k: Kind),+,
-                $($t: IntoRespond<$k>),+,
-            {
-                fn into_respond(self) -> OutputResult<AsRespond<$($k),+,>> {
-                    Ok(AsRespond($(self.$i.into_respond()?),+,))
                 }
             }
         }

@@ -99,22 +99,18 @@
 //! ### Mutating inputs
 //! Many traits uses the argument mutation pattern, where there are one or more `&mut` parameters.
 //!
-//! To access the `&mut` parameters, a function is applied to the call pattern using [`applies`](crate::build::DefineResponse::applies):
+//! To access the `&mut` parameters, a function is applied to the call pattern using [`answers`](crate::build::DefineResponse::answers):
 //!
 //! ```rust
 //! # use unimock::*;
 //! let mocked = Unimock::new(
 //!     mock::core::fmt::DisplayMock::fmt
 //!         .next_call(matching!(_))
-//!         .applies(&|f| respond(write!(f, "mutation!")))
+//!         .answers(&|_, f| write!(f, "mutation!"))
 //! );
 //!
 //! assert_eq!("mutation!", format!("{mocked}"));
 //! ```
-//!
-//! The applied function also specifies the response, which is constructed by calling [respond].
-//! In the `fmt` case, the return type is [core::fmt::Result].
-//! The respond function helps with automatic type conversion and automatic borrowing.
 //!
 //! ## Combining setup clauses
 //! `Unimock::new()` accepts as argument anything that implements [Clause].
@@ -142,10 +138,10 @@
 //!         &Unimock::new((
 //!             FooMock::foo
 //!                 .some_call(matching!(_))
-//!                 .applies(&|arg| respond(arg * 3)),
+//!                 .answers(&|_, arg| arg * 3),
 //!             BarMock::bar
 //!                 .some_call(matching!((arg) if *arg > 20))
-//!                 .applies(&|arg| respond(arg * 2)),
+//!                 .answers(&|_, arg| arg * 2),
 //!         )),
 //!         7
 //!     )
@@ -159,10 +155,10 @@
 //!         &Unimock::new((
 //!             FooMock::foo.stub(|each| {
 //!                 each.call(matching!(1337)).returns(1024);
-//!                 each.call(matching!(_)).applies(&|arg| respond(arg * 3));
+//!                 each.call(matching!(_)).answers(&|_, arg| arg * 3);
 //!             }),
 //!             BarMock::bar.stub(|each| {
-//!                 each.call(matching!((arg) if *arg > 20)).applies(&|arg| respond(arg * 2));
+//!                 each.call(matching!((arg) if *arg > 20)).answers(&|_, arg| arg * 2);
 //!             }),
 //!         )),
 //!         7
@@ -428,6 +424,9 @@
 #![warn(missing_docs)]
 #![cfg_attr(feature = "unstable-doc-cfg", feature(doc_auto_cfg))]
 
+#[cfg(not(any(feature = "std", feature = "critical-section")))]
+compile_error!("At least one of the features `std` or `critical-section` must be set.");
+
 #[cfg(feature = "std")]
 extern crate std;
 
@@ -502,7 +501,7 @@ use alloc::Box;
 use assemble::MockAssembler;
 use call_pattern::DynInputMatcher;
 use debug::TraitMethodPath;
-use output::{static_ref::Reference, IntoRespond, Kind, StaticRef};
+use output::Kind;
 use private::{DefaultImplDelegator, Matching};
 
 ///
@@ -862,6 +861,13 @@ impl Unimock {
         teardown::teardown_panic(&mut self);
     }
 
+    /// Convert the given value into a reference.
+    ///
+    /// This can be useful when returning references from `answers` functions.
+    pub fn make_ref<T: Send + Sync + 'static>(&self, value: T) -> &T {
+        self.value_chain.add(value)
+    }
+
     #[track_caller]
     fn from_assembler(
         assembler_result: Result<MockAssembler, alloc::String>,
@@ -978,9 +984,14 @@ impl Drop for Unimock {
 impl std::process::Termination for Unimock {
     #[cfg(feature = "mock-std")]
     fn report(mut self) -> std::process::ExitCode {
+        use private::Eval;
+
         match private::eval::<mock::std::process::TerminationMock::report>(&self, ()) {
-            private::Evaluation::Unmocked(_) => teardown::teardown_report(&mut self),
-            e => e.unwrap(&self),
+            Eval::Return(output) => output,
+            Eval::Continue(private::Continuation::Unmock, _) => {
+                teardown::teardown_report(&mut self)
+            }
+            Eval::Continue(cont, _) => cont.report(&self),
         }
     }
 
@@ -1034,7 +1045,7 @@ pub trait MockFn: Sized + 'static {
     type OutputKind: output::Kind;
 
     /// The function type used for function application on a call pattern.
-    type ApplyFn: ?Sized + Send + Sync;
+    type AnswerFn: ?Sized + Send + Sync;
 
     /// Static information about the mocked method
     fn info() -> MockFnInfo;
@@ -1200,112 +1211,6 @@ pub struct Impossible;
 pub trait Clause {
     #[doc(hidden)]
     fn deconstruct(self, sink: &mut dyn clause::term::Sink) -> Result<(), alloc::String>;
-}
-
-/// A mocked response
-pub struct Respond<F: MockFn>(RespondInner<F>);
-
-enum RespondInner<F: MockFn> {
-    Respond(<F::OutputKind as Kind>::Respond),
-    Mocked(&'static dyn Fn(Unimock) -> <F::OutputKind as Kind>::Respond),
-}
-
-/// Turn a value into a mock function response.
-///
-/// This function is used to produce a return value from within [applies](build::DefineResponse::applies)-functions.
-///
-/// # Example
-/// ```rust
-/// # use unimock::*;
-/// # use std::cell::Cell;
-/// #
-/// # #[unimock(api=TraitMock)]
-/// # trait Trait {
-/// #     fn method(&self) -> Cell<u32>;
-/// # }
-/// let u = Unimock::new(
-///     TraitMock::method
-///         .each_call(matching!())
-///         .applies(&|| respond(Cell::new(42)))
-/// );
-/// let cell = u.method();
-/// ```
-pub fn respond<F, T>(input: T) -> Respond<F>
-where
-    F: MockFn,
-    T: IntoRespond<<F as MockFn>::OutputKind>,
-{
-    Respond(RespondInner::Respond(input.into_respond().unwrap()))
-}
-
-/// Make a response that is a static reference to leaked memory.
-///
-/// This method should only be used when computing a reference based
-/// on input parameters is necessary, which should not be a common use case.
-///
-/// # Example
-/// ```rust
-/// use unimock::*;
-///
-/// #[unimock(api=TraitMock)]
-/// trait Trait {
-///     fn get_static(&self, input: i32) -> &'static i32;
-/// }
-///
-/// let u = Unimock::new(
-///     TraitMock::get_static
-///         .next_call(matching!(84))
-///         .applies(&|input| respond_leaked_ref(input / 2))
-/// );
-///
-/// assert_eq!(&42, u.get_static(84));
-/// ```
-pub fn respond_leaked_ref<F, T, R>(input: T) -> Respond<F>
-where
-    F: MockFn<OutputKind = StaticRef<R>>,
-    T: core::borrow::Borrow<R> + 'static,
-    R: Send + Sync + 'static,
-{
-    let reference = <T as core::borrow::Borrow<R>>::borrow(Box::leak(Box::new(input)));
-    Respond(RespondInner::Respond(Reference(reference)))
-}
-
-/// Respond with the unimock instance itself.
-///
-/// # Example
-/// ```rust
-/// use unimock::*;
-/// use std::borrow::Borrow;
-///
-/// #[unimock(api=ThisMock)]
-/// pub trait This: Send + Sync {
-///     fn this(&self) -> &dyn This;
-/// }
-///
-/// impl Borrow<dyn This + 'static> for Unimock {
-///     fn borrow(&self) -> &(dyn This + 'static) {
-///         self
-///     }
-/// }
-///
-/// let u = Unimock::new(
-///     ThisMock::this
-///         .next_call(matching!())
-///         .applies(&respond_mocked)
-///         .n_times(2)
-/// );
-///
-/// let this = u.this();
-/// this.this();
-/// ```
-pub fn respond_mocked<F>() -> Respond<F>
-where
-    F: MockFn,
-    Unimock: IntoRespond<<F as MockFn>::OutputKind>,
-{
-    Respond(RespondInner::Mocked(&|unimock| {
-        unimock.into_respond().unwrap()
-    }))
 }
 
 type AnyBox = Box<dyn Any + Send + Sync + 'static>;

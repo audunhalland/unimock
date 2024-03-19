@@ -30,7 +30,7 @@ mod default_impl_borrowed {
             Unimock::new(
                 DefaultBodyMock::default_body
                     .next_call(matching!(21))
-                    .applies(&|_| respond(777))
+                    .answers(&|_, _| 777)
             )
             .default_body(21)
         );
@@ -43,7 +43,7 @@ mod default_impl_borrowed {
             Unimock::new(
                 DefaultBodyMock::core
                     .next_call(matching!(42))
-                    .applies(&|_| respond(666))
+                    .answers(&|_, _| 666)
             )
             .default_body(21)
         );
@@ -69,7 +69,7 @@ mod default_impl_mut {
             Unimock::new(
                 MutDefaultBodyMock::default_body
                     .next_call(matching!(21))
-                    .applies(&|_arg| respond(777))
+                    .answers(&|_, _arg| 777)
             )
             .default_body(21)
         );
@@ -82,7 +82,7 @@ mod default_impl_mut {
             Unimock::new(
                 MutDefaultBodyMock::core
                     .next_call(matching!(42))
-                    .applies(&|_| respond(666))
+                    .answers(&|_, _| 666)
             )
             .default_body(21)
         );
@@ -105,7 +105,7 @@ mod default_impl_mut {
             Unimock::new(
                 MutDefaultBodyBorrowMock::borrow_ret
                     .next_call(matching!(42))
-                    .applies(&|_| respond(666))
+                    .answers(&|_, _| &666)
             )
             .default_borrow_ret(21)
         );
@@ -133,7 +133,7 @@ mod default_impl_rc {
             Rc::new(Unimock::new(
                 DefaultBodyMock::default_body
                     .next_call(matching!(21))
-                    .applies(&|_| respond(777))
+                    .answers(&|_, _| 777)
             ))
             .default_body(21)
         );
@@ -161,7 +161,7 @@ mod default_impl_arc {
             Arc::new(Unimock::new(
                 DefaultBodyMock::default_body
                     .next_call(matching!(21))
-                    .applies(&|_| respond(777))
+                    .answers(&|_, _| 777)
             ))
             .default_body(21)
         );
@@ -256,7 +256,7 @@ mod default_impl_pin {
         let mut unimock = Unimock::new(
             PinDefault1Mock::pinned
                 .next_call(matching!(123))
-                .applies(&|_| respond(666)),
+                .answers(&|_, _| &666),
         );
         assert_eq!(
             &666,

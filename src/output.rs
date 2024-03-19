@@ -1,4 +1,6 @@
-use crate::{alloc::Box, value_chain::ValueChain};
+//! Traits for modelling the output of MockFns used with `returns`.
+
+use crate::alloc::Box;
 
 pub(crate) mod deep;
 pub(crate) mod lending;
@@ -19,10 +21,6 @@ type OutputResult<T> = Result<T, OutputError>;
 pub trait Kind: 'static {
     /// A type used to store return values
     type Return: GetOutput;
-
-    /// A type used to hold ephemeral values for [crate::respond]
-    /// These do not require [Send], [Sync] bounds.
-    type Respond: for<'u> IntoOutput<Output<'u> = <Self::Return as GetOutput>::Output<'u>>;
 }
 
 /// A [Kind] that may be used with `returns` combinators.
@@ -43,17 +41,6 @@ pub trait GetOutput: Sized + 'static {
     fn output(&self) -> Option<Self::Output<'_>>;
 }
 
-/// A type that can be converted into an output by consuming it.
-pub trait IntoOutput: Sized + 'static {
-    /// The output this value turns into
-    type Output<'u>
-    where
-        Self: 'u;
-
-    /// Turn this value into an output
-    fn into_output(self, value_chain: &ValueChain) -> Self::Output<'_>;
-}
-
 /// A type that can be converted into a [Kind::Return] that can be returned one time.
 pub trait IntoReturnOnce<K: Kind> {
     #[doc(hidden)]
@@ -70,12 +57,6 @@ pub trait IntoReturn<K: Kind>: IntoReturnOnce<K> {
 pub trait ReturnDefault<K: Kind> {
     #[doc(hidden)]
     fn return_default() -> K::Return;
-}
-
-/// A type that may be converted into a [crate::Respond].
-pub trait IntoRespond<K: Kind> {
-    #[doc(hidden)]
-    fn into_respond(self) -> OutputResult<K::Respond>;
 }
 
 pub use deep::Deep;

@@ -6,14 +6,14 @@ use crate::{
     alloc::Box,
     call_pattern::{downcast_box, PatternResult},
     output::{GetOutput, Kind},
+    private::AnswerClosure,
     AnyBox, MockFn,
 };
 
 /// Type-erased responder which can be stored directly in the Unimock instance.
 pub(crate) enum DynResponder {
     Return(DynReturnResponder),
-    StaticApply(DynApplyResponder),
-    BoxedApply(DynBoxedApplyResponder),
+    Answer(DynAnswerResponder),
     ApplyDefaultImpl,
     Unmock,
     Panic(Box<str>),
@@ -30,14 +30,8 @@ impl<F: MockFn> Returner<F> {
     }
 }
 
-/// A responder that applies the [MockFn::ApplyFn] function.
-pub(crate) struct Applier<F: MockFn> {
-    pub apply_fn: &'static F::ApplyFn,
-}
-
-/// A responder that applies [MockFn::ApplyFn], and also supports upvars by boxing it.
-pub(crate) struct BoxedApplier<F: MockFn> {
-    pub apply_fn: Box<F::ApplyFn>,
+pub(crate) struct Answerer<F: MockFn> {
+    pub answer_closure: AnswerClosure<F>,
 }
 
 /// A trait for turning things into a [Returner] for [MockFn].
@@ -71,8 +65,7 @@ where
 }
 
 pub(crate) struct DynReturnResponder(AnyBox);
-pub(crate) struct DynApplyResponder(AnyBox);
-pub(crate) struct DynBoxedApplyResponder(AnyBox);
+pub(crate) struct DynAnswerResponder(AnyBox);
 
 /// Trait for downcasting type-erased responders to respective [MockFn]s.
 pub(crate) trait DowncastResponder<F: MockFn> {
@@ -89,16 +82,8 @@ impl<F: MockFn> DowncastResponder<F> for DynReturnResponder {
     }
 }
 
-impl<F: MockFn> DowncastResponder<F> for DynApplyResponder {
-    type Downcasted = Applier<F>;
-
-    fn downcast(&self) -> PatternResult<&Self::Downcasted> {
-        downcast_box(&self.0)
-    }
-}
-
-impl<F: MockFn> DowncastResponder<F> for DynBoxedApplyResponder {
-    type Downcasted = BoxedApplier<F>;
+impl<F: MockFn> DowncastResponder<F> for DynAnswerResponder {
+    type Downcasted = Answerer<F>;
 
     fn downcast(&self) -> PatternResult<&Self::Downcasted> {
         downcast_box(&self.0)
@@ -111,14 +96,8 @@ impl<F: MockFn> Returner<F> {
     }
 }
 
-impl<F: MockFn> Applier<F> {
+impl<F: MockFn> Answerer<F> {
     pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::StaticApply(DynApplyResponder(Box::new(self)))
-    }
-}
-
-impl<F: MockFn> BoxedApplier<F> {
-    pub fn into_dyn_responder(self) -> DynResponder {
-        DynResponder::BoxedApply(DynBoxedApplyResponder(Box::new(self)))
+        DynResponder::Answer(DynAnswerResponder(Box::new(self)))
     }
 }

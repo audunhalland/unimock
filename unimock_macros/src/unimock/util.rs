@@ -1,3 +1,5 @@
+use std::{borrow::Cow, collections::BTreeSet};
+
 use super::{method::MockMethod, trait_info::TraitInfo, Attr};
 
 use quote::*;
@@ -290,12 +292,13 @@ impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
     }
 }
 
-pub struct PhantomDataConstructor;
+pub struct PhantomDataConstructor<'t>(pub &'t syn::TypeParam);
 
-impl quote::ToTokens for PhantomDataConstructor {
+impl<'t> quote::ToTokens for PhantomDataConstructor<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let ident = &self.0.ident;
         quote! {
-            ::core::marker::PhantomData
+            ::core::marker::PhantomData::<#ident>
         }
         .to_tokens(tokens);
     }
@@ -320,15 +323,26 @@ pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: Option<&syn::Lifetime>)
 
     impl<'s> syn::visit_mut::VisitMut for LifetimeReplace<'s> {
         fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
-            reference.lifetime = self.lifetime.cloned();
+            match reference.lifetime.as_ref().map(LifetimeKind::get) {
+                Some(LifetimeKind::Static) => {}
+                _ => {
+                    reference.lifetime = self.lifetime.cloned();
+                }
+            }
             syn::visit_mut::visit_type_reference_mut(self, reference);
         }
 
         fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
-            *lifetime = match self.lifetime {
-                Some(lt) => lt.clone(),
-                None => syn::Lifetime::new("'_", lifetime.span()),
-            };
+            match LifetimeKind::get(lifetime) {
+                LifetimeKind::Static => {}
+                _ => {
+                    *lifetime = match self.lifetime {
+                        Some(lt) => lt.clone(),
+                        None => syn::Lifetime::new("'_", lifetime.span()),
+                    };
+                }
+            }
+
             syn::visit_mut::visit_lifetime_mut(self, lifetime);
         }
     }
@@ -337,6 +351,110 @@ pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: Option<&syn::Lifetime>)
     replace.visit_type_mut(&mut ty);
 
     ty
+}
+
+enum LifetimeKind<'a> {
+    Inferred,
+    Static,
+    Normal(&'a syn::Lifetime),
+}
+
+impl<'a> LifetimeKind<'a> {
+    fn get(lifetime: &syn::Lifetime) -> LifetimeKind<'_> {
+        let ident = lifetime.ident.to_string();
+        match ident.as_str() {
+            "_" => LifetimeKind::Inferred,
+            "static" => LifetimeKind::Static,
+            _ => LifetimeKind::Normal(lifetime),
+        }
+    }
+}
+
+pub fn register_lifetimes_and_substitute_missing(
+    mut ty: syn::Type,
+    substitute: Option<&syn::Lifetime>,
+    register: &mut BTreeSet<syn::Lifetime>,
+) -> syn::Type {
+    struct Ctx<'s> {
+        substitute: Option<&'s syn::Lifetime>,
+        register: &'s mut BTreeSet<syn::Lifetime>,
+    }
+
+    impl<'s> syn::visit_mut::VisitMut for Ctx<'s> {
+        fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
+            match reference.lifetime.as_ref().map(LifetimeKind::get) {
+                Some(LifetimeKind::Normal(lifetime)) => {
+                    self.register.insert(lifetime.clone());
+                }
+                Some(LifetimeKind::Static) => {}
+                _ => {
+                    if let Some(substitute) = self.substitute {
+                        self.register.insert(substitute.clone());
+                        reference.lifetime = Some(substitute.clone());
+                    }
+                }
+            }
+            syn::visit_mut::visit_type_reference_mut(self, reference);
+        }
+
+        fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
+            match LifetimeKind::get(lifetime) {
+                LifetimeKind::Inferred => {
+                    if let Some(substitute) = self.substitute {
+                        self.register.insert(substitute.clone());
+                        *lifetime = substitute.clone();
+                    }
+                }
+                LifetimeKind::Static => {}
+                LifetimeKind::Normal(_) => {
+                    self.register.insert(lifetime.clone());
+                }
+            }
+
+            syn::visit_mut::visit_lifetime_mut(self, lifetime);
+        }
+    }
+
+    let mut ctx = Ctx {
+        substitute,
+        register,
+    };
+
+    ctx.visit_type_mut(&mut ty);
+
+    ty
+}
+
+pub fn rename_lifetimes(
+    ty: &mut syn::Type,
+    rename_fn: &mut dyn FnMut(Option<&syn::Lifetime>) -> Option<Cow<'static, str>>,
+) {
+    struct Rename<'t> {
+        rename_fn: &'t mut dyn FnMut(Option<&syn::Lifetime>) -> Option<Cow<'static, str>>,
+    }
+
+    impl<'t> syn::visit_mut::VisitMut for Rename<'t> {
+        fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
+            if let Some(new_name) = (*self.rename_fn)(reference.lifetime.as_ref()) {
+                reference.lifetime = Some(syn::Lifetime::new(
+                    &new_name,
+                    proc_macro2::Span::call_site(),
+                ));
+            }
+
+            syn::visit_mut::visit_type_mut(self, &mut reference.elem);
+        }
+
+        fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
+            if let Some(new_name) = (*self.rename_fn)(Some(lifetime)) {
+                *lifetime = syn::Lifetime::new(&new_name, proc_macro2::Span::call_site());
+            }
+
+            syn::visit_mut::visit_lifetime_mut(self, lifetime);
+        }
+    }
+
+    Rename { rename_fn }.visit_type_mut(ty);
 }
 
 pub fn self_type_to_unimock(mut ty: syn::Type, trait_info: &TraitInfo, attr: &Attr) -> syn::Type {
@@ -534,4 +652,18 @@ pub fn find_future_bound<'s>(
 
 pub struct RpitFuture {
     pub output: syn::AssocType,
+}
+
+pub fn guess_is_pin(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(last_segment) = type_path.path.segments.last() {
+            if last_segment.ident == "Pin" {
+                if let syn::PathArguments::AngleBracketed(_) = &last_segment.arguments {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
 }

@@ -1,43 +1,44 @@
 use core::ops::Deref;
 
-use crate::alloc::{vec, String, Vec};
+use crate::alloc::{vec, Arc, String, Vec};
 use crate::call_pattern::InputIndex;
 use crate::mismatch::{Mismatch, MismatchKind};
-use crate::output::{GetOutput, IntoOutput};
+use crate::output::GetOutput;
 use crate::{call_pattern::MatchingFn, *};
 
 pub use crate::default_impl_delegator::*;
 
-/// The evaluation of a [MockFn].
-///
-/// Used to tell trait implementations whether to do perform their own evaluation of a call.
-///
-/// The output is generic, because both owned and referenced output are supported.
-#[non_exhaustive]
-pub enum Evaluation<'u, 'i, F: MockFn> {
-    /// Function evaluated to its output.
-    Evaluated(<<F::OutputKind as Kind>::Return as GetOutput>::Output<'u>),
-    /// Function should be applied
-    Apply(ApplyClosure<'u, F>, F::Inputs<'i>),
-    /// Function not yet evaluated, should be unmocked.
-    Unmocked(F::Inputs<'i>),
-    /// Function not yet evaluated, should call default implementation.
-    CallDefaultImpl(F::Inputs<'i>),
+/// The result of a [MockFn] evaluation.
+#[doc(hidden)]
+pub enum Eval<'u, 'i, F: MockFn> {
+    /// An output should be returned.
+    Return(<<<F as MockFn>::OutputKind as Kind>::Return as GetOutput>::Output<'u>),
+    /// Mock implementation should continue to evaluate the inputs
+    Continue(Continuation<F>, F::Inputs<'i>),
 }
 
-impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
+/// The continuation of an unevaluated [MockFn].
+///
+/// Used to tell trait implementations whether to do perform their own evaluation of a call.
+#[non_exhaustive]
+pub enum Continuation<F: MockFn> {
+    /// Answer function should be applied
+    Answer(AnswerClosure<F>),
+    /// Unmocked implementation should be invoked
+    Unmock,
+    /// Default implementation should be invoked
+    CallDefaultImpl,
+}
+
+impl<F: MockFn> Continuation<F> {
     /// Unwrap the `Evaluated` variant, or panic.
     /// The unimock instance must be passed in order to register that an eventual panic happened.
     #[track_caller]
-    pub fn unwrap(
-        self,
-        unimock: &Unimock,
-    ) -> <<F::OutputKind as Kind>::Return as GetOutput>::Output<'u> {
+    pub fn report(self, unimock: &Unimock) -> ! {
         let error = match self {
-            Self::Evaluated(output) => return output,
-            Self::Apply(..) => error::MockError::NotApplied { info: F::info() },
-            Self::Unmocked(_) => error::MockError::CannotUnmock { info: F::info() },
-            Self::CallDefaultImpl(_) => error::MockError::NoDefaultImpl { info: F::info() },
+            Self::Answer(..) => error::MockError::NotAnswered { info: F::info() },
+            Self::Unmock => error::MockError::CannotUnmock { info: F::info() },
+            Self::CallDefaultImpl => error::MockError::NoDefaultImpl { info: F::info() },
         };
 
         unimock.induce_panic(error)
@@ -45,29 +46,29 @@ impl<'u, 'i, F: MockFn> Evaluation<'u, 'i, F> {
 }
 
 #[doc(hidden)]
-pub struct ApplyClosure<'u, F: MockFn> {
-    pub(crate) unimock: &'u Unimock,
-    pub(crate) apply_fn: &'u F::ApplyFn,
+pub struct AnswerClosure<F: MockFn>(pub(crate) AnswerClosureInner<F>);
+
+pub(crate) enum AnswerClosureInner<F: MockFn> {
+    Ref(&'static F::AnswerFn),
+    Arc(Arc<F::AnswerFn>),
 }
 
-impl<'u, F: MockFn> Deref for ApplyClosure<'u, F> {
-    type Target = F::ApplyFn;
-
-    fn deref(&self) -> &Self::Target {
-        self.apply_fn
+impl<F: MockFn> Clone for AnswerClosure<F> {
+    fn clone(&self) -> Self {
+        AnswerClosure(match &self.0 {
+            AnswerClosureInner::Ref(answer_fn) => AnswerClosureInner::Ref(*answer_fn),
+            AnswerClosureInner::Arc(arc) => AnswerClosureInner::Arc(arc.clone()),
+        })
     }
 }
 
-impl<'u, F: MockFn> ApplyClosure<'u, F> {
-    pub fn __to_output(
-        &self,
-        respond: crate::Respond<F>,
-    ) -> <<F::OutputKind as Kind>::Return as GetOutput>::Output<'u> {
-        match respond.0 {
-            RespondInner::Respond(response) => response.into_output(&self.unimock.value_chain),
-            RespondInner::Mocked(func) => {
-                func(self.unimock.clone()).into_output(&self.unimock.value_chain)
-            }
+impl<F: MockFn> Deref for AnswerClosure<F> {
+    type Target = F::AnswerFn;
+
+    fn deref(&self) -> &Self::Target {
+        match &self.0 {
+            AnswerClosureInner::Ref(answer_fn) => answer_fn,
+            AnswerClosureInner::Arc(answer_fn) => answer_fn.as_ref(),
         }
     }
 }
@@ -200,7 +201,7 @@ impl MismatchReporter {
 
 /// Evaluate a [MockFn] given some inputs, to produce its output.
 #[track_caller]
-pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Evaluation<'u, 'i, F>
+pub fn eval<'u, 'i, F>(unimock: &'u Unimock, inputs: F::Inputs<'i>) -> Eval<'u, 'i, F>
 where
     F: MockFn + 'static,
 {

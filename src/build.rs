@@ -5,8 +5,9 @@ use crate::alloc::{String, ToString, Vec};
 use crate::call_pattern::*;
 use crate::fn_mocker::PatternMatchMode;
 use crate::output::{IntoReturn, IntoReturnOnce, Return, ReturnDefault};
+use crate::private::{AnswerClosure, AnswerClosureInner};
 use crate::property::*;
-use crate::responder::{Applier, BoxedApplier, DynResponder, IntoReturner};
+use crate::responder::{Answerer, DynResponder, IntoReturner};
 use crate::*;
 use dyn_builder::*;
 
@@ -327,10 +328,12 @@ assert_eq!(None, u.get());
                 self.quantify()
             }
 
-
             /// Specify the response of the call pattern by applying the given function that can then compute it based on input parameters.
             ///
-            /// The applied function can also respond with types that don't implement [Send] and [Sync].
+            /// The applied function can respond with types that don't implement [Send] and [Sync].
+            ///
+            /// The function signature has the same signature as the trait function that it mocks, including `self`.
+            /// The `self` argument is included because of a potential need for calling .e.g. [`make_ref`](crate::Unimock::make_ref) on it.
             ///
             /// # Example
             #[doc = concat!("\
@@ -346,7 +349,7 @@ trait Trait {
 let u = Unimock::new(
     TraitMock::get_cell
         .next_call(matching!(84))
-        .applies(&|input| respond(Cell::new(input / 2)))
+        .answers(&|_, input| Cell::new(input / 2))
 );
 
 assert_eq!(Cell::new(42), u.get_cell(84));
@@ -367,9 +370,8 @@ trait Trait {
 let u = Unimock::new(
     TraitMock::mutate
         .next_call(matching!(41))
-        .applies(&|input| {
+        .answers(&|_, input| {
             *input += 1;
-            respond(())
         })
 );
 
@@ -379,9 +381,52 @@ assert_eq!(number, 42);
 ```
 ",
 )]
-            pub fn applies(mut self, apply_fn: &'static F::ApplyFn) -> Quantify<'p, F, O> {
+            /// # Borrow from self
+            #[doc = concat!("\
+```
+# use unimock::*;
+#[unimock(api=TraitMock)]
+trait Trait {
+    fn get(&self) -> &u32;
+}
+
+let u = Unimock::new(
+    TraitMock::get
+        .next_call(matching!())
+        .answers(&|u| u.make_ref(42))
+);
+
+assert_eq!(u.get(), &42);
+```
+",
+)]
+            /// # Recursion
+            #[doc = concat!("\
+```
+# use unimock::*;
+#[unimock(api=FibMock)]
+trait Fib {
+    fn fib(&self, input: i32) -> i32;
+}
+
+let u = Unimock::new((
+    FibMock::fib
+        .each_call(matching!(1 | 2))
+        .returns(1),
+    FibMock::fib
+        .each_call(matching!(_))
+        .answers(&|u, input| {
+            u.fib(input - 1) + u.fib(input - 2)
+        })
+));
+
+assert_eq!(55, u.fib(10));
+```
+",
+)]
+            pub fn answers(mut self, answer_fn: &'static F::AnswerFn) -> Quantify<'p, F, O> {
                 self.wrapper
-                    .push_responder(Applier::<F> { apply_fn }.into_dyn_responder());
+                    .push_responder(Answerer::<F> { answer_closure: AnswerClosure(AnswerClosureInner::Ref(answer_fn)) }.into_dyn_responder());
                 self.quantify()
             }
 
@@ -401,10 +446,10 @@ let mutex: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 let u = Unimock::new(
     TraitMock::get
         .each_call(matching!())
-        .applies_closure({
+        .answers_arc({
             let mutex = mutex.clone();
-            Box::new(move || {
-                respond(*mutex.lock().unwrap())
+            Arc::new(move |_| {
+                *mutex.lock().unwrap()
             })
         })
 );
@@ -415,12 +460,12 @@ assert_eq!(42, u.get());
 ```
 ",
             )]
-            pub fn applies_closure(
+            pub fn answers_arc(
                 mut self,
-                apply_fn: crate::alloc::Box<F::ApplyFn>,
+                answer_fn: crate::alloc::Arc<F::AnswerFn>,
             ) -> Quantify<'p, F, O> {
                 self.wrapper
-                    .push_responder(BoxedApplier::<F> { apply_fn }.into_dyn_responder());
+                    .push_responder(Answerer::<F> { answer_closure: AnswerClosure(AnswerClosureInner::Arc(answer_fn)) }.into_dyn_responder());
                 self.quantify()
             }
 

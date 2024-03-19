@@ -8,7 +8,6 @@ where
     EK: Kind,
 {
     type Return = AsReturn<TK, EK>;
-    type Respond = AsRespond<TK, EK>;
 }
 
 impl<TK, EK> Return for Mix<TK, EK>
@@ -48,33 +47,6 @@ where
     }
 }
 
-pub enum AsRespond<TK: Kind, EK: Kind> {
-    Ok(TK::Respond),
-    Err(EK::Respond),
-}
-
-impl<TK, EK> IntoOutput for AsRespond<TK, EK>
-where
-    TK: Kind,
-    EK: Kind,
-    Self: 'static,
-{
-    type Output<'u> =
-        Result<
-            <<TK as Kind>::Respond as IntoOutput>::Output<'u>,
-            <<EK as Kind>::Respond as IntoOutput>::Output<'u>,
-        >
-        where
-            Self: 'u;
-
-    fn into_output(self, value_chain: &ValueChain) -> Self::Output<'_> {
-        match self {
-            Self::Ok(val) => Ok(val.into_output(value_chain)),
-            Self::Err(val) => Err(val.into_output(value_chain)),
-        }
-    }
-}
-
 impl<T, TK, E, EK> IntoReturnOnce<Mix<TK, EK>> for Result<T, E>
 where
     TK: Return,
@@ -105,21 +77,6 @@ where
         match self {
             Ok(val) => Ok(AsReturn::Ok(val.into_return()?)),
             Err(val) => Ok(AsReturn::Err(val.into_return()?)),
-        }
-    }
-}
-
-impl<T, TK, E, EK> IntoRespond<Mix<TK, EK>> for Result<T, E>
-where
-    TK: Kind,
-    T: IntoRespond<TK>,
-    EK: Kind,
-    E: IntoRespond<EK>,
-{
-    fn into_respond(self) -> OutputResult<AsRespond<TK, EK>> {
-        match self {
-            Ok(val) => Ok(AsRespond::Ok(val.into_respond()?)),
-            Err(val) => Ok(AsRespond::Err(val.into_respond()?)),
         }
     }
 }

@@ -49,7 +49,7 @@ pub(crate) enum MockError {
     NoDefaultImpl {
         info: MockFnInfo,
     },
-    NotApplied {
+    NotAnswered {
         info: MockFnInfo,
     },
     ExplicitPanic {
@@ -130,10 +130,10 @@ impl core::fmt::Display for MockError {
                     path = info.path
                 )
             }
-            Self::NotApplied { info } => {
+            Self::NotAnswered { info } => {
                 write!(
                     f,
-                    "{path} did not apply the function, this is a bug.",
+                    "{path} did not apply the answer function, this is a bug.",
                     path = info.path
                 )
             }

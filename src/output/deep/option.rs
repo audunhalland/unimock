@@ -4,7 +4,6 @@ type Mix<K> = Deep<Option<K>>;
 
 impl<K: Kind> Kind for Mix<K> {
     type Return = AsReturn<K>;
-    type Respond = AsRespond<K>;
 }
 
 impl<K> Return for Mix<K>
@@ -39,30 +38,6 @@ where
     }
 }
 
-pub enum AsRespond<K: Kind> {
-    Some(K::Respond),
-    None,
-}
-
-impl<K: Kind> IntoOutput for AsRespond<K>
-where
-    Self: 'static,
-{
-    type Output<'u> =
-        Option<
-            <<K as Kind>::Respond as IntoOutput>::Output<'u>,
-        >
-        where
-            Self: 'u;
-
-    fn into_output(self, value_chain: &ValueChain) -> Self::Output<'_> {
-        match self {
-            Self::Some(val) => Some(val.into_output(value_chain)),
-            Self::None => None,
-        }
-    }
-}
-
 impl<T, K: Return> IntoReturnOnce<Mix<K>> for Option<T>
 where
     <K as Return>::Type: 'static + Send + Sync,
@@ -85,18 +60,6 @@ where
         match self {
             Some(val) => Ok(AsReturn::Some(val.into_return()?)),
             None => Ok(AsReturn::None),
-        }
-    }
-}
-
-impl<T, K: Kind> IntoRespond<Mix<K>> for Option<T>
-where
-    T: IntoRespond<K>,
-{
-    fn into_respond(self) -> OutputResult<AsRespond<K>> {
-        match self {
-            Some(val) => Ok(AsRespond::Some(val.into_respond()?)),
-            None => Ok(AsRespond::None),
         }
     }
 }

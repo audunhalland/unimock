@@ -4,14 +4,15 @@ use syn::{parse_quote_spanned, spanned::Spanned, visit_mut::VisitMut, PathArgume
 
 use super::{
     trait_info::TraitInfo,
-    util::{find_future_bound, self_type_to_unimock, RpitFuture},
+    util::{find_future_bound, rename_lifetimes, self_type_to_unimock, RpitFuture},
     Attr,
 };
 
 pub struct OutputStructure {
     pub wrapping: OutputWrapping,
     pub output_kind: OutputKind,
-    output_ty: AssociatedInnerType,
+    output_ty_stripped: AssociatedInnerType,
+    output_ty_with_kind: AssociatedInnerType,
 }
 
 impl OutputStructure {
@@ -21,8 +22,18 @@ impl OutputStructure {
         trait_info: &TraitInfo,
         attr: &Attr,
     ) -> proc_macro2::TokenStream {
-        let response_ty = self.output_ty.self_type_to_unimock(trait_info, attr);
+        let response_ty = self
+            .output_ty_with_kind
+            .self_type_to_unimock(trait_info, attr);
         self.render_associated_type(prefix, &response_ty)
+    }
+
+    /// Type without future wrapping and without output::Kind injected
+    pub fn output_type_stripped(&self) -> Option<syn::Type> {
+        match &self.output_ty_stripped {
+            AssociatedInnerType::Typed(ty) => Some(ty.clone()),
+            AssociatedInnerType::Unit => None,
+        }
     }
 
     fn render_associated_type(
@@ -88,7 +99,8 @@ pub fn determine_output_structure(
         syn::ReturnType::Default => OutputStructure {
             wrapping: OutputWrapping::None,
             output_kind: OutputKind::Owning,
-            output_ty: AssociatedInnerType::Unit,
+            output_ty_stripped: AssociatedInnerType::Unit,
+            output_ty_with_kind: AssociatedInnerType::Unit,
         },
         syn::ReturnType::Type(_, output_ty) => match output_ty.as_ref() {
             syn::Type::Reference(type_reference) => {
@@ -98,7 +110,11 @@ pub fn determine_output_structure(
                 OutputStructure {
                     wrapping: OutputWrapping::None,
                     output_kind: determine_reference_ownership(sig, type_reference),
-                    output_ty: AssociatedInnerType::new_static(inner_ty, &borrow_info),
+                    output_ty_stripped: AssociatedInnerType::new_static(
+                        output_ty.as_ref().clone(),
+                        &borrow_info,
+                    ),
+                    output_ty_with_kind: AssociatedInnerType::new_static(inner_ty, &borrow_info),
                 }
             }
             syn::Type::Path(output_path)
@@ -152,8 +168,8 @@ pub fn determine_owned_or_deep_output_structure(
                 elems: Default::default(),
             };
 
-            for elem in tuple.elems {
-                let (kind, ty) = make_generic_kind(elem, attr);
+            for elem in &tuple.elems {
+                let (kind, ty) = make_generic_kind(elem.clone(), attr);
                 kind_params.elems.push(wrap_output_kind(kind, ty, attr));
             }
 
@@ -162,25 +178,29 @@ pub fn determine_owned_or_deep_output_structure(
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 output_kind: OutputKind::Deep,
-                output_ty: AssociatedInnerType::Typed(syn::Type::Tuple(kind_params)),
+                output_ty_stripped: AssociatedInnerType::Typed(syn::Type::Tuple(tuple)),
+                output_ty_with_kind: AssociatedInnerType::Typed(syn::Type::Tuple(kind_params)),
             }
         }
         (OutputKind::Shallow, inner_ty) => {
-            let (kind, deep_ty) = make_generic_kind(inner_ty, attr);
+            let (kind, deep_ty) = make_generic_kind(inner_ty.clone(), attr);
 
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 output_kind: kind,
-                output_ty: AssociatedInnerType::Typed(deep_ty),
+                output_ty_stripped: AssociatedInnerType::Typed(inner_ty),
+                output_ty_with_kind: AssociatedInnerType::Typed(deep_ty),
             }
         }
         (kind, inner_ty) => {
-            let output_ty = AssociatedInnerType::new_static(inner_ty, &borrow_info);
+            let output_ty_with_kind =
+                AssociatedInnerType::new_static(inner_ty.clone(), &borrow_info);
 
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 output_kind: kind,
-                output_ty,
+                output_ty_stripped: AssociatedInnerType::Typed(inner_ty),
+                output_ty_with_kind,
             }
         }
     }
@@ -205,7 +225,7 @@ fn make_generic_kind(ty: syn::Type, attr: &Attr) -> (OutputKind, syn::Type) {
                                     *ty = wrap_output_kind(inner_kind, inner_ty, attr);
                                 }
                                 _ => {
-                                    rename_lifetimes(ty, &mut |_| Some("'static"));
+                                    rename_lifetimes(ty, &mut |_| Some("'static".into()));
                                 }
                             }
                         }
@@ -320,7 +340,7 @@ enum AssociatedInnerType {
 impl AssociatedInnerType {
     fn new_static(mut inner_type: syn::Type, borrow_info: &BorrowInfo) -> Self {
         if borrow_info.has_nonstatic_lifetime {
-            rename_lifetimes(&mut inner_type, &mut |_| Some("'static"));
+            rename_lifetimes(&mut inner_type, &mut |_| Some("'static".into()));
             add_dyn_static_bound(&mut inner_type);
         }
 
@@ -335,11 +355,6 @@ impl AssociatedInnerType {
     }
 }
 
-struct ReturnTypeAnalyzer<'s> {
-    sig: &'s syn::Signature,
-    borrow_info: BorrowInfo,
-}
-
 #[derive(Default)]
 struct BorrowInfo {
     self_lifetime_ident: Option<String>,
@@ -352,6 +367,11 @@ struct BorrowInfo {
     has_self_reference: bool,
     has_input_lifetime: bool,
     has_undeclared_lifetime: bool,
+}
+
+struct ReturnTypeAnalyzer<'s> {
+    sig: &'s syn::Signature,
+    borrow_info: BorrowInfo,
 }
 
 impl<'s> ReturnTypeAnalyzer<'s> {
@@ -413,36 +433,6 @@ impl<'s> syn::visit_mut::VisitMut for ReturnTypeAnalyzer<'s> {
         self.analyze_lifetime(Some(lifetime), false);
         syn::visit_mut::visit_lifetime_mut(self, lifetime);
     }
-}
-
-fn rename_lifetimes(
-    ty: &mut syn::Type,
-    rename_fn: &mut dyn FnMut(Option<&syn::Lifetime>) -> Option<&'static str>,
-) {
-    struct Rename<'t> {
-        rename_fn: &'t mut dyn FnMut(Option<&syn::Lifetime>) -> Option<&'static str>,
-    }
-
-    impl<'t> syn::visit_mut::VisitMut for Rename<'t> {
-        fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
-            if let Some(new_name) = (*self.rename_fn)(reference.lifetime.as_ref()) {
-                reference.lifetime =
-                    Some(syn::Lifetime::new(new_name, proc_macro2::Span::call_site()));
-            }
-
-            syn::visit_mut::visit_type_mut(self, &mut reference.elem);
-        }
-
-        fn visit_lifetime_mut(&mut self, lifetime: &mut syn::Lifetime) {
-            if let Some(new_name) = (*self.rename_fn)(Some(lifetime)) {
-                *lifetime = syn::Lifetime::new(new_name, proc_macro2::Span::call_site());
-            }
-
-            syn::visit_mut::visit_lifetime_mut(self, lifetime);
-        }
-    }
-
-    Rename { rename_fn }.visit_type_mut(ty);
 }
 
 fn add_dyn_static_bound(ty: &mut syn::Type) {
