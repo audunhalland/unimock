@@ -10,7 +10,6 @@ type Response<T, E> = Result<Box<dyn Borrow<T> + Send + Sync>, Owned<E>>;
 
 impl<T: ?Sized, E: 'static> Kind for Mix<T, E> {
     type Return = Response<T, E>;
-    type Respond = Response<T, E>;
 }
 
 impl<T: ?Sized, E: 'static> Return for Mix<T, E>
@@ -33,19 +32,6 @@ impl<T: ?Sized + 'static, E: 'static> GetOutput for Response<T, E> {
     }
 }
 
-impl<T: ?Sized + 'static, E: 'static> IntoOutput for Response<T, E> {
-    type Output<'u> = Result<&'u T, E>
-        where
-            Self: 'u;
-
-    fn into_output(self, value_chain: &ValueChain) -> Self::Output<'_> {
-        match self {
-            Ok(val) => Ok(value_chain.add(val).as_ref().borrow()),
-            Err(err) => Err(err.into_output(value_chain)),
-        }
-    }
-}
-
 macro_rules! into {
     ($trait:ident, $method:ident) => {
         impl<T0, T: ?Sized + 'static, E0, E: 'static> $trait<Mix<T, E>> for Result<T0, E0>
@@ -65,4 +51,3 @@ macro_rules! into {
 
 into!(IntoReturnOnce, into_return_once);
 into!(IntoReturn, into_return);
-into!(IntoRespond, into_respond);

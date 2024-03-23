@@ -1,6 +1,7 @@
 use quote::{quote, quote_spanned, ToTokens};
-use syn::{parse_quote, FnArg};
+use syn::parse_quote;
 
+mod answer_fn;
 mod associated_future;
 mod attr;
 mod method;
@@ -16,6 +17,7 @@ use trait_info::TraitInfo;
 
 use attr::{UnmockFn, UnmockFnParams};
 
+use self::answer_fn::make_answer_fn;
 use self::method::{ArgClass, MockMethod};
 use self::util::{iter_generic_type_params, InferImplTrait};
 
@@ -260,19 +262,8 @@ fn def_mock_fn(
     let output_kind_assoc_type = method
         .output_structure
         .output_kind_assoc_type(prefix, trait_info, attr);
-    let apply_fn_params = method
-        .adapted_sig
-        .inputs
-        .iter()
-        .filter_map(|input| match input {
-            FnArg::Receiver(_) => None,
-            FnArg::Typed(pat_type) => Some(pat_type.ty.as_ref().clone()),
-        })
-        .map(|mut ty| {
-            ty = util::substitute_lifetimes(ty, None);
-            ty = util::self_type_to_unimock(ty, trait_info, attr);
-            ty
-        });
+
+    let answer_fn_assoc_type = make_answer_fn(method, trait_info, attr);
 
     let debug_inputs_fn = method.generate_debug_inputs_fn(attr);
 
@@ -295,7 +286,7 @@ fn def_mock_fn(
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = #input_types_tuple;
             type OutputKind = #output_kind_assoc_type;
-            type ApplyFn = dyn Fn(#(#apply_fn_params),*) -> #prefix::Respond<Self> + Send + Sync;
+            type AnswerFn = #answer_fn_assoc_type;
 
             fn info() -> #prefix::MockFnInfo {
                 #prefix::MockFnInfo::new::<Self>()
@@ -311,7 +302,7 @@ fn def_mock_fn(
         // the trait is generic
         let phantoms_tuple = util::MockFnPhantomsTuple { trait_info, method };
         let untyped_phantoms =
-            iter_generic_type_params(trait_info, method).map(|_| util::PhantomDataConstructor);
+            iter_generic_type_params(trait_info, method).map(util::PhantomDataConstructor);
         let module_scope = match &attr.mock_api {
             MockApi::MockMod(ident) => Some(quote_spanned! { span=> #ident:: }),
             _ => None,
@@ -326,7 +317,7 @@ fn def_mock_fn(
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = #input_types_tuple,
                         OutputKind = #output_kind_assoc_type,
-                        ApplyFn = <#mock_fn_ident #generic_args as #prefix::MockFn>::ApplyFn,
+                        AnswerFn = <#mock_fn_ident #generic_args as #prefix::MockFn>::AnswerFn,
                     >
                         #where_clause
                     {
@@ -424,7 +415,7 @@ fn def_method_impl(
                     );
 
                     quote! {
-                        #prefix::private::Evaluation::Unmocked(#eval_pattern) => #unmock_expr,
+                        #prefix::private::Eval::Continue(#prefix::private::Continuation::Unmock, #eval_pattern) => #unmock_expr,
                     }
                 },
             );
@@ -478,37 +469,18 @@ fn def_method_impl(
 
             match &receiver {
                 Receiver::MutRef { .. } | Receiver::Pin { .. } => {
-                    let eval_pattern = method.inputs_destructuring(
+                    let eval_pattern_no_mut = method.inputs_destructuring(
                         InputsSyntax::EvalPatternMutAsWildcard,
                         Tupled(true),
                         attr,
                     );
-
-                    let answer_arm = {
-                        let fn_params = method.inputs_destructuring(
-                            InputsSyntax::FnParams,
-                            Tupled(false),
-                            attr,
-                        );
-                        quote! {
-                            #prefix::private::Evaluation::Apply(__closure, #eval_pattern) => {
-                                #prefix::polonius::_return!(
-                                    __closure.__to_output(__closure(#fn_params))
-                                )
-                            }
-                        }
-                    };
-                    let default_impl_delegate_arm_polonius = if method.method.default.is_some() {
-                        let args =
-                            method.inputs_destructuring(InputsSyntax::FnParams, Tupled(true), attr);
-                        Some(quote! {
-                            #prefix::private::Evaluation::CallDefaultImpl(#eval_pattern) => {
-                                #prefix::polonius::_exit!(#args);
-                            },
-                        })
-                    } else {
-                        None
-                    };
+                    let eval_pattern_all = method.inputs_destructuring(
+                        InputsSyntax::EvalPatternAll,
+                        Tupled(true),
+                        attr,
+                    );
+                    let fn_params_tupled =
+                        method.inputs_destructuring(InputsSyntax::FnParams, Tupled(true), attr);
 
                     let polonius_return_type: syn::Type = match method.method.sig.output.clone() {
                         syn::ReturnType::Default => syn::parse_quote!(()),
@@ -517,54 +489,42 @@ fn def_method_impl(
                         }
                     };
 
-                    let polonius = quote_spanned! { span=>
-                        #prefix::polonius::_polonius!(|#self_ref| -> #polonius_return_type {
-                            match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params) {
-                                #answer_arm
-                                #unmock_arm
-                                #default_impl_delegate_arm_polonius
-                                e => #prefix::polonius::_return!(e.unwrap(#self_ref))
-                            }
-                        })
-                    };
-
-                    if method.method.default.is_some() {
-                        let eval_pattern = method.inputs_destructuring(
-                            InputsSyntax::EvalPatternAll,
-                            Tupled(true),
-                            attr,
-                        );
-
+                    let default_impl_input_eval_arm = if default_delegator_call.is_some() {
                         quote! {
-                            let #eval_pattern = #polonius;
-                            #default_delegator_call
+                            #prefix::private::Continuation::CallDefaultImpl => {
+                                #default_delegator_call
+                            }
                         }
                     } else {
-                        polonius
+                        quote!()
+                    };
+
+                    quote! {
+                        let (__cont, #eval_pattern_all) = #prefix::polonius::_polonius!(|#self_ref| -> #polonius_return_type {
+                            match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params) {
+                                #prefix::private::Eval::Return(output) => #prefix::polonius::_return!(output),
+                                #prefix::private::Eval::Continue(__cont, #eval_pattern_no_mut) => #prefix::polonius::_exit!((__cont, #fn_params_tupled)),
+                            }
+                        });
+                        match __cont {
+                            #prefix::private::Continuation::Answer(__answer_fn) => {
+                                __answer_fn(__self, #fn_params)
+                            }
+                            #default_impl_input_eval_arm
+                            cont => cont.report(__self)
+                        }
                     }
                 }
                 _ => {
-                    let eval_pattern = method.inputs_destructuring(
+                    let eval_pattern_no_mut = method.inputs_destructuring(
                         InputsSyntax::EvalPatternMutAsWildcard,
                         Tupled(true),
                         attr,
                     );
 
-                    let answer_arm = {
-                        let fn_params = method.inputs_destructuring(
-                            InputsSyntax::FnParams,
-                            Tupled(false),
-                            attr,
-                        );
-                        quote! {
-                            #prefix::private::Evaluation::Apply(__closure, #eval_pattern) => {
-                                __closure.__to_output(__closure(#fn_params))
-                            }
-                        }
-                    };
                     let default_impl_delegate_arm = if method.method.default.is_some() {
                         Some(quote! {
-                            #prefix::private::Evaluation::CallDefaultImpl(#eval_pattern) => {
+                            #prefix::private::Eval::Continue(#prefix::private::Continuation::CallDefaultImpl, #eval_pattern_no_mut) => {
                                 #default_delegator_call
                             },
                         })
@@ -574,10 +534,13 @@ fn def_method_impl(
 
                     quote_spanned! { span=>
                         match #prefix::private::eval::<#mock_fn_path #eval_generic_args>(#self_ref, #inputs_eval_params) {
-                            #answer_arm
+                            #prefix::private::Eval::Return(output) => output,
+                            #prefix::private::Eval::Continue(#prefix::private::Continuation::Answer(__answer_fn), #eval_pattern_no_mut) => {
+                                __answer_fn(self, #fn_params)
+                            }
                             #unmock_arm
                             #default_impl_delegate_arm
-                            e => e.unwrap(#self_ref)
+                            #prefix::private::Eval::Continue(cont, _) => cont.report(#self_ref),
                         }
                     }
                 }

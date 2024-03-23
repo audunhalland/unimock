@@ -7,16 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Changed
 - Unimock now supports very flexible argument mutation, instead of one hard-coded parameter.
-  A new `applies()` function-responder has been added, in favor of the old `answers()`, `answers_leaked_ref()`, `mutates()`.
-  The function passed to `applies()` API can mutate all its inputs freely.
-  The downside to this new mechanism is that its return type can't be generic (i.e. `Ret: IntoResponse`).
-  Flexible return types are still supported though, but now a response has to be created explicitly calling `unimock::respond(return_value)`. ([#43](https://github.com/audunhalland/unimock/pull/43))
+  To achieve this, the `answers` API had to be redesigned with a new signature based on a `dyn Fn`.
+  This dynamic function type has one fixed signature per `MockFn`, so its return type isn't generic as it used to be in `0.5.x`.
+  All generated borrows have to be done explicitly through `Unimock::make_ref` for this to work. ([#43](https://github.com/audunhalland/unimock/pull/43), [#47](https://github.com/audunhalland/unimock/pull/47))
+  - The function passed to `answers` must be a `&static` Fn, _or_ it can be an `Arc` closure that can be registered by calling `answers_arc`.
+  - The parameters passed to this function are the same as passed to the mocked trait method, including `self`.
 - Output trait hierarchy (which allows safely mocking borrowed return values) rewritten to be more flexible and future-proof than previously ([#46](https://github.com/audunhalland/unimock/pull/46))
 - `default_implementation` renamed to `applies_default_impl`.
 ### Added
 - Mocks for `tokio-1` and `futures-0-3` async read/write traits ([#45](https://github.com/audunhalland/unimock/pull/45))
 ### Fixed
 - Fix `matching!` against references to number literals ([#42](https://github.com/audunhalland/unimock/pull/42))
+- Borrows from function arguments can now be made without leaking memory ([#47](https://github.com/audunhalland/unimock/pull/47))
+### Removed
+- The `mutates` builder APIs. These are now handled using `answers`.
 
 ## [0.5.8] - 2024-01-15
 ### Fixed

@@ -9,6 +9,8 @@ use core::future::Future;
 #[cfg(any(feature = "std", feature = "spin-lock"))]
 mod basic;
 
+mod arg_borrows;
+
 mod default_impl;
 mod errors;
 mod generic;

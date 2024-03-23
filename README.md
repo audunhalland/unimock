@@ -105,21 +105,17 @@ There are different constraints acting on return values based on how the clause 
 ### Mutating inputs
 Many traits uses the argument mutation pattern, where there are one or more `&mut` parameters.
 
-To access the `&mut` parameters, a function is applied to the call pattern using `applies`:
+To access the `&mut` parameters, a function is applied to the call pattern using `answers`:
 
 ```rust
 let mocked = Unimock::new(
     mock::core::fmt::DisplayMock::fmt
         .next_call(matching!(_))
-        .applies(&|f| respond(write!(f, "mutation!")))
+        .answers(&|_, f| write!(f, "mutation!"))
 );
 
 assert_eq!("mutation!", format!("{mocked}"));
 ```
-
-The applied function also specifies the response, which is constructed by calling [respond].
-In the `fmt` case, the return type is [core::fmt::Result].
-The respond function helps with automatic type conversion and automatic borrowing.
 
 ## Combining setup clauses
 `Unimock::new()` accepts as argument anything that implements [Clause].
@@ -146,10 +142,10 @@ assert_eq!(
         &Unimock::new((
             FooMock::foo
                 .some_call(matching!(_))
-                .applies(&|arg| respond(arg * 3)),
+                .answers(&|_, arg| arg * 3),
             BarMock::bar
                 .some_call(matching!((arg) if *arg > 20))
-                .applies(&|arg| respond(arg * 2)),
+                .answers(&|_, arg| arg * 2),
         )),
         7
     )
@@ -163,10 +159,10 @@ assert_eq!(
         &Unimock::new((
             FooMock::foo.stub(|each| {
                 each.call(matching!(1337)).returns(1024);
-                each.call(matching!(_)).applies(&|arg| respond(arg * 3));
+                each.call(matching!(_)).answers(&|_, arg| arg * 3);
             }),
             BarMock::bar.stub(|each| {
-                each.call(matching!((arg) if *arg > 20)).applies(&|arg| respond(arg * 2));
+                each.call(matching!((arg) if *arg > 20)).answers(&|_, arg| arg * 2);
             }),
         )),
         7

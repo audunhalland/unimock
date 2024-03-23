@@ -11,7 +11,6 @@ type Response<T> = Vec<Box<dyn Borrow<T> + Send + Sync>>;
 
 impl<T: ?Sized> Kind for Mix<T> {
     type Return = Response<T>;
-    type Respond = Response<T>;
 }
 
 impl<T: ?Sized + 'static> GetOutput for Response<T> {
@@ -21,18 +20,6 @@ impl<T: ?Sized + 'static> GetOutput for Response<T> {
 
     fn output(&self) -> Option<Self::Output<'_>> {
         Some(self.iter().map(|el| el.as_ref().borrow()).collect())
-    }
-}
-
-impl<T: ?Sized + 'static> IntoOutput for Response<T> {
-    type Output<'u> = Vec<&'u T>
-        where
-            Self: 'u;
-
-    fn into_output(self, value_chain: &ValueChain) -> Self::Output<'_> {
-        self.into_iter()
-            .map(|el| value_chain.add(el).as_ref().borrow())
-            .collect()
     }
 }
 
@@ -54,4 +41,3 @@ macro_rules! into {
 
 into!(IntoReturnOnce, into_return_once);
 into!(IntoReturn, into_return);
-into!(IntoRespond, into_respond);

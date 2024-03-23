@@ -1,4 +1,5 @@
 #![allow(clippy::write_literal)]
+#![allow(clippy::to_string_in_format_args)]
 
 use std::io::{BufRead, BufReader, Write};
 
@@ -17,7 +18,7 @@ fn test_display() {
         Unimock::new(
             DisplayMock::fmt
                 .next_call(matching!(_))
-                .applies(&|f| respond(write!(f, "u")))
+                .answers(&|_, f| write!(f, "u"))
         )
         .to_string()
     );
@@ -39,7 +40,7 @@ fn test_debug() {
     let unimock = Unimock::new(
         DebugMock::fmt
             .next_call(matching!())
-            .applies(&|f| respond(write!(f, "u"))),
+            .answers(&|_, f| write!(f, "u")),
     );
 
     assert_eq!("u", format!("{unimock:?}"));
@@ -50,10 +51,10 @@ fn test_read() {
     let mut reader = BufReader::new(Unimock::new((
         ReadMock::read
             .next_call(matching!(_))
-            .applies(&|mut f| respond(f.write(b"ok"))),
+            .answers(&|_, mut f| f.write(b"ok")),
         ReadMock::read
             .next_call(matching!(_))
-            .applies(&|mut f| respond(f.write(b"\n"))),
+            .answers(&|_, mut f| f.write(b"\n")),
     )));
 
     let mut line = String::new();
@@ -95,7 +96,7 @@ fn test_fmt_io_duplex_default_impl_implicit() {
     let unimock = Unimock::new((
         DisplayMock::fmt
             .next_call(matching!())
-            .applies(&|f| respond(write!(f, "hello {}", "unimock".to_string()))),
+            .answers(&|_, f| write!(f, "hello {}", "unimock".to_string())),
         // NOTE: write! calls `write_all` which should get re-routed to `write`:
         WriteMock::write
             .next_call(matching!(eq!(b"hello ")))
@@ -115,7 +116,7 @@ fn test_fmt_io_duplex_default_impl_explicit() {
     let unimock = Unimock::new((
         DisplayMock::fmt
             .next_call(matching!())
-            .applies(&|f| respond(write!(f, "hello {}", "unimock".to_string()))),
+            .answers(&|_, f| write!(f, "hello {}", "unimock".to_string())),
         WriteMock::write_all
             .next_call(matching!(eq!(b"hello ")))
             .applies_default_impl(),

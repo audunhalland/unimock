@@ -182,11 +182,14 @@ fn mixed_tuple_clone_combinatorics_once() {
 
 #[test]
 fn mixed_tuple_clone_combinatorics_many() {
-    let u = Unimock::new(
-        MixedTupleMock::tuple4
-            .each_call(matching!())
-            .applies(&|| respond((clone::Nope, clone::Nope, clone::Sure, clone::Sure))),
-    );
+    let u = Unimock::new(MixedTupleMock::tuple4.each_call(matching!()).answers(&|u| {
+        (
+            u.make_ref(clone::Nope),
+            clone::Nope,
+            u.make_ref(clone::Sure),
+            clone::Sure,
+        )
+    }));
 
     for _ in 0..3 {
         assert_eq!(
@@ -220,7 +223,7 @@ fn in_poll() {
 mod shallow {
     use unimock::*;
 
-    trait Lol {
+    trait Trait {
         fn f(&self) -> Result<&u32, u32>;
     }
 
@@ -231,16 +234,19 @@ mod shallow {
     impl MockFn for Mock {
         type Inputs<'i> = ();
         type OutputKind = unimock::output::Shallow<MyResult<&'static u32>>;
-        type ApplyFn = ();
+        type AnswerFn = ();
 
         fn info() -> MockFnInfo {
             MockFnInfo::new::<Self>()
         }
     }
 
-    impl Lol for Unimock {
+    impl Trait for Unimock {
         fn f(&self) -> Result<&u32, u32> {
-            unimock::private::eval::<Mock>(self, ()).unwrap(self)
+            match unimock::private::eval::<Mock>(self, ()) {
+                unimock::private::Eval::Return(out) => out,
+                _ => panic!(),
+            }
         }
     }
 
@@ -248,6 +254,6 @@ mod shallow {
     fn test() {
         let u = Unimock::new(Mock.each_call(matching!()).returns(Ok::<_, u32>(42)));
 
-        assert_eq!(<Unimock as Lol>::f(&u), Ok(&42));
+        assert_eq!(<Unimock as Trait>::f(&u), Ok(&42));
     }
 }

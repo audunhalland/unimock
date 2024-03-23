@@ -7,7 +7,9 @@ use syn::visit_mut::VisitMut;
 
 use super::attr::MockApi;
 use super::output;
-use super::util::{contains_lifetime, DotAwait, IsGeneric, IsTypeGeneric, RpitFuture};
+use super::util::{
+    contains_lifetime, guess_is_pin, DotAwait, IsGeneric, IsTypeGeneric, RpitFuture,
+};
 use super::Attr;
 
 use crate::doc;
@@ -105,7 +107,7 @@ impl<'t> MockMethod<'t> {
                 ty,
                 ..
             }) => {
-                if Self::guess_is_pin(ty) {
+                if guess_is_pin(ty) {
                     Receiver::Pin {
                         surrogate_self: syn::Ident::new("__self", self_token.span()),
                     }
@@ -214,20 +216,6 @@ impl<'t> MockMethod<'t> {
         if let syn::Type::Reference(reference) = ty {
             if reference.mutability.is_some() {
                 return contains_lifetime(reference.elem.as_ref().clone());
-            }
-        }
-
-        false
-    }
-
-    fn guess_is_pin(ty: &syn::Type) -> bool {
-        if let syn::Type::Path(type_path) = ty {
-            if let Some(last_segment) = type_path.path.segments.last() {
-                if last_segment.ident == "Pin" {
-                    if let syn::PathArguments::AngleBracketed(_) = &last_segment.arguments {
-                        return true;
-                    }
-                }
             }
         }
 

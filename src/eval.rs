@@ -4,7 +4,7 @@ use crate::error::{self};
 use crate::error::{MockError, MockResult};
 use crate::fn_mocker::{FnMocker, PatternMatchMode};
 use crate::mismatch::Mismatches;
-use crate::private::{ApplyClosure, Evaluation, MismatchReporter};
+use crate::private::{Continuation, Eval, MismatchReporter};
 use crate::responder::{DowncastResponder, DynResponder};
 use crate::state::SharedState;
 use crate::{debug, MockFnInfo, Unimock};
@@ -25,7 +25,7 @@ struct EvalResponder<'u> {
 pub(crate) fn eval<'u, 'i, F: MockFn>(
     unimock: &'u Unimock,
     inputs: F::Inputs<'i>,
-) -> MockResult<Evaluation<'u, 'i, F>> {
+) -> MockResult<Eval<'u, 'i, F>> {
     let dyn_ctx = DynCtx {
         info: F::info(),
         shared_state: &unimock.shared_state,
@@ -39,7 +39,7 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     .downcast_responder::<F, _>(dyn_return_responder, &eval_responder)?
                     .get_output()
                 {
-                    Some(output) => Ok(Evaluation::Evaluated(output)),
+                    Some(output) => Ok(Eval::Return(output)),
                     None => Err(MockError::CannotReturnValueMoreThanOnce {
                         fn_call: dyn_ctx.fn_call(),
                         pattern: eval_responder
@@ -48,25 +48,11 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     }),
                 }
             }
-            DynResponder::StaticApply(dyn_responder) => {
-                let apply_fn_responder =
+            DynResponder::Answer(dyn_responder) => {
+                let answerer =
                     dyn_ctx.downcast_responder::<F, _>(dyn_responder, &eval_responder)?;
-                Ok(Evaluation::Apply(
-                    ApplyClosure {
-                        unimock,
-                        apply_fn: apply_fn_responder.apply_fn,
-                    },
-                    inputs,
-                ))
-            }
-            DynResponder::BoxedApply(dyn_responder) => {
-                let apply_fn_responder =
-                    dyn_ctx.downcast_responder::<F, _>(dyn_responder, &eval_responder)?;
-                Ok(Evaluation::Apply(
-                    ApplyClosure {
-                        unimock,
-                        apply_fn: apply_fn_responder.apply_fn.as_ref(),
-                    },
+                Ok(Eval::Continue(
+                    Continuation::Answer(answerer.answer_closure.clone()),
                     inputs,
                 ))
             }
@@ -77,11 +63,13 @@ pub(crate) fn eval<'u, 'i, F: MockFn>(
                     .debug_pattern(eval_responder.pat_index),
                 msg: msg.clone(),
             }),
-            DynResponder::Unmock => Ok(Evaluation::Unmocked(inputs)),
-            DynResponder::ApplyDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),
+            DynResponder::Unmock => Ok(Eval::Continue(Continuation::Unmock, inputs)),
+            DynResponder::ApplyDefaultImpl => {
+                Ok(Eval::Continue(Continuation::CallDefaultImpl, inputs))
+            }
         },
-        EvalResult::Unmock => Ok(Evaluation::Unmocked(inputs)),
-        EvalResult::CallDefaultImpl => Ok(Evaluation::CallDefaultImpl(inputs)),
+        EvalResult::Unmock => Ok(Eval::Continue(Continuation::Unmock, inputs)),
+        EvalResult::CallDefaultImpl => Ok(Eval::Continue(Continuation::CallDefaultImpl, inputs)),
     }
 }
 

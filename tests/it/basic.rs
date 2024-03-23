@@ -1,4 +1,4 @@
-use unimock::alloc::{format, String, ToString};
+use unimock::alloc::{format, Box, String, ToString};
 use unimock::*;
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
@@ -63,7 +63,7 @@ mod owned_output {
                 &Unimock::new(
                     OwnedMock::foo
                         .next_call(matching!(_, _))
-                        .applies(&|a, b| respond(format!("{a}{b}")))
+                        .answers(&|_, a, b| format!("{a}{b}"))
                         .once()
                 ),
                 "a",
@@ -313,7 +313,7 @@ mod no_debug {
     fn can_match_a_non_debug_argument() {
         let unimock = Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
-                .applies(&|_, _| respond(PrimitiveEnum::Foo));
+                .answers(&|_, _, _| PrimitiveEnum::Foo);
         }));
 
         match unimock.primitive(PrimitiveEnum::Bar, "") {
@@ -327,7 +327,7 @@ mod no_debug {
     fn should_format_non_debug_input_with_a_question_mark() {
         Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
             each.call(matching!(PrimitiveEnum::Bar, _))
-                .applies(&|_, _| respond(PrimitiveEnum::Foo));
+                .answers(&|_, _, _| PrimitiveEnum::Foo);
         }))
         .primitive(PrimitiveEnum::Foo, "");
     }
@@ -423,7 +423,7 @@ mod various_borrowing {
                 &Unimock::new(
                     BorrowingMock::borrow
                         .next_call(matching!(_))
-                        .applies(&|input| respond(format!("{input}{input}")))
+                        .answers(&|unimock, input| unimock.make_ref(format!("{input}{input}")))
                         .once()
                 ),
                 "yo"
@@ -434,7 +434,7 @@ mod various_borrowing {
             <Unimock as Borrowing>::borrow_static(&Unimock::new(
                 BorrowingMock::borrow_static
                     .next_call(matching!(_))
-                    .applies(&|| respond_leaked_ref("yoyoyo".to_string()))
+                    .answers(&|_| Box::leak(Box::new("yoyoyo".to_string())))
                     .once()
             ))
         );
@@ -966,7 +966,7 @@ mod non_sync_return {
         let u = Unimock::new(
             NonSyncMock::return_cell
                 .next_call(matching!())
-                .applies(&|| respond(Cell::new(42))),
+                .answers(&|_| Cell::new(42)),
         );
         assert_eq!(Cell::new(42), u.return_cell());
     }
@@ -988,10 +988,10 @@ mod mutated_args {
 
     #[test]
     fn can_mutate1() {
-        let u = Unimock::new(Mut1Mock::mut1_a.next_call(matching!(2, _, 21)).applies(
-            &|a, b, c| {
+        let u = Unimock::new(Mut1Mock::mut1_a.next_call(matching!(2, _, 21)).answers(
+            &|_, a, b, c| {
                 *b = a * c;
-                respond(a + c)
+                a + c
             },
         ));
 
@@ -1026,9 +1026,9 @@ mod mutated_args {
         let u = Unimock::new(
             ImpossibleMutableLifetimeArgMock::mut_b_impossible
                 .next_call(matching!(2, _cannot_match_b, 21))
-                .applies(&|a, _, c| {
+                .answers(&|_, a, _, c| {
                     *c *= a;
-                    respond(*c + a)
+                    *c + a
                 }),
         );
 
@@ -1065,10 +1065,10 @@ mod borrow_dyn {
         let u = Unimock::new((
             BorrowDynMock::borrow_dyn
                 .next_call(matching!())
-                .applies(&respond_mocked),
+                .answers(&|unimock| unimock),
             BorrowDynMock::borrow_dyn_opt
                 .next_call(matching!())
-                .applies(&|| respond(None::<&dyn BorrowDyn>)),
+                .answers(&|_| None),
         ));
 
         let u2 = u.borrow_dyn();
@@ -1131,11 +1131,7 @@ mod no_verify_in_drop {
     }
 
     fn mock() -> Unimock {
-        Unimock::new(
-            TraitMock::foo
-                .next_call(matching!())
-                .applies(&|| respond(())),
-        )
+        Unimock::new(TraitMock::foo.next_call(matching!()).answers(&|_| ()))
     }
 
     fn mock_no_verify_in_drop() -> Unimock {
@@ -1184,15 +1180,13 @@ mod apply_fn {
 
     #[test]
     fn test() {
-        let u = Unimock::new(
-            TraitMock::foo
-                .next_call(matching!(42, _, _))
-                .applies(&|_, b, c| {
-                    *b += 1;
-                    *c += 1;
-                    respond(1337)
-                }),
-        );
+        let u = Unimock::new(TraitMock::foo.next_call(matching!(42, _, _)).answers(
+            &|_, _, b, c| {
+                *b += 1;
+                *c += 1;
+                1337
+            },
+        ));
         let mut b = 0;
         let mut c = 0;
         assert_eq!(1337, u.foo(&42, &mut b, &mut c));

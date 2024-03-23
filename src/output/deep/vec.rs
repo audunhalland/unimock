@@ -8,7 +8,6 @@ where
     K: Kind,
 {
     type Return = AsReturn<K>;
-    type Respond = AsRespond<K>;
 }
 
 impl<K> Return for Mix<K>
@@ -20,7 +19,6 @@ where
 }
 
 pub struct AsReturn<K: Kind>(Vec<K::Return>);
-pub struct AsRespond<K: Kind>(Vec<K::Respond>);
 
 impl<K> GetOutput for AsReturn<K>
 where
@@ -37,22 +35,6 @@ where
         }
 
         Some(out)
-    }
-}
-
-impl<K> IntoOutput for AsRespond<K>
-where
-    K: Kind,
-    Self: 'static,
-{
-    type Output<'u> = Vec<<<K as Kind>::Return as GetOutput>::Output<'u>>
-        where Self: 'u;
-
-    fn into_output(self, value_chain: &ValueChain) -> Self::Output<'_> {
-        self.0
-            .into_iter()
-            .map(|el| el.into_output(value_chain))
-            .collect()
     }
 }
 
@@ -81,20 +63,6 @@ where
         Ok(AsReturn(
             self.into_iter()
                 .map(|el| el.into_return())
-                .collect::<Result<_, _>>()?,
-        ))
-    }
-}
-
-impl<T, K> IntoRespond<Mix<K>> for Vec<T>
-where
-    K: Kind,
-    T: IntoRespond<K>,
-{
-    fn into_respond(self) -> OutputResult<AsRespond<K>> {
-        Ok(AsRespond(
-            self.into_iter()
-                .map(|el| el.into_respond())
                 .collect::<Result<_, _>>()?,
         ))
     }
