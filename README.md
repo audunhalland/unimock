@@ -105,7 +105,7 @@ There are different constraints acting on return values based on how the clause 
 ### Mutating inputs
 Many traits uses the argument mutation pattern, where there are one or more `&mut` parameters.
 
-To access the `&mut` parameters, a function is applied to the call pattern using `answers`:
+To access the `&mut` parameters (and mutate them), a function is applied to the call pattern using `answers`:
 
 ```rust
 let mocked = Unimock::new(
@@ -116,6 +116,8 @@ let mocked = Unimock::new(
 
 assert_eq!("mutation!", format!("{mocked}"));
 ```
+
+The argument to `answers` is a function with the same signature as the method it mocks, including the `self` parameter.
 
 ## Combining setup clauses
 `Unimock::new()` accepts as argument anything that implements [Clause].
@@ -307,11 +309,10 @@ These mock APIs can be found in [mock].
 * Traits with associated types and constants, using `#[unimock(type T = Foo; const FOO: T = value;)]` syntax.
 * Methods with any self receiver (`self`, `&self`, `&mut self` or arbitrary (e.g. `self: Rc<Self>`)).
 * Methods that take reference inputs.
-* Methods returning references to self.
+* Methods returning values borrowed from self.
 * Methods returning references to arguments.
 * Methods returning `Option<&T>`, `Result<&T, E>` or `Vec<&T>` for any `T` that is borrowed from `self`.
 * Methods returning any tuple combination of self-borrowed or owned elements up to 4 elements.
-* Methods returning data borrowed from non-self arguments (these have to be converted to static reference, e.g. via [`Box::leak`](Box::leak)).
 * Methods returning a type containing lifetime parameters. For a mocked return they will have to be `'static`.
 * Generic methods using either explicit generic params or argument-position `impl Trait`.
 * Methods that are `async` or return `impl Future`.
@@ -374,7 +375,7 @@ Unimock respects the memory safety and soundness provided by Rust.
 Sometimes this fact can lead to less than optimal ergonomics.
 
 For example, in order to use `.returns(value)`, the value must (generally) implement `Clone`, `Send`, `Sync` and `'static`.
-If it's not all of those things, the slightly longer `.applies(&|_| respond(value))` can be used instead.
+If it's not all of those things, the slightly longer `.answers(&|_| value)` can be used instead.
 
 #### Keep the amount of generated code to a minimum
 The unimock API is mainly built around generics and traits, instead of being macro-generated.
