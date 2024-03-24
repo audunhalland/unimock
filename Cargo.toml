@@ -19,7 +19,7 @@ std = ["once_cell/std"]
 spin-lock = ["dep:spin"]
 mock-core = []
 mock-std = ["std", "mock-core"]
-mock-futures-0-3 = ["std", "dep:futures-0-3"]
+mock-futures-io-0-3 = ["std", "dep:futures-io-0-3"]
 mock-tokio-1 = ["std", "dep:tokio-1"]
 nightly-tests = []
 unstable-doc-cfg = []
@@ -31,7 +31,7 @@ once_cell = { version = "1.17", default-features = false }
 polonius-the-crab = "0.4"
 pretty_assertions = { version = "1.3", optional = true }
 spin = { version = "0.9.8", optional = true }
-futures-0-3 = { package = "futures", version = "0.3", optional = true }
+futures-io-0-3 = { package = "futures-io", version = "0.3.30", optional = true }
 tokio-1 = { package = "tokio", version = "1.36", default-features = false, optional = true }
 
 [dev-dependencies]
@@ -45,7 +45,7 @@ rustversion = "1"
 doctest = false
 
 [package.metadata.docs.rs]
-features = ["unstable-doc-cfg", "mock-core", "mock-std", "mock-futures-0-3", "mock-tokio-1"]
+features = ["unstable-doc-cfg", "mock-core", "mock-std", "mock-futures-io-0-3", "mock-tokio-1"]
 
 [workspace]
 members = ["unimock_macros"]

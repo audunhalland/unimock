@@ -1,13 +1,13 @@
 //! Mock APIs for `futures 0.3` traits
 
 /// Mock APIs for `futures::io` traits
-#[cfg(feature = "mock-futures-0-3")]
+#[cfg(feature = "mock-futures-io-0-3")]
 pub mod io {
     use core::pin::Pin;
     use core::task::{Context, Poll};
     use std::io::{IoSlice, IoSliceMut};
 
-    use futures_0_3::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, Error, SeekFrom};
+    use futures_io_0_3::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, Error, SeekFrom};
 
     use crate::unimock;
 

@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Output trait hierarchy (which allows safely mocking borrowed return values) rewritten to be more flexible and future-proof than previously ([#46](https://github.com/audunhalland/unimock/pull/46))
 - `default_implementation` renamed to `applies_default_impl`.
 ### Added
-- Mocks for `tokio-1` and `futures-0-3` async read/write traits ([#45](https://github.com/audunhalland/unimock/pull/45))
+- Mocks for `tokio-1` and `futures-io-0-3` async read/write traits ([#45](https://github.com/audunhalland/unimock/pull/45))
 ### Fixed
 - Fix `matching!` against references to number literals ([#42](https://github.com/audunhalland/unimock/pull/42))
 - Borrows from function arguments can now be made without leaking memory ([#47](https://github.com/audunhalland/unimock/pull/47))
