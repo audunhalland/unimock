@@ -585,7 +585,7 @@ use private::{DefaultImplDelegator, Matching};
 ///     Unimock::new(
 ///         FactorialMock::factorial.stub(|each| {
 ///             each.call(matching!((input) if *input <= 1)).returns(1_u32); // unimock controls the API call
-///             each.call(matching!(_)).unmocked();
+///             each.call(matching!(_)).applies_unmocked();
 ///         })
 ///     )
 ///     .factorial(5)

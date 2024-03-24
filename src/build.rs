@@ -500,14 +500,14 @@ let u = Unimock::new((
         .returns(1),
     FibMock::fib
         .each_call(matching!(_))
-        .unmocked()
+        .applies_unmocked()
 ));
 
 assert_eq!(55, u.fib(10));
 ```
 ",
 )]
-            pub fn unmocked(mut self) -> Quantify<'p, F, O> {
+            pub fn applies_unmocked(mut self) -> Quantify<'p, F, O> {
                 self.wrapper.push_responder(DynResponder::Unmock);
                 self.quantify()
             }

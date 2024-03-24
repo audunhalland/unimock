@@ -60,7 +60,7 @@ mod unmock_simple {
         assert_eq!(
             "ab",
             Unimock::new(SpyableMock::concat.stub(|each| {
-                each.call(matching!("a", "b")).unmocked();
+                each.call(matching!("a", "b")).applies_unmocked();
             }))
             .concat("a".to_string(), "b".to_string())
         );
@@ -75,7 +75,7 @@ mod unmock_simple {
             each.call(matching!("", ""))
                 .returns("foobar")
                 .at_least_times(1);
-            each.call(matching!(_, _)).unmocked();
+            each.call(matching!(_, _)).applies_unmocked();
         }))
         .concat("a".to_string(), "b".to_string());
     }
@@ -99,7 +99,7 @@ mod unmock_recursion {
             120,
             Unimock::new(FactorialMock::factorial.stub(|each| {
                 each.call(matching!(0 | 1)).returns(1u32);
-                each.call(matching!(_)).unmocked();
+                each.call(matching!(_)).applies_unmocked();
             }))
             .factorial(5)
         );
@@ -139,7 +139,7 @@ mod unmock_async {
                 120,
                 Unimock::new(AsyncFactorialMock::factorial.stub(|each| {
                     each.call(matching!((input) if *input <= 1)).returns(1_u32);
-                    each.call(matching!(_)).unmocked();
+                    each.call(matching!(_)).applies_unmocked();
                 }))
                 .factorial(5)
                 .await,
