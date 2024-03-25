@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [0.6.0] - 2024-03-25
 ### Changed
 - Unimock now supports very flexible argument mutation, instead of one hard-coded parameter.
   To achieve this, the `answers` API had to be redesigned with a new signature based on a `dyn Fn`.
