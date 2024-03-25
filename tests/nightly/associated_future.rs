@@ -46,7 +46,11 @@ mod with_unmock {
     #[test]
     fn should_mock_with_unmock() {
         async {
-            let test = Unimock::new(FooMock::with_unmock.each_call(matching!(42)).unmocked());
+            let test = Unimock::new(
+                FooMock::with_unmock
+                    .each_call(matching!(42))
+                    .applies_unmocked(),
+            );
 
             let answer = test.with_unmock(42).await;
 
