@@ -389,6 +389,19 @@ fn def_method_impl(
         None
     };
 
+    let allow_lints: proc_macro2::TokenStream = {
+        let mut lints: Vec<proc_macro2::TokenStream> = vec![quote! { unused }];
+
+        if matches!(
+            method.output_structure.wrapping,
+            output::OutputWrapping::RpitFuture(_)
+        ) {
+            lints.push(quote! { manual_async_fn });
+        }
+
+        quote! { #[allow(#(#lints),*)] }
+    };
+
     let body = match kind {
         MethodImplKind::Mock => {
             let unmock_arm = attr.get_unmock_fn(index).map(
@@ -622,7 +635,7 @@ fn def_method_impl(
     quote_spanned! { span=>
         #(#mirrored_attrs)*
         #track_caller
-        #[allow(unused)]
+        #allow_lints
         #method_sig {
             #body
         }
