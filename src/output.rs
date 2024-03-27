@@ -4,6 +4,7 @@ use crate::alloc::Box;
 
 pub(crate) mod deep;
 pub(crate) mod lending;
+pub(crate) mod mut_lending;
 pub(crate) mod owning;
 pub(crate) mod shallow;
 pub(crate) mod static_ref;
@@ -59,8 +60,12 @@ pub trait ReturnDefault<K: Kind> {
     fn return_default() -> K::Return;
 }
 
+/// A "marker" for mutable types
+pub struct Mutable<T>(pub(crate) T);
+
 pub use deep::Deep;
 pub use lending::Lending;
+pub use mut_lending::MutLending;
 pub use owning::Owning;
 pub use shallow::Shallow;
 pub use static_ref::StaticRef;

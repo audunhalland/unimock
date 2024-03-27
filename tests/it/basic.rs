@@ -1193,3 +1193,39 @@ mod apply_fn {
         assert_eq!(1, b);
     }
 }
+
+mod mut_output {
+    use unimock::*;
+
+    #[unimock(api = TraitMock)]
+    trait Trait {
+        fn ref_mut(&mut self) -> &mut i32;
+        fn option_mut(&mut self) -> Option<&mut i32>;
+        fn result_mut(&mut self) -> Result<&mut i32, ()>;
+    }
+
+    #[test]
+    fn test_ref_mut() {
+        let mut u = Unimock::new(
+            TraitMock::ref_mut
+                .next_call(matching!())
+                .answers(&|u| u.make_mut(42)),
+        );
+
+        let num = u.ref_mut();
+        *num += 1;
+    }
+
+    #[test]
+    fn test_option_mut() {
+        let mut u = Unimock::new(
+            TraitMock::option_mut
+                .next_call(matching!())
+                .answers(&|u| Some(u.make_mut(42))),
+        );
+
+        if let Some(num) = u.option_mut() {
+            *num += 1;
+        }
+    }
+}
