@@ -150,6 +150,21 @@ mod unmock_async {
     }
 }
 
+mod impl_future_in_trait_unmock_with_async_fn {
+    use core::future::Future;
+
+    use super::*;
+
+    #[unimock(unmock_with=[foo])]
+    trait Async {
+        fn foo(&self) -> impl Future<Output = i32>;
+    }
+
+    async fn foo(_: &impl core::any::Any) -> i32 {
+        42
+    }
+}
+
 mod unmock_with_custom_args {
     use super::*;
 

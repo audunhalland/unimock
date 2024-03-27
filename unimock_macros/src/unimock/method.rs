@@ -70,7 +70,7 @@ impl<'t> MockMethod<'t> {
         if self.method.sig.asyncness.is_some()
             || matches!(
                 self.output_structure.wrapping,
-                output::OutputWrapping::AssociatedFuture(_)
+                output::OutputWrapping::AssociatedFuture(_) | output::OutputWrapping::RpitFuture(_)
             )
         {
             Some(DotAwait)
