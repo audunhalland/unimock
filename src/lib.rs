@@ -869,6 +869,13 @@ impl Unimock {
         self.value_chain.add(value)
     }
 
+    /// Convert the given value into a mutable reference.
+    ///
+    /// This can be useful when returning mutable references from `answers` functions.
+    pub fn make_mut<T: Send + Sync + 'static>(&mut self, value: T) -> &mut T {
+        self.value_chain.add_mut(value)
+    }
+
     #[track_caller]
     fn from_assembler(
         assembler_result: Result<MockAssembler, alloc::String>,

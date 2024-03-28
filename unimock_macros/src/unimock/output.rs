@@ -66,6 +66,7 @@ pub enum OutputWrapping {
 pub enum OutputKind {
     Owning,
     SelfReference,
+    MutSelfReference,
     ParamReference,
     StaticReference,
     Shallow,
@@ -81,6 +82,7 @@ impl OutputKind {
         match self {
             Self::Owning => "Owning",
             Self::SelfReference => "Lending",
+            Self::MutSelfReference => "MutLending",
             Self::ParamReference => "StaticRef",
             Self::StaticReference => "StaticRef",
             Self::Shallow => "Shallow",
@@ -208,7 +210,13 @@ pub fn determine_owned_or_deep_output_structure(
 
 fn make_generic_kind(ty: syn::Type, attr: &Attr) -> (OutputKind, syn::Type) {
     match ty {
-        syn::Type::Reference(reference) => (OutputKind::SelfReference, *reference.elem),
+        syn::Type::Reference(reference) => {
+            if reference.mutability.is_some() {
+                (OutputKind::MutSelfReference, *reference.elem)
+            } else {
+                (OutputKind::SelfReference, *reference.elem)
+            }
+        }
         syn::Type::Path(mut path) => {
             let mut kind = OutputKind::Owning;
 
@@ -295,12 +303,20 @@ fn determine_reference_ownership(
             "static" => OutputKind::StaticReference,
             _ => match find_param_lifetime(sig, &lifetime.ident) {
                 Some(index) => match index {
-                    0 => OutputKind::SelfReference,
+                    0 => {
+                        if type_reference.mutability.is_some() {
+                            OutputKind::MutSelfReference
+                        } else {
+                            OutputKind::SelfReference
+                        }
+                    }
                     _ => OutputKind::ParamReference,
                 },
                 None => OutputKind::SelfReference,
             },
         }
+    } else if type_reference.mutability.is_some() {
+        OutputKind::MutSelfReference
     } else {
         OutputKind::SelfReference
     }
