@@ -352,3 +352,55 @@ mod generics_and_associated_type {
         fn func<U: 'static>(&self) -> Option<Self::Assoc>;
     }
 }
+
+mod generic_non_static_input_type {
+    use std::io::Read;
+
+    // TODO: Need a syntax to "opt-out" of `Read`
+    //
+    // #[unimock(api = MyTraitMock)]
+    trait MyTrait {
+        fn process<T: Read>(&self, data: T);
+    }
+
+    #[doc = "Unimock mock API for [MyTrait]."]
+    #[allow(non_snake_case)]
+    mod MyTraitMock {
+        #[allow(non_camel_case_types)]
+        #[doc = "Generic mock interface for [`MyTrait::process<T: Read>(data: T)`](MyTrait::process). Get a MockFn instance by calling `with_types()`."]
+        pub struct process;
+    }
+    const _: () = {
+        impl ::unimock::MockFn for MyTraitMock::process {
+            type Inputs<'__i> = unimock::Impossible;
+            type OutputKind = ::unimock::output::Owning<()>;
+            type AnswerFn =
+                dyn (for<'__u> Fn(&'__u ::unimock::Unimock, unimock::Impossible)) + Send + Sync;
+            fn info() -> ::unimock::MockFnInfo {
+                ::unimock::MockFnInfo::new::<Self>().path(&["MyTrait", "process"])
+            }
+            fn debug_inputs(
+                data: &Self::Inputs<'_>,
+            ) -> ::unimock::alloc::Box<[::core::option::Option<::unimock::alloc::String>]>
+            {
+                use ::unimock::private::{NoDebug, ProperDebug};
+                ::unimock::alloc::Box::new([data.unimock_try_debug()])
+            }
+        }
+        #[doc = "Mocked implementation. Mock API is available at [MyTraitMock]."]
+        impl MyTrait for ::unimock::Unimock {
+            #[track_caller]
+            #[allow(unused)]
+            fn process<T: Read>(&self, data: T) {
+                match ::unimock::private::eval::<MyTraitMock::process>(self, unimock::Impossible) {
+                    ::unimock::private::Eval::Return(output) => output,
+                    ::unimock::private::Eval::Continue(
+                        ::unimock::private::Continuation::Answer(__answer_fn),
+                        data,
+                    ) => __answer_fn(self, data),
+                    ::unimock::private::Eval::Continue(cont, _) => cont.report(self),
+                }
+            }
+        }
+    };
+}

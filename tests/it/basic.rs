@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use unimock::alloc::{format, Box, String, ToString};
 use unimock::*;
 
