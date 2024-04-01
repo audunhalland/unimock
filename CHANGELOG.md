@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [0.6.4] - 2024-04-01
 ### Added
 - Support for returning references to non-Send types ([#53](https://github.com/audunhalland/unimock/pull/53))
 
