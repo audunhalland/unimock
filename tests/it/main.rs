@@ -38,6 +38,9 @@ mod std;
 #[cfg(all(feature = "mock-tokio-1", feature = "std"))]
 mod test_mock_tokio;
 
+#[cfg(feature = "fragile")]
+mod test_fragile;
+
 mod unmock;
 
 fn main() {}

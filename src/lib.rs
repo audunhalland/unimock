@@ -866,16 +866,37 @@ impl Unimock {
     ///
     /// This can be useful when returning references from `answers` functions.
     pub fn make_ref<T: Send + Sync + 'static>(&self, value: T) -> &T {
-        self.value_chain.add(value)
+        self.value_chain.push(value)
     }
 
     /// Convert the given value into a mutable reference.
     ///
     /// This can be useful when returning mutable references from `answers` functions.
     pub fn make_mut<T: Send + Sync + 'static>(&mut self, value: T) -> &mut T {
-        self.value_chain.add_mut(value)
+        self.value_chain.push_mut(value)
+    }
+}
+
+#[cfg(feature = "fragile")]
+impl Unimock {
+    /// Convert the given value into a reference.
+    ///
+    /// The value does not need to implement [Send].
+    /// Unimock will panic/abort if the instance is sent to another thread after calling this.
+    pub fn make_fragile_ref<T: 'static>(&self, value: T) -> &T {
+        self.value_chain.push_fragile(value)
     }
 
+    /// Convert the given value into a mutable reference.
+    ///
+    /// The value does not need to implement [Send].
+    /// Unimock will panic/abort if the instance is sent to another thread after calling this.
+    pub fn make_fragile_mut<T: 'static>(&mut self, value: T) -> &mut T {
+        self.value_chain.push_fragile_mut(value)
+    }
+}
+
+impl Unimock {
     #[track_caller]
     fn from_assembler(
         assembler_result: Result<MockAssembler, alloc::String>,
