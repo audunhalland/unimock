@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- Support for mocking [embedded-hal](https://docs.rs/embedded-hal/latest/embedded_hal/) ([#55](https://github.com/audunhalland/unimock/pull/55)).
+### Fixed
+- Compile error encountered `&[NoDebug]` arguments.
+- Default methods when the trait needs generic arguments.
+- Missing documentation warning for the generated `with_types` function.
 
 ## [0.6.4] - 2024-04-01
 ### Added

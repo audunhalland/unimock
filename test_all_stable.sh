@@ -9,6 +9,7 @@ cargo hack --feature-powerset \
     --mutually-exclusive-features std,critical-section \
     --mutually-exclusive-features std,spin-lock \
     --group-features mock-std,mock-tokio-1,mock-futures-io-0-3 \
+    --group-features critical-section,spin-lock \
     --exclude-features nightly-tests,unstable-doc-cfg \
     test
 cargo test --doc --features mock-core,mock-std
