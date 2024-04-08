@@ -296,43 +296,6 @@ fn test_multiple() {
     );
 }
 
-mod no_debug {
-    use super::*;
-
-    pub enum PrimitiveEnum {
-        Foo,
-        Bar,
-    }
-
-    #[unimock(api=VeryPrimitiveMock)]
-    trait VeryPrimitive {
-        fn primitive(&self, a: PrimitiveEnum, b: &str) -> PrimitiveEnum;
-    }
-
-    #[test]
-    fn can_match_a_non_debug_argument() {
-        let unimock = Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
-            each.call(matching!(PrimitiveEnum::Bar, _))
-                .answers(&|_, _, _| PrimitiveEnum::Foo);
-        }));
-
-        match unimock.primitive(PrimitiveEnum::Bar, "") {
-            PrimitiveEnum::Foo => {}
-            PrimitiveEnum::Bar => panic!(),
-        }
-    }
-
-    #[test]
-    #[should_panic(expected = "VeryPrimitive::primitive(?, \"\"): No matching call patterns.")]
-    fn should_format_non_debug_input_with_a_question_mark() {
-        Unimock::new(VeryPrimitiveMock::primitive.stub(|each| {
-            each.call(matching!(PrimitiveEnum::Bar, _))
-                .answers(&|_, _, _| PrimitiveEnum::Foo);
-        }))
-        .primitive(PrimitiveEnum::Foo, "");
-    }
-}
-
 #[test]
 fn should_debug_reference_to_debug_implementing_type() {
     #[derive(Debug)]
@@ -452,7 +415,7 @@ mod custom_api_module {
     }
 
     #[test]
-    #[should_panic = "Single::func: Expected Single::func(_) at tests/it/basic.rs:459 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."]
+    #[should_panic = "Single::func: Expected Single::func(_) at tests/it/basic.rs:422 to match exactly 1 call, but it actually matched no calls.\nMock for Single::func was never called. Dead mocks should be removed."]
     fn test_without_module() {
         Unimock::new(
             FakeSingle::func
@@ -709,7 +672,7 @@ mod responders_in_series {
 
     #[test]
     #[should_panic(
-        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:685 to match at least 4 calls, but it actually matched 2 calls."
+        expected = "Series::series: Expected Series::series() at tests/it/basic.rs:648 to match at least 4 calls, but it actually matched 2 calls."
     )]
     fn series_not_fully_generated_should_panic() {
         let b = Unimock::new(clause());

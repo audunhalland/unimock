@@ -14,6 +14,7 @@ mod default_impl;
 mod errors;
 mod generic;
 mod matching_eq;
+mod test_debug;
 
 #[cfg(any(feature = "std", feature = "spin-lock"))]
 mod matching_pat;
@@ -35,13 +36,16 @@ mod async_fn;
 #[cfg(all(feature = "mock-core", feature = "mock-std"))]
 mod std;
 
-#[cfg(all(feature = "mock-tokio-1", feature = "std"))]
-mod test_mock_tokio;
-
 #[cfg(feature = "fragile")]
 mod test_fragile;
 
 mod unmock;
+
+#[cfg(all(feature = "mock-tokio-1", feature = "std"))]
+mod test_mock_tokio;
+
+#[cfg(feature = "mock-embedded-hal-1")]
+mod test_mock_embedded_hal;
 
 fn main() {}
 

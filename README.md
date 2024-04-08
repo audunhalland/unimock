@@ -290,6 +290,8 @@ Unimock can be used in a `no_std` environment. The `"std"` feature is enabled by
 
 The `no_std` environment depends on [alloc](https://doc.rust-lang.org/alloc/) and requires a global allocator.
 Some unimock features rely on a working implementation of Mutex, and the `spin-lock` feature enables this for `no_std`.
+The `critical-section` feature is also required for `no_std`.
+These two features will likely merge into one in some future breaking release.
 
 
 ## Mock APIs for central crates

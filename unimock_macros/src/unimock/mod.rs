@@ -312,6 +312,7 @@ fn def_mock_fn(
             mock_fn_struct_item: gen_mock_fn_struct_item(non_generic_ident),
             impl_details: quote! {
                 impl #module_scope #non_generic_ident {
+                    #[doc = "Provide the generic parameters to the mocked method"]
                     pub fn with_types #generic_params(
                         self
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
@@ -469,8 +470,14 @@ fn def_method_impl(
                     _ => todo!("unhandled DefaultImplDelegator constructor"),
                 };
 
+                let generic_args = util::Generics::trait_args(
+                    &trait_info.input_trait.generics,
+                    None,
+                    InferImplTrait(false),
+                );
+
                 Some(quote! {
-                    <#delegator_path as #trait_path>::#method_ident(
+                    <#delegator_path as #trait_path #generic_args>::#method_ident(
                         #delegator_constructor,
                         #fn_params
                     )
@@ -597,9 +604,13 @@ fn def_method_impl(
                 }
                 _ => panic!("BUG: Incompatible receiver for default delegator"),
             };
-            let generic_params = util::Generics::trait_params(trait_info, None);
+            let generic_args = util::Generics::trait_args(
+                &trait_info.input_trait.generics,
+                None,
+                InferImplTrait(false),
+            );
             quote! {
-                <#prefix::Unimock as #trait_path #generic_params>::#method_ident(
+                <#prefix::Unimock as #trait_path #generic_args>::#method_ident(
                     #unimock_accessor,
                     #inputs_destructuring
                 )

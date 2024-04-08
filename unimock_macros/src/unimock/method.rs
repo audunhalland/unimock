@@ -371,15 +371,31 @@ fn generate_mock_fn_ident(
 }
 
 fn try_debug_expr(pat_ident: &syn::PatIdent, ty: &syn::Type) -> proc_macro2::TokenStream {
-    fn collect_derefs(ty: &syn::Type, output: &mut Vec<TokenStream>) {
-        if let syn::Type::Reference(type_reference) = ty {
-            collect_derefs(&type_reference.elem, output);
+    #[derive(Clone, Copy)]
+    enum InnerKind {
+        Slice,
+        Other,
+    }
 
-            if type_reference.mutability.is_some() {
-                output.push(quote! { &* });
-            } else {
-                output.push(quote! { * });
+    fn collect_derefs(ty: &syn::Type, output: &mut Vec<TokenStream>) -> InnerKind {
+        match ty {
+            syn::Type::Reference(type_reference) => {
+                let inner_kind = collect_derefs(&type_reference.elem, output);
+
+                match inner_kind {
+                    InnerKind::Other if type_reference.mutability.is_some() => {
+                        output.push(quote! { &* });
+                    }
+                    InnerKind::Other => {
+                        output.push(quote! { * });
+                    }
+                    InnerKind::Slice => {}
+                }
+
+                inner_kind
             }
+            syn::Type::Slice(_) => InnerKind::Slice,
+            _ => InnerKind::Other,
         }
     }
 
