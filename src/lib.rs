@@ -1141,9 +1141,30 @@ pub trait MockFn: Sized + 'static {
 
     /// Initiate a call pattern builder intended to be used as a [Clause] with exact order verification.
     ///
-    /// This differens from [MockFn::stub], in that that a stub defines all call patterns without any
-    /// specific required call order. This function takes only single input matcher, that MUST be
-    /// matched in the order specified, relative to other next calls.
+    /// The chain of `next_call` call-patterns _must_ be matched (called) in the exact same order as they appear
+    /// in the clause tuple(s). Unimock will fail its post-verification step if not.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use unimock::*;
+    /// #[unimock(api=TraitMock)]
+    /// trait Trait {
+    ///     fn method(&self, input: i32);
+    /// }
+    ///
+    /// let u = Unimock::new((
+    ///     TraitMock::method
+    ///         .next_call(matching!(1))
+    ///         .returns(()),
+    ///     TraitMock::method
+    ///         .next_call(matching!(2))
+    ///         .returns(())
+    /// ));
+    ///
+    /// // the calls must happen in this order:
+    /// u.method(1);
+    /// u.method(2);
+    /// ```
     fn next_call(
         self,
         matching_fn: &dyn Fn(&mut Matching<Self>),
