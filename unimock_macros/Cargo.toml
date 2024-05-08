@@ -1,6 +1,6 @@
 [package]
 name = "unimock_macros"
-version = "0.6.5"
+version = "0.6.6"
 authors = ["Audun Halland <audun.halland@pm.me>"]
 edition = "2021"
 license = "MIT"
@@ -9,7 +9,7 @@ repository = "https://github.com/audunhalland/unimock/"
 keywords = ["procedural-macro", "macros"]
 
 [dependencies]
-syn = { version = "2.0.14", features = ["full", "visit-mut"] }
+syn = { version = "2.0.61", features = ["full", "visit-mut"] }
 quote = "1"
 proc-macro2 = "1"
 
