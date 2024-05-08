@@ -3,6 +3,7 @@
 [<img alt="crates.io" src="https://img.shields.io/crates/v/unimock.svg?style=for-the-badge&logo=rust" height="20">](https://crates.io/crates/unimock)
 [<img alt="docs.rs" src="https://img.shields.io/docsrs/unimock?style=for-the-badge&logo=docs.rs" height="20">](https://docs.rs/unimock)
 [<img alt="CI" src="https://img.shields.io/github/actions/workflow/status/audunhalland/unimock/rust.yml?branch=main&style=for-the-badge&logo=github" height="20">](https://github.com/audunhalland/unimock/actions?query=branch%3Amain)
+[<img alt="Discord" src="https://img.shields.io/discord/1233771789348507698?style=for-the-badge&logo=discord" height="20">](https://discord.gg/nw9ZWP9kvy)
 
 <!-- cargo-rdme start -->
 
