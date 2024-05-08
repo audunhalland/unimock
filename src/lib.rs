@@ -1144,26 +1144,38 @@ pub trait MockFn: Sized + 'static {
     /// The chain of `next_call` call-patterns _must_ be matched (called) in the exact same order as they appear
     /// in the clause tuple(s). Unimock will fail its post-verification step if not.
     ///
+    /// The `next_call` call patterns may be interspersed with other call patterns that do not engage in exact order verification,
+    /// as long as these are not mixed for the same trait method.
+    ///
     /// # Example
     /// ```rust
     /// # use unimock::*;
-    /// #[unimock(api=TraitMock)]
-    /// trait Trait {
-    ///     fn method(&self, input: i32);
+    /// #[unimock(api=FooMock)]
+    /// trait Foo {
+    ///     fn foo(&self, input: i32);
+    /// }
+    ///
+    /// #[unimock(api=BarMock)]
+    /// trait Bar {
+    ///     fn bar(&self);
     /// }
     ///
     /// let u = Unimock::new((
-    ///     TraitMock::method
+    ///     FooMock::foo
     ///         .next_call(matching!(1))
     ///         .returns(()),
-    ///     TraitMock::method
+    ///     BarMock::bar
+    ///         .next_call(matching!())
+    ///         .returns(()),
+    ///     FooMock::foo
     ///         .next_call(matching!(2))
     ///         .returns(())
     /// ));
     ///
     /// // the calls must happen in this order:
-    /// u.method(1);
-    /// u.method(2);
+    /// u.foo(1);
+    /// u.bar();
+    /// u.foo(2);
     /// ```
     fn next_call(
         self,

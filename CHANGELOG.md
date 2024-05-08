@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixed
 - Silenced `clippy::multiple_bound_locations` lints
+- Small doc improvements
 
 ## [0.6.5] - 2024-04-08
 ### Added
