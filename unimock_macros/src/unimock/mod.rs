@@ -27,7 +27,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
 
     let prefix = &attr.prefix;
     let trait_path = &trait_info.trait_path;
-    let impl_attributes = trait_info
+    let mirrored_impl_attributes = trait_info
         .input_trait
         .attrs
         .iter()
@@ -42,6 +42,7 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             syn::AttrStyle::Inner(_) => false,
         })
         .collect::<Vec<_>>();
+    let impl_allow_lints = impl_allow_lints();
 
     let mock_fn_defs: Vec<Option<MockFnDef>> = trait_info
         .methods
@@ -180,7 +181,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             });
 
         Some(quote! {
-            #(#impl_attributes)*
+            #(#mirrored_impl_attributes)*
+            #impl_allow_lints
             impl #generic_params #trait_path #generic_args for #prefix::private::DefaultImplDelegator #where_clause {
                 #(#attr_associated_types)*
                 #(#attr_associated_consts)*
@@ -203,7 +205,8 @@ pub fn generate(attr: Attr, item_trait: syn::ItemTrait) -> syn::Result<proc_macr
             #(#mock_fn_impl_details)*
 
             #impl_doc
-            #(#impl_attributes)*
+            #(#mirrored_impl_attributes)*
+            #impl_allow_lints
             impl #generic_params #trait_path #generic_args for #prefix::Unimock #where_clause {
                 #(#attr_associated_types)*
                 #(#attr_associated_consts)*
@@ -230,6 +233,7 @@ fn def_mock_fn(
     let prefix = &attr.prefix;
     let span = method.span();
     let mirrored_attrs = method.mirrored_attrs();
+    let impl_allow_lints = impl_allow_lints();
     let mock_fn_ident = &method.mock_fn_ident;
     let mock_fn_path = method.mock_fn_path(attr);
     let trait_ident_lit = &trait_info.ident_lit;
@@ -283,6 +287,7 @@ fn def_mock_fn(
 
     let impl_block = quote_spanned! { span=>
         #(#mirrored_attrs)*
+        #impl_allow_lints
         impl #generic_params #prefix::MockFn for #mock_fn_path #generic_args #where_clause {
             type Inputs<#input_lifetime> = #input_types_tuple;
             type OutputKind = #output_kind_assoc_type;
@@ -311,6 +316,7 @@ fn def_mock_fn(
         MockFnDef {
             mock_fn_struct_item: gen_mock_fn_struct_item(non_generic_ident),
             impl_details: quote! {
+                #impl_allow_lints
                 impl #module_scope #non_generic_ident {
                     #[doc = "Provide the generic parameters to the mocked method"]
                     pub fn with_types #generic_params(
@@ -716,4 +722,10 @@ fn path_to_string(path: &syn::Path) -> String {
         }
     }
     out
+}
+
+fn impl_allow_lints() -> proc_macro2::TokenStream {
+    quote! {
+        #[allow(clippy::multiple_bound_locations)]
+    }
 }
