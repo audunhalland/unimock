@@ -448,7 +448,7 @@ let u = Unimock::new(
         .each_call(matching!())
         .answers_arc({
             let mutex = mutex.clone();
-            Arc::new(move |_| {
+            Arc::new(move |_, _| {
                 *mutex.lock().unwrap()
             })
         })
