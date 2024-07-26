@@ -333,7 +333,7 @@ fn def_mock_fn(
                 }
 
                 #[allow(non_camel_case_types)]
-                struct #mock_fn_ident #generic_args #phantoms_tuple;
+                pub(crate) struct #mock_fn_ident #generic_args #phantoms_tuple;
 
                 #impl_block
             },
