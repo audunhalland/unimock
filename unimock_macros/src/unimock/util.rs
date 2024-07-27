@@ -610,7 +610,6 @@ pub fn replace_self_ty_with_path(mut ty: syn::Type, replacement_path: &syn::Path
 }
 
 pub struct FutureBound<'s> {
-    pub future_ident: &'s syn::Ident,
     pub output: &'s syn::AssocType,
 }
 
@@ -642,7 +641,6 @@ pub fn find_future_bound<'s>(
             .next()?;
 
         Some(FutureBound {
-            future_ident: &last_segment.ident,
             output: output_assoc,
         })
     }

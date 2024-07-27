@@ -383,7 +383,7 @@ fn def_method_impl(
 
     let must_async_wrap = matches!(
         method.output_structure.wrapping,
-        output::OutputWrapping::RpitFuture(_) | output::OutputWrapping::AssociatedFuture(_)
+        output::OutputWrapping::RpitFuture | output::OutputWrapping::AssociatedFuture(_)
     );
 
     let trait_path = &trait_info.trait_path;
@@ -402,7 +402,7 @@ fn def_method_impl(
 
         if matches!(
             method.output_structure.wrapping,
-            output::OutputWrapping::RpitFuture(_)
+            output::OutputWrapping::RpitFuture
         ) {
             lints.push(quote! { manual_async_fn });
         }
