@@ -59,7 +59,7 @@ impl OutputStructure {
 
 pub enum OutputWrapping {
     None,
-    RpitFuture(syn::Type),
+    RpitFuture,
     AssociatedFuture(syn::TraitItemType),
 }
 
@@ -134,7 +134,7 @@ pub fn determine_output_structure(
                     let mut output_structure =
                         determine_owned_or_deep_output_structure(sig, &rpit_future.output.ty, attr);
 
-                    output_structure.wrapping = OutputWrapping::RpitFuture(rpit_future.output.ty);
+                    output_structure.wrapping = OutputWrapping::RpitFuture;
                     output_structure
                 } else {
                     determine_owned_or_deep_output_structure(sig, output_ty, attr)

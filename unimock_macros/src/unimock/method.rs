@@ -45,7 +45,7 @@ pub enum InputsSyntax {
 
 pub enum ArgClass<'t> {
     Receiver,
-    MutImpossible(&'t syn::PatIdent, &'t syn::Type),
+    MutImpossible(&'t syn::PatIdent),
     Other(&'t syn::PatIdent, &'t syn::Type),
     Unprocessable(&'t syn::PatType),
 }
@@ -70,7 +70,7 @@ impl<'t> MockMethod<'t> {
         if self.method.sig.asyncness.is_some()
             || matches!(
                 self.output_structure.wrapping,
-                output::OutputWrapping::AssociatedFuture(_) | output::OutputWrapping::RpitFuture(_)
+                output::OutputWrapping::AssociatedFuture(_) | output::OutputWrapping::RpitFuture
             )
         {
             Some(DotAwait)
@@ -202,7 +202,7 @@ impl<'t> MockMethod<'t> {
             syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
                 (_, syn::Pat::Ident(pat_ident)) => {
                     if Self::is_mutable_reference_with_lifetimes_in_type(pat_type.ty.as_ref()) {
-                        ArgClass::MutImpossible(pat_ident, &pat_type.ty)
+                        ArgClass::MutImpossible(pat_ident)
                     } else {
                         ArgClass::Other(pat_ident, &pat_type.ty)
                     }
@@ -450,7 +450,7 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
                     ArgClass::Receiver => {
                         continue;
                     }
-                    ArgClass::MutImpossible(pat_ident, _) => match self.syntax {
+                    ArgClass::MutImpossible(pat_ident) => match self.syntax {
                         InputsSyntax::FnPattern
                         | InputsSyntax::FnParams
                         | InputsSyntax::EvalPatternAll => pat_ident.to_tokens(tokens),

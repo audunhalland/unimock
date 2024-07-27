@@ -898,6 +898,8 @@ mod eval_name_clash {
 }
 
 mod fn_cfg_attrs {
+    #![allow(unexpected_cfgs)]
+
     use super::*;
 
     #[unimock(api = TraitMock)]

@@ -312,6 +312,7 @@ fn def_mock_fn(
             MockApi::MockMod(ident) => Some(quote_spanned! { span=> #ident:: }),
             _ => None,
         };
+        let answer_fn_assoc_type = make_answer_fn(method, trait_info, attr);
 
         MockFnDef {
             mock_fn_struct_item: gen_mock_fn_struct_item(non_generic_ident),
@@ -324,7 +325,7 @@ fn def_mock_fn(
                     ) -> impl for<#input_lifetime> #prefix::MockFn<
                         Inputs<#input_lifetime> = #input_types_tuple,
                         OutputKind = #output_kind_assoc_type,
-                        AnswerFn = <#mock_fn_ident #generic_args as #prefix::MockFn>::AnswerFn,
+                        AnswerFn = #answer_fn_assoc_type,
                     >
                         #where_clause
                     {
@@ -382,7 +383,7 @@ fn def_method_impl(
 
     let must_async_wrap = matches!(
         method.output_structure.wrapping,
-        output::OutputWrapping::RpitFuture(_) | output::OutputWrapping::AssociatedFuture(_)
+        output::OutputWrapping::RpitFuture | output::OutputWrapping::AssociatedFuture(_)
     );
 
     let trait_path = &trait_info.trait_path;
@@ -401,7 +402,7 @@ fn def_method_impl(
 
         if matches!(
             method.output_structure.wrapping,
-            output::OutputWrapping::RpitFuture(_)
+            output::OutputWrapping::RpitFuture
         ) {
             lints.push(quote! { manual_async_fn });
         }

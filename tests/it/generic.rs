@@ -93,6 +93,29 @@ mod param {
 
         deps.generic_param_debug(42_i32);
     }
+
+    mod cross_mod {
+        use super::*;
+
+        #[unimock(api=CrossModGenericMock)]
+        pub trait CrossModGeneric<T> {
+            fn cross_mod(&self, param: T) -> &'static str;
+        }
+    }
+
+    /// https://github.com/audunhalland/unimock/issues/58
+    #[test]
+    fn cross_mod_setup() {
+        let deps = Unimock::new(
+            cross_mod::CrossModGenericMock::cross_mod
+                .with_types::<&'static str>()
+                .each_call(matching!("foobar"))
+                .returns("a string"),
+        );
+
+        use cross_mod::CrossModGeneric;
+        assert_eq!("a string", deps.cross_mod("foobar"));
+    }
 }
 
 mod combined {
