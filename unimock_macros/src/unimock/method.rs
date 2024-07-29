@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -22,7 +22,7 @@ pub struct MockMethod<'t> {
     pub adapted_sig: syn::Signature,
     pub non_receiver_arg_count: usize,
     pub is_generic: IsGeneric,
-    pub is_type_generic: IsTypeGeneric,
+    pub sig_generics: SigGenerics,
     pub impl_trait_idents: HashSet<String>,
     pub non_generic_mock_entry_ident: Option<syn::Ident>,
     pub mock_fn_ident: syn::Ident,
@@ -46,6 +46,7 @@ pub enum InputsSyntax {
 pub enum ArgClass<'t> {
     Receiver,
     MutImpossible(&'t syn::PatIdent),
+    GenericMissingStaticBound(&'t syn::PatIdent),
     Other(&'t syn::PatIdent, &'t syn::Type),
     Unprocessable(&'t syn::PatType),
 }
@@ -201,7 +202,11 @@ impl<'t> MockMethod<'t> {
             syn::FnArg::Receiver(_) => ArgClass::Receiver,
             syn::FnArg::Typed(pat_type) => match (index, pat_type.pat.as_ref()) {
                 (_, syn::Pat::Ident(pat_ident)) => {
-                    if Self::is_mutable_reference_with_lifetimes_in_type(pat_type.ty.as_ref()) {
+                    if self.is_generic_param_missing_static_bound(pat_type.ty.as_ref()) {
+                        ArgClass::GenericMissingStaticBound(pat_ident)
+                    } else if Self::is_mutable_reference_with_lifetimes_in_type(
+                        pat_type.ty.as_ref(),
+                    ) {
                         ArgClass::MutImpossible(pat_ident)
                     } else {
                         ArgClass::Other(pat_ident, &pat_type.ty)
@@ -220,6 +225,25 @@ impl<'t> MockMethod<'t> {
         }
 
         false
+    }
+
+    fn is_generic_param_missing_static_bound(&self, ty: &syn::Type) -> bool {
+        let ident = match ty {
+            syn::Type::Path(type_path) => {
+                if type_path.path.segments.len() != 1 {
+                    return false;
+                };
+
+                &type_path.path.segments.iter().next().unwrap().ident
+            }
+            _ => return false,
+        };
+
+        let Some(sig_generic_param) = self.sig_generics.params.get(&ident.to_string()) else {
+            return false;
+        };
+
+        !sig_generic_param.has_static_bound
     }
 }
 
@@ -245,8 +269,9 @@ pub fn extract_methods<'s>(
 
             let mut adapted_sig = method.sig.clone();
             let adapt_sig_result = adapt_sig(&mut adapted_sig);
-            let is_type_generic =
-                IsTypeGeneric(is_trait_type_generic.0 || adapt_sig_result.is_type_generic.0);
+            let is_type_generic = IsTypeGeneric(
+                is_trait_type_generic.0 || adapt_sig_result.sig_generics.is_mock_type_generic,
+            );
 
             let output_structure = output::determine_output_structure(
                 &adapted_sig,
@@ -286,7 +311,7 @@ pub fn extract_methods<'s>(
                 adapted_sig,
                 non_receiver_arg_count,
                 is_generic: adapt_sig_result.is_generic,
-                is_type_generic: adapt_sig_result.is_type_generic,
+                sig_generics: adapt_sig_result.sig_generics,
                 impl_trait_idents: adapt_sig_result.impl_trait_idents,
                 non_generic_mock_entry_ident: if is_type_generic.0 {
                     Some(generate_mock_fn_ident(
@@ -463,6 +488,19 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
                         }
                         InputsSyntax::EvalPatternMutAsWildcard => quote! { _ }.to_tokens(tokens),
                     },
+                    ArgClass::GenericMissingStaticBound(pat_ident) => match self.syntax {
+                        InputsSyntax::FnPattern | InputsSyntax::EvalPatternAll => {
+                            pat_ident.to_tokens(tokens)
+                        }
+                        InputsSyntax::EvalParams | InputsSyntax::FnParams => {
+                            let prefix = &self.attr.prefix;
+                            quote! {
+                                #prefix::ImpossibleWithoutExplicitStaticBound
+                            }
+                            .to_tokens(tokens)
+                        }
+                        InputsSyntax::EvalPatternMutAsWildcard => quote! { _ }.to_tokens(tokens),
+                    },
                     ArgClass::Other(pat_ident, _ty) => {
                         pat_ident.to_tokens(tokens);
                     }
@@ -483,26 +521,47 @@ impl<'t> quote::ToTokens for InputsDestructuring<'t> {
 
 struct AdaptSigResult {
     is_generic: IsGeneric,
-    is_type_generic: IsTypeGeneric,
+    sig_generics: SigGenerics,
     impl_trait_idents: HashSet<String>,
     rpit_future: Option<RpitFuture>,
 }
 
+pub struct SigGenerics {
+    pub is_mock_type_generic: bool,
+    params: HashMap<String, SigGenericParam>,
+}
+
+#[derive(Default, Debug)]
+struct SigGenericParam {
+    has_static_bound: bool,
+}
+
 // TODO: Rewrite impl Trait to normal param
 fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
-    let mut generics: syn::Generics = Default::default();
     let mut impl_trait_idents: HashSet<String> = HashSet::new();
-    std::mem::swap(&mut sig.generics, &mut generics);
 
     struct ImplTraitConverter<'s> {
         /// state
         cur_is_return: bool,
 
         /// output
-        generics: &'s mut syn::Generics,
+        generated_generic_params: syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma>,
+        sig_generics: SigGenerics,
         impl_trait_idents: &'s mut HashSet<String>,
         impl_trait_count: usize,
         rpit_future: Option<RpitFuture>,
+    }
+
+    fn contains_static_bound<'a>(bounds: impl Iterator<Item = &'a syn::TypeParamBound>) -> bool {
+        for bound in bounds {
+            if let syn::TypeParamBound::Lifetime(lt) = bound {
+                if lt.ident == "static" {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     impl<'s> syn::visit_mut::VisitMut for ImplTraitConverter<'s> {
@@ -521,8 +580,7 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
 
                 self.impl_trait_idents.insert(generic_ident.to_string());
 
-                self.generics
-                    .params
+                self.generated_generic_params
                     .push(syn::GenericParam::Type(syn::TypeParam {
                         attrs: vec![],
                         ident: generic_ident.clone(),
@@ -531,11 +589,14 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
                         eq_token: None,
                         default: None,
                     }));
+                self.sig_generics.is_mock_type_generic = true;
 
                 *ty = syn::parse_quote!( #generic_ident );
 
                 self.impl_trait_count += 1;
             }
+
+            syn::visit_mut::visit_type_mut(self, ty);
         }
 
         fn visit_return_type_mut(&mut self, i: &mut syn::ReturnType) {
@@ -543,11 +604,48 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
             syn::visit_mut::visit_return_type_mut(self, i);
             self.cur_is_return = false;
         }
+
+        fn visit_type_param_mut(&mut self, i: &mut syn::TypeParam) {
+            let ident = i.ident.to_string();
+            self.sig_generics.params.entry(ident.clone()).or_default();
+
+            syn::visit_mut::visit_type_param_mut(self, i);
+
+            if contains_static_bound(i.bounds.iter()) {
+                self.sig_generics
+                    .params
+                    .get_mut(&ident)
+                    .unwrap()
+                    .has_static_bound = true;
+            }
+        }
+
+        fn visit_predicate_type_mut(&mut self, i: &mut syn::PredicateType) {
+            syn::visit_mut::visit_predicate_type_mut(self, i);
+
+            if let syn::Type::Path(type_path) = &i.bounded_ty {
+                if type_path.path.segments.len() == 1 {
+                    let segment = type_path.path.segments.iter().next().unwrap();
+
+                    if contains_static_bound(i.bounds.iter()) {
+                        if let Some(info) =
+                            self.sig_generics.params.get_mut(&segment.ident.to_string())
+                        {
+                            info.has_static_bound = true;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let mut converter = ImplTraitConverter {
         cur_is_return: false,
-        generics: &mut generics,
+        generated_generic_params: Default::default(),
+        sig_generics: SigGenerics {
+            is_mock_type_generic: false,
+            params: Default::default(),
+        },
         impl_trait_idents: &mut impl_trait_idents,
         impl_trait_count: 0,
         rpit_future: None,
@@ -556,19 +654,47 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
 
     let rpit_future = converter.rpit_future;
 
-    // write back generics
-    std::mem::swap(&mut generics, &mut sig.generics);
+    for generic_param in converter.generated_generic_params {
+        sig.generics.params.push(generic_param);
+    }
 
-    let mut is_type_generic = IsTypeGeneric(false);
-    for generic_param in &sig.generics.params {
-        if matches!(generic_param, syn::GenericParam::Type(_)) {
-            is_type_generic.0 = true;
+    let mut filter_generic_params = false;
+
+    for sig_generic_param in converter.sig_generics.params.values() {
+        if sig_generic_param.has_static_bound {
+            converter.sig_generics.is_mock_type_generic = true;
+        } else {
+            filter_generic_params = true;
+        }
+    }
+
+    if filter_generic_params {
+        // remove all AdaptedSig generic params that are not 'static
+        let params = std::mem::take(&mut sig.generics.params);
+
+        for param in params {
+            match param {
+                syn::GenericParam::Type(type_param) => {
+                    if converter
+                        .sig_generics
+                        .params
+                        .get(&type_param.ident.to_string())
+                        .map(|param| param.has_static_bound)
+                        .unwrap_or(true)
+                    {
+                        sig.generics
+                            .params
+                            .push(syn::GenericParam::Type(type_param));
+                    }
+                }
+                param => sig.generics.params.push(param),
+            }
         }
     }
 
     AdaptSigResult {
         is_generic: IsGeneric(!sig.generics.params.is_empty()),
-        is_type_generic,
+        sig_generics: converter.sig_generics,
         impl_trait_idents,
         rpit_future,
     }

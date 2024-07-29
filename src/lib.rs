@@ -1234,6 +1234,10 @@ impl MockFnInfo {
 #[derive(Debug)]
 pub struct Impossible;
 
+/// A marker type used when Unimock is unable to represent the user's generic type because it's missing an explicit 'static bound.
+#[derive(Debug)]
+pub struct ImpossibleWithoutExplicitStaticBound;
+
 /// A clause represents a recipe for creating a unimock instance.
 ///
 /// Clauses may be _terminal_ (basic) and _non-terminal_ (composite).

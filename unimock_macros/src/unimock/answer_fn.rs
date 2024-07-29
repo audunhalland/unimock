@@ -25,52 +25,41 @@ pub fn make_answer_fn(
 
     let mut args: syn::punctuated::Punctuated<syn::Type, syn::token::Comma> = Default::default();
 
-    for fn_arg in &method.adapted_sig.inputs {
-        match fn_arg {
-            syn::FnArg::Receiver(syn::Receiver {
-                reference,
-                mutability,
-                ty,
-                ..
-            }) => {
-                if let Some((_, lifetime)) = reference {
-                    let lifetime = match lifetime {
-                        Some(lifetime) => {
-                            hrtbs.insert(lifetime.clone());
-                            lifetime.clone()
-                        }
-                        None => {
-                            hrtbs.insert(self_lifetime.clone());
-                            self_lifetime.clone()
-                        }
-                    };
-
-                    args.push(syn::Type::Reference(syn::TypeReference {
-                        and_token: Default::default(),
-                        lifetime: Some(lifetime),
-                        mutability: *mutability,
-                        elem: syn::parse_quote! {
-                            #prefix::Unimock
-                        },
-                    }));
-                } else if guess_is_pin(ty) {
-                    hrtbs.insert(self_lifetime.clone());
-                    let ty = syn::parse_quote! { & #self_lifetime mut #prefix::Unimock };
-                    args.push(ty);
-                } else {
-                    let ty = register_lifetimes_and_substitute_missing(
-                        ty.as_ref().clone(),
-                        Some(&self_lifetime),
-                        &mut hrtbs,
-                    );
-                    let receiver = self_type_to_unimock(ty, trait_info, attr);
-
-                    args.push(receiver);
-                }
+    for (arg_index, fn_arg) in method.adapted_sig.inputs.iter().enumerate() {
+        match method.classify_arg(fn_arg, arg_index) {
+            crate::unimock::method::ArgClass::GenericMissingStaticBound(_) => {
+                args.push(syn::parse_quote! {
+                    #prefix::ImpossibleWithoutExplicitStaticBound
+                });
             }
-            syn::FnArg::Typed(syn::PatType { pat, ty, .. }) => match pat.as_ref() {
-                syn::Pat::Ident(ident) if ident.ident == "self" => {
-                    if guess_is_pin(ty) {
+            _ => match fn_arg {
+                syn::FnArg::Receiver(syn::Receiver {
+                    reference,
+                    mutability,
+                    ty,
+                    ..
+                }) => {
+                    if let Some((_, lifetime)) = reference {
+                        let lifetime = match lifetime {
+                            Some(lifetime) => {
+                                hrtbs.insert(lifetime.clone());
+                                lifetime.clone()
+                            }
+                            None => {
+                                hrtbs.insert(self_lifetime.clone());
+                                self_lifetime.clone()
+                            }
+                        };
+
+                        args.push(syn::Type::Reference(syn::TypeReference {
+                            and_token: Default::default(),
+                            lifetime: Some(lifetime),
+                            mutability: *mutability,
+                            elem: syn::parse_quote! {
+                                #prefix::Unimock
+                            },
+                        }));
+                    } else if guess_is_pin(ty) {
                         hrtbs.insert(self_lifetime.clone());
                         let ty = syn::parse_quote! { & #self_lifetime mut #prefix::Unimock };
                         args.push(ty);
@@ -80,20 +69,38 @@ pub fn make_answer_fn(
                             Some(&self_lifetime),
                             &mut hrtbs,
                         );
-                        let ty = self_type_to_unimock(ty, trait_info, attr);
-                        args.push(ty);
+                        let receiver = self_type_to_unimock(ty, trait_info, attr);
+
+                        args.push(receiver);
                     }
                 }
-                _ => {
-                    let ty = register_lifetimes_and_substitute_missing(
-                        ty.as_ref().clone(),
-                        None,
-                        &mut hrtbs,
-                    );
-                    let ty = self_type_to_unimock(ty, trait_info, attr);
+                syn::FnArg::Typed(syn::PatType { pat, ty, .. }) => match pat.as_ref() {
+                    syn::Pat::Ident(ident) if ident.ident == "self" => {
+                        if guess_is_pin(ty) {
+                            hrtbs.insert(self_lifetime.clone());
+                            let ty = syn::parse_quote! { & #self_lifetime mut #prefix::Unimock };
+                            args.push(ty);
+                        } else {
+                            let ty = register_lifetimes_and_substitute_missing(
+                                ty.as_ref().clone(),
+                                Some(&self_lifetime),
+                                &mut hrtbs,
+                            );
+                            let ty = self_type_to_unimock(ty, trait_info, attr);
+                            args.push(ty);
+                        }
+                    }
+                    _ => {
+                        let ty = register_lifetimes_and_substitute_missing(
+                            ty.as_ref().clone(),
+                            None,
+                            &mut hrtbs,
+                        );
+                        let ty = self_type_to_unimock(ty, trait_info, attr);
 
-                    args.push(ty);
-                }
+                        args.push(ty);
+                    }
+                },
             },
         }
     }
