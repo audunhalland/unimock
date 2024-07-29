@@ -218,6 +218,23 @@ mod method_generics {
             T: 'static;
     }
 
+    #[unimock(api=G5)]
+    trait NonStaticArg {
+        fn m5<T>(&self, arg: T);
+    }
+
+    #[unimock(api=G6)]
+    trait NonStaticArgMix {
+        fn m6<T: 'static, U>(&self, t: T, u: U);
+    }
+
+    #[unimock(api=G7)]
+    trait NonStaticArgMix2 {
+        fn m7<T, U>(&self, t: T, u: U)
+        where
+            T: 'static;
+    }
+
     #[test]
     fn method_generics() {
         let u = Unimock::new((
@@ -237,12 +254,26 @@ mod method_generics {
                 .with_types::<i32>()
                 .next_call(matching!())
                 .returns((4, 4)),
+            G5::m5
+                .next_call(matching!(ImpossibleWithoutExplicitStaticBound))
+                .returns(()),
+            G6::m6
+                .with_types::<i32>()
+                .next_call(matching!(42, ImpossibleWithoutExplicitStaticBound))
+                .returns(()),
+            G7::m7
+                .with_types::<i32>()
+                .next_call(matching!(42, ImpossibleWithoutExplicitStaticBound))
+                .returns(()),
         ));
 
         assert_eq!(1, u.m1("g1"));
         assert_eq!(2, u.m2("g2".to_string()));
         assert_eq!("g3", u.m3::<&str>());
         assert_eq!((4, &4), u.m4::<i32>());
+        u.m5(42);
+        u.m6(42, 43);
+        u.m7(42, 43);
     }
 }
 
@@ -349,7 +380,7 @@ mod issue_37_mutation_with_generics {
     trait Mock {
         fn func<T>(&self, nasty: T, foo: &mut MyFoo)
         where
-            T: Bound;
+            T: Bound + 'static;
     }
 
     #[test]

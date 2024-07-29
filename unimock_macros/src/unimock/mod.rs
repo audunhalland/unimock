@@ -249,7 +249,7 @@ fn def_mock_fn(
     let input_lifetime = &attr.input_lifetime;
     let input_types_tuple = InputTypesTuple::new(method, trait_info, attr);
 
-    let generic_params = util::Generics::fn_params(trait_info, Some(method));
+    let generic_params = util::Generics::mock_fn_trait_params(trait_info, Some(method));
     let generic_args = util::Generics::fn_args(
         &trait_info.input_trait.generics,
         Some(method),
@@ -684,8 +684,11 @@ impl InputTypesTuple {
                 .filter_map(
                     |(index, input)| match mock_method.classify_arg(input, index) {
                         ArgClass::Receiver => None,
-                        ArgClass::MutImpossible(..) => Some(syn::parse_quote!(
+                        ArgClass::MutImpossible(_) => Some(syn::parse_quote!(
                             #prefix::Impossible
+                        )),
+                        ArgClass::GenericMissingStaticBound(_) => Some(syn::parse_quote!(
+                            #prefix::ImpossibleWithoutExplicitStaticBound
                         )),
                         ArgClass::Other(_, ty) => Some(ty.clone()),
                         ArgClass::Unprocessable(_) => None,

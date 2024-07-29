@@ -41,7 +41,7 @@ pub struct Generics<'t> {
 enum GenericsKind {
     None,
     TraitParams(ContainsAsync),
-    FnParams(ContainsAsync),
+    MockFnTraitParams(ContainsAsync),
     TraitArgs(InferImplTrait),
     FnArgs(InferImplTrait),
 }
@@ -88,7 +88,7 @@ fn are_any_type_generic(
     }
 
     if let Some(method) = method {
-        if method.is_type_generic.0 {
+        if method.sig_generics.is_mock_type_generic {
             return IsTypeGeneric(true);
         }
     }
@@ -111,12 +111,15 @@ impl<'t> Generics<'t> {
     }
 
     // Params: e.g. impl<A, B>
-    pub fn fn_params(trait_info: &'t TraitInfo, method: Option<&'t MockMethod<'t>>) -> Self {
+    pub fn mock_fn_trait_params(
+        trait_info: &'t TraitInfo,
+        method: Option<&'t MockMethod<'t>>,
+    ) -> Self {
         Self {
             trait_generics: &trait_info.input_trait.generics,
             method,
             kind: if are_any_type_generic(&trait_info.input_trait.generics, method).0 {
-                GenericsKind::FnParams(trait_info.contains_async)
+                GenericsKind::MockFnTraitParams(trait_info.contains_async)
             } else {
                 GenericsKind::None
             },
@@ -222,7 +225,8 @@ impl<'t> quote::ToTokens for Generics<'t> {
         syn::token::Lt::default().to_tokens(tokens);
         match &self.kind {
             GenericsKind::None => {}
-            GenericsKind::TraitParams(contains_async) | GenericsKind::FnParams(contains_async) => {
+            GenericsKind::TraitParams(contains_async)
+            | GenericsKind::MockFnTraitParams(contains_async) => {
                 let mut sep_tracker = SepTracker::new();
 
                 if let GenericsKind::TraitParams(_) = &self.kind {
@@ -276,7 +280,8 @@ pub struct MockFnPhantomsTuple<'t> {
 
 impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        if is_type_generic(&self.trait_info.input_trait.generics).0 || self.method.is_type_generic.0
+        if is_type_generic(&self.trait_info.input_trait.generics).0
+            || self.method.sig_generics.is_mock_type_generic
         {
             let phantom_data = iter_generic_type_params(self.trait_info, self.method)
                 .map(PhantomDataType)
