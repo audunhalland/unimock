@@ -213,7 +213,7 @@ impl<'t> Generics<'t> {
     }
 }
 
-impl<'t> quote::ToTokens for Generics<'t> {
+impl quote::ToTokens for Generics<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if let GenericsKind::None = &self.kind {
             return;
@@ -274,7 +274,7 @@ pub struct MockFnPhantomsTuple<'t> {
     pub method: &'t MockMethod<'t>,
 }
 
-impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
+impl quote::ToTokens for MockFnPhantomsTuple<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if is_type_generic(&self.trait_info.input_trait.generics).0 || self.method.is_type_generic.0
         {
@@ -294,7 +294,7 @@ impl<'t> quote::ToTokens for MockFnPhantomsTuple<'t> {
 
 pub struct PhantomDataConstructor<'t>(pub &'t syn::TypeParam);
 
-impl<'t> quote::ToTokens for PhantomDataConstructor<'t> {
+impl quote::ToTokens for PhantomDataConstructor<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let ident = &self.0.ident;
         quote! {
@@ -306,7 +306,7 @@ impl<'t> quote::ToTokens for PhantomDataConstructor<'t> {
 
 pub struct PhantomDataType<'t>(&'t syn::TypeParam);
 
-impl<'t> quote::ToTokens for PhantomDataType<'t> {
+impl quote::ToTokens for PhantomDataType<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let ident = &self.0.ident;
         quote! {
@@ -321,7 +321,7 @@ pub fn substitute_lifetimes(mut ty: syn::Type, lifetime: Option<&syn::Lifetime>)
         lifetime: Option<&'s syn::Lifetime>,
     }
 
-    impl<'s> syn::visit_mut::VisitMut for LifetimeReplace<'s> {
+    impl syn::visit_mut::VisitMut for LifetimeReplace<'_> {
         fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
             match reference.lifetime.as_ref().map(LifetimeKind::get) {
                 Some(LifetimeKind::Static) => {}
@@ -359,7 +359,7 @@ enum LifetimeKind<'a> {
     Normal(&'a syn::Lifetime),
 }
 
-impl<'a> LifetimeKind<'a> {
+impl LifetimeKind<'_> {
     fn get(lifetime: &syn::Lifetime) -> LifetimeKind<'_> {
         let ident = lifetime.ident.to_string();
         match ident.as_str() {
@@ -380,7 +380,7 @@ pub fn register_lifetimes_and_substitute_missing(
         register: &'s mut BTreeSet<syn::Lifetime>,
     }
 
-    impl<'s> syn::visit_mut::VisitMut for Ctx<'s> {
+    impl syn::visit_mut::VisitMut for Ctx<'_> {
         fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
             match reference.lifetime.as_ref().map(LifetimeKind::get) {
                 Some(LifetimeKind::Normal(lifetime)) => {
@@ -433,7 +433,7 @@ pub fn rename_lifetimes(
         rename_fn: &'t mut dyn FnMut(Option<&syn::Lifetime>) -> Option<Cow<'static, str>>,
     }
 
-    impl<'t> syn::visit_mut::VisitMut for Rename<'t> {
+    impl syn::visit_mut::VisitMut for Rename<'_> {
         fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
             if let Some(new_name) = (*self.rename_fn)(reference.lifetime.as_ref()) {
                 reference.lifetime = Some(syn::Lifetime::new(
@@ -463,7 +463,7 @@ pub fn self_type_to_unimock(mut ty: syn::Type, trait_info: &TraitInfo, attr: &At
         attr: &'a Attr,
     }
 
-    impl<'a> syn::visit_mut::VisitMut for SelfTypeToUnimock<'a> {
+    impl syn::visit_mut::VisitMut for SelfTypeToUnimock<'_> {
         fn visit_type_path_mut(&mut self, node: &mut syn::TypePath) {
             if node.path.is_ident("Self") {
                 let prefix = &self.attr.prefix;
@@ -593,7 +593,7 @@ pub fn replace_self_ty_with_path(mut ty: syn::Type, replacement_path: &syn::Path
         replacement_path: &'s syn::Path,
     }
 
-    impl<'s> syn::visit_mut::VisitMut for Replacer<'s> {
+    impl syn::visit_mut::VisitMut for Replacer<'_> {
         fn visit_path_mut(&mut self, path: &mut syn::Path) {
             if path.is_ident("Self") {
                 *path = self.replacement_path.clone();

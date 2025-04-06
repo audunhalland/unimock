@@ -421,7 +421,7 @@ pub struct InputsDestructuring<'t> {
     attr: &'t Attr,
 }
 
-impl<'t> quote::ToTokens for InputsDestructuring<'t> {
+impl quote::ToTokens for InputsDestructuring<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if self.tupled.0 {
             let inner = InputsDestructuring {
@@ -505,7 +505,7 @@ fn adapt_sig(sig: &mut syn::Signature) -> AdaptSigResult {
         rpit_future: Option<RpitFuture>,
     }
 
-    impl<'s> syn::visit_mut::VisitMut for ImplTraitConverter<'s> {
+    impl syn::visit_mut::VisitMut for ImplTraitConverter<'_> {
         fn visit_type_mut(&mut self, ty: &mut syn::Type) {
             if let syn::Type::ImplTrait(impl_trait) = ty {
                 if let Some(future_bound) = find_future_bound(impl_trait.bounds.iter()) {
@@ -583,7 +583,7 @@ pub enum Receiver {
 
 pub struct SelfReference<'a>(pub &'a Receiver);
 
-impl<'a> quote::ToTokens for SelfReference<'a> {
+impl quote::ToTokens for SelfReference<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match &self.0 {
             Receiver::Owned => {
@@ -602,7 +602,7 @@ impl<'a> quote::ToTokens for SelfReference<'a> {
 
 pub struct SelfToDelegator<'a>(pub &'a Receiver);
 
-impl<'a> quote::ToTokens for SelfToDelegator<'a> {
+impl quote::ToTokens for SelfToDelegator<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match &self.0 {
             Receiver::Owned | Receiver::Ref => {

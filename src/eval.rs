@@ -80,7 +80,7 @@ struct DynCtx<'u, 's> {
     input_debugger: &'s dyn Fn() -> Box<[Option<String>]>,
 }
 
-impl<'u, 's> DynCtx<'u, 's> {
+impl<'u> DynCtx<'u, '_> {
     #[inline(never)]
     fn eval_dyn(
         &self,

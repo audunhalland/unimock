@@ -194,7 +194,7 @@ impl<'s> Diff<'s> {
     }
 }
 
-impl<'s> Display for Diff<'s> {
+impl Display for Diff<'_> {
     #[cfg(feature = "pretty-print")]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let comparison = pretty_assertions::StrComparison::new(self.actual, self.expected);
