@@ -600,10 +600,10 @@ use private::{DefaultImplDelegator, Matching};
 ///
 /// * `#[unimock(api=#ident), ]`: Export a mocking API as a module with the given name
 /// * `#[unimock(api=[method1, method2, ..], )]`: Instead of generating a module, generate top-level mock structs for the methods in the trait,
-///     with the names of those structs passed with array-like syntax in the same order as the methods appear in the trait definition.
+///   with the names of those structs passed with array-like syntax in the same order as the methods appear in the trait definition.
 /// * `#[unimock(unmock_with=[a, b, _], )]`: Given there are e.g. 3 methods in the annotated trait, uses the given paths as unmock implementations.
-///     The functions are assigned to the methods in the same order as the methods are listed in the trait.
-///     A value of `_` means _no unmock support_ for that method.
+///   The functions are assigned to the methods in the same order as the methods are listed in the trait.
+///   A value of `_` means _no unmock support_ for that method.
 /// * `#[unimock(prefix=path, )]`: Makes unimock use a different path prefix than `::unimock`, in case the crate has been re-exported through another crate.
 /// * `#[unimock(type #ident = #assoc; )]`: Specify the value of the associated type `#ident`.
 pub use unimock_macros::unimock;

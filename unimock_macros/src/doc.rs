@@ -42,7 +42,7 @@ macro_rules! doc {
 
 struct SigDoc<'a>(&'a syn::Signature, SkipReceiver);
 
-impl<'a> SynDoc for SigDoc<'a> {
+impl SynDoc for SigDoc<'_> {
     fn doc(&self, out: &mut String) {
         doc!(out, [self.0.ident, self.0.generics, self.0.paren_token]);
 
@@ -81,7 +81,7 @@ fn should_print_arg_pair(
 
 struct Trail<'a, T>(pub &'a Option<T>, &'static str);
 
-impl<'a, T: SynDoc> SynDoc for Trail<'a, T> {
+impl<T: SynDoc> SynDoc for Trail<'_, T> {
     fn doc(&self, out: &mut String) {
         if let Some(t) = &self.0 {
             t.doc(out);
@@ -113,7 +113,7 @@ impl<'a, T, P> Sep<'a, T, P> {
     }
 }
 
-impl<'a, T: SynDoc, P: SynDoc> SynDoc for Sep<'a, T, P> {
+impl<T: SynDoc, P: SynDoc> SynDoc for Sep<'_, T, P> {
     fn doc(&self, out: &mut String) {
         let len = self.punct.len();
         for (index, pair) in self.punct.pairs().enumerate() {
@@ -142,7 +142,7 @@ impl<'a, T: SynDoc, P: SynDoc> SynDoc for Sep<'a, T, P> {
 
 struct TokenDoc<'s, T>(&'s T);
 
-impl<'s, T: ToTokens> SynDoc for TokenDoc<'s, T> {
+impl<T: ToTokens> SynDoc for TokenDoc<'_, T> {
     fn doc(&self, out: &mut String) {
         let mut stream = TokenStream::new();
         self.0.to_tokens(&mut stream);

@@ -439,7 +439,7 @@ impl<'s> ReturnTypeAnalyzer<'s> {
     }
 }
 
-impl<'s> syn::visit_mut::VisitMut for ReturnTypeAnalyzer<'s> {
+impl syn::visit_mut::VisitMut for ReturnTypeAnalyzer<'_> {
     fn visit_type_reference_mut(&mut self, reference: &mut syn::TypeReference) {
         self.analyze_lifetime(reference.lifetime.as_ref(), true);
         syn::visit_mut::visit_type_reference_mut(self, reference);

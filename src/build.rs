@@ -656,7 +656,7 @@ where
     }
 }
 
-impl<'p, F, T, O> Clause for QuantifyReturnValue<'p, F, T, O>
+impl<F, T, O> Clause for QuantifyReturnValue<'_, F, T, O>
 where
     F: MockFn,
     T: IntoReturnOnce<F::OutputKind>,
@@ -673,7 +673,7 @@ where
 ///
 /// In that case, it is only able to return once, because no [Clone] bound has been
 /// part of any construction step.
-impl<'p, F, T, O> Drop for QuantifyReturnValue<'p, F, T, O>
+impl<F, T, O> Drop for QuantifyReturnValue<'_, F, T, O>
 where
     F: MockFn,
     T: IntoReturnOnce<F::OutputKind>,
@@ -735,7 +735,7 @@ where
     }
 }
 
-impl<'p, F, O> Clause for Quantify<'p, F, O>
+impl<F, O> Clause for Quantify<'_, F, O>
 where
     F: MockFn,
     O: Ordering,
@@ -786,7 +786,7 @@ where
     }
 }
 
-impl<'p, F, O, R> Clause for QuantifiedResponse<'p, F, O, R>
+impl<F, O, R> Clause for QuantifiedResponse<'_, F, O, R>
 where
     F: MockFn,
     O: Ordering,
