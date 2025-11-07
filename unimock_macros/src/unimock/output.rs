@@ -31,7 +31,7 @@ impl OutputStructure {
     /// Type without future wrapping and without output::Kind injected
     pub fn output_type_stripped(&self) -> Option<syn::Type> {
         match &self.output_ty_stripped {
-            AssociatedInnerType::Typed(ty) => Some(ty.clone()),
+            AssociatedInnerType::Typed(ty) => Some((**ty).clone()),
             AssociatedInnerType::Unit => None,
         }
     }
@@ -60,7 +60,7 @@ impl OutputStructure {
 pub enum OutputWrapping {
     None,
     RpitFuture,
-    AssociatedFuture(syn::TraitItemType),
+    AssociatedFuture(Box<syn::TraitItemType>),
 }
 
 pub enum OutputKind {
@@ -180,8 +180,10 @@ pub fn determine_owned_or_deep_output_structure(
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 output_kind: OutputKind::Deep,
-                output_ty_stripped: AssociatedInnerType::Typed(syn::Type::Tuple(tuple)),
-                output_ty_with_kind: AssociatedInnerType::Typed(syn::Type::Tuple(kind_params)),
+                output_ty_stripped: AssociatedInnerType::Typed(Box::new(syn::Type::Tuple(tuple))),
+                output_ty_with_kind: AssociatedInnerType::Typed(Box::new(syn::Type::Tuple(
+                    kind_params,
+                ))),
             }
         }
         (OutputKind::Shallow, inner_ty) => {
@@ -190,8 +192,8 @@ pub fn determine_owned_or_deep_output_structure(
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 output_kind: kind,
-                output_ty_stripped: AssociatedInnerType::Typed(inner_ty),
-                output_ty_with_kind: AssociatedInnerType::Typed(deep_ty),
+                output_ty_stripped: AssociatedInnerType::Typed(Box::new(inner_ty)),
+                output_ty_with_kind: AssociatedInnerType::Typed(Box::new(deep_ty)),
             }
         }
         (kind, inner_ty) => {
@@ -201,7 +203,7 @@ pub fn determine_owned_or_deep_output_structure(
             OutputStructure {
                 wrapping: OutputWrapping::None,
                 output_kind: kind,
-                output_ty_stripped: AssociatedInnerType::Typed(inner_ty),
+                output_ty_stripped: AssociatedInnerType::Typed(Box::new(inner_ty)),
                 output_ty_with_kind,
             }
         }
@@ -289,7 +291,7 @@ fn determine_associated_future_structure(
     let future_bound = find_future_bound(assoc_ty.bounds.iter())?;
     let mut future_output_structure =
         determine_owned_or_deep_output_structure(sig, &future_bound.output.ty, attr);
-    future_output_structure.wrapping = OutputWrapping::AssociatedFuture(assoc_ty.clone());
+    future_output_structure.wrapping = OutputWrapping::AssociatedFuture(Box::new(assoc_ty.clone()));
 
     Some(future_output_structure)
 }
@@ -350,7 +352,7 @@ fn find_param_lifetime(sig: &syn::Signature, lifetime_ident: &syn::Ident) -> Opt
 #[derive(Clone)]
 enum AssociatedInnerType {
     Unit,
-    Typed(syn::Type),
+    Typed(Box<syn::Type>),
 }
 
 impl AssociatedInnerType {
@@ -360,12 +362,16 @@ impl AssociatedInnerType {
             add_dyn_static_bound(&mut inner_type);
         }
 
-        Self::Typed(inner_type)
+        Self::Typed(Box::new(inner_type))
     }
 
     fn self_type_to_unimock(&self, trait_info: &TraitInfo, attr: &Attr) -> Self {
         match self {
-            Self::Typed(ty) => Self::Typed(self_type_to_unimock(ty.clone(), trait_info, attr)),
+            Self::Typed(ty) => Self::Typed(Box::new(self_type_to_unimock(
+                (**ty).clone(),
+                trait_info,
+                attr,
+            ))),
             other => other.clone(),
         }
     }
@@ -487,10 +493,10 @@ fn add_dyn_static_bound(ty: &mut syn::Type) {
                         let mut tmp = Box::new(syn::Type::Verbatim(TokenStream::new()));
                         std::mem::swap(&mut tmp, &mut ty.elem);
 
-                        ty.elem = Box::new(syn::Type::Paren(syn::TypeParen {
+                        *ty.elem = syn::Type::Paren(syn::TypeParen {
                             paren_token: syn::token::Paren::default(),
                             elem: tmp,
-                        }));
+                        });
                     }
                 }
             }
