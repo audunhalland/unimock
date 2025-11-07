@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.8] - 2025-11-01
+### Fixed
+- Updated dependency polonius-the-crab
+- Clippy fixes
+
 ## [0.6.7] - 2024-07-27
 ### Fixed
 - Leaked private type for generic-argument mocks in `with_types` signature ([#58](https://github.com/audunhalland/unimock/issues/58)).
