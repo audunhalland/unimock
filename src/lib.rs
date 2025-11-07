@@ -425,7 +425,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-#![cfg_attr(feature = "unstable-doc-cfg", feature(doc_auto_cfg))]
+#![cfg_attr(feature = "unstable-doc-cfg", feature(doc_cfg))]
 
 #[cfg(not(any(feature = "std", feature = "critical-section")))]
 compile_error!("At least one of the features `std` or `critical-section` must be set.");
@@ -998,7 +998,6 @@ impl Drop for Unimock {
 ///
 /// ```rust
 /// # use unimock::*;
-/// #[test]
 /// fn test() -> Unimock {
 ///     Unimock::new(())
 /// }

@@ -90,7 +90,7 @@ impl<'t> MockMethod<'t> {
         syntax: InputsSyntax,
         tupled: Tupled,
         attr: &'t Attr,
-    ) -> InputsDestructuring {
+    ) -> InputsDestructuring<'_> {
         InputsDestructuring {
             method: self,
             syntax,
