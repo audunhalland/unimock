@@ -42,6 +42,9 @@ pub(crate) enum MockError {
         fn_call: debug::FnActualCall,
         pattern: debug::CallPatternDebug,
     },
+    CallToEscapedClone {
+        fn_call: debug::FnActualCall,
+    },
     FailedVerification(String),
     CannotUnmock {
         info: MockFnInfo,
@@ -135,6 +138,12 @@ impl core::fmt::Display for MockError {
                     f,
                     "{path} did not apply the answer function, this is a bug.",
                     path = info.path
+                )
+            }
+            Self::CallToEscapedClone { fn_call } => {
+                write!(
+                    f,
+                    "{fn_call}: Happened to an escaped Unimock clone, after call verification on the original instance."
                 )
             }
             Self::ExplicitPanic {

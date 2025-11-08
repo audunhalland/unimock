@@ -864,6 +864,21 @@ impl Unimock {
         teardown::teardown_panic(&mut self);
     }
 
+    /// Make Unimock not complain about escaped clones outliving the original instance.
+    ///
+    /// After the test function/task has returned, it will be impossible to make that test fail.
+    /// This is the reason unimock prefers to complain about escaped clones at that point.
+    /// But sometimes it can be inconvenient to achieve this, so this option exists to turn off the check.
+    ///
+    /// Calling mock methods in escaped clones (in escaped threads) is still a _panic_ in that thread,
+    /// but that will not be able to incluence the outcome of the test.
+    pub fn ignore_escaped_clones(self) -> Self {
+        self.shared_state
+            .ignore_escaped_clones
+            .store(true, core::sync::atomic::Ordering::Relaxed);
+        self
+    }
+
     /// Convert the given value into a reference.
     ///
     /// This can be useful when returning references from `answers` functions.

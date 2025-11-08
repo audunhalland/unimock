@@ -89,7 +89,7 @@ fn should_panic_with_explicit_message() {
 
 #[test]
 #[should_panic(
-    expected = "Unimock cannot verify calls, because the original instance got dropped while there are clones still alive."
+    expected = "Unimock cannot verify calls, because the original instance got dropped while there are escaped clones still alive. (use .ignore_escaped_clones() to disable this check)"
 )]
 fn should_crash_when_the_original_instance_disappears_before_the_clone() {
     let _ = {
@@ -197,4 +197,15 @@ fn no_default_impl() {
 #[should_panic = "No Mutex API available"]
 fn should_panic_without_mutex_api_for_owned_once_responder() {
     Unimock::new(SingleArgMock::owned.next_call(matching!(_)).returns(666));
+}
+
+#[test]
+#[should_panic(
+    expected = "SingleArg::method1(\"\"): Happened to an escaped Unimock clone, after call verification on the original instance."
+)]
+fn should_crash_when_calling_mock_method_after_origin_dropped_with_ignore_escaped_clones() {
+    let original = Unimock::new(()).ignore_escaped_clones();
+    let clone = original.clone();
+    drop(original);
+    clone.method1("");
 }

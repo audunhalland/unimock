@@ -1,5 +1,5 @@
 use core::any::TypeId;
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicBool, AtomicUsize};
 
 use crate::alloc::{vec, BTreeMap, Vec};
 use crate::debug;
@@ -17,6 +17,9 @@ pub(crate) struct SharedState {
 
     next_ordered_call_index: AtomicUsize,
     pub panic_reasons: MutexIsh<Vec<error::MockError>>,
+
+    pub ignore_escaped_clones: AtomicBool,
+    pub verification_started: AtomicBool,
 }
 
 impl SharedState {
@@ -30,6 +33,9 @@ impl SharedState {
 
             next_ordered_call_index: AtomicUsize::new(0),
             panic_reasons: MutexIsh::new(vec![]),
+
+            ignore_escaped_clones: AtomicBool::new(false),
+            verification_started: AtomicBool::new(false),
         }
     }
 

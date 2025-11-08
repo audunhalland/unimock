@@ -1,3 +1,5 @@
+use core::sync::atomic::Ordering;
+
 use crate::alloc::{Box, String};
 use crate::call_pattern::{CallPattern, PatIndex, PatternError, PatternResult};
 use crate::error::{self};
@@ -86,6 +88,8 @@ impl<'u> DynCtx<'u, '_> {
         &self,
         match_inputs: &dyn Fn(&CallPattern, Option<&mut MismatchReporter>) -> PatternResult<bool>,
     ) -> MockResult<EvalResult<'u>> {
+        self.check_preconditions()?;
+
         let fn_mocker = match self.shared_state.fn_mockers.get(&self.info.type_id) {
             None => {
                 return if self.info.has_default_impl {
@@ -231,5 +235,19 @@ impl<'u> DynCtx<'u, '_> {
 
     fn debug_inputs(&self) -> Box<[Option<String>]> {
         (self.input_debugger)()
+    }
+
+    fn check_preconditions(&self) -> MockResult<()> {
+        if self
+            .shared_state
+            .verification_started
+            .load(Ordering::Relaxed)
+        {
+            return Err(MockError::CallToEscapedClone {
+                fn_call: self.fn_call(),
+            });
+        }
+
+        Ok(())
     }
 }
