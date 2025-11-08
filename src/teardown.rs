@@ -1,3 +1,5 @@
+use core::sync::atomic::Ordering;
+
 use crate::alloc::{Arc, ToString, Vec};
 use crate::{error::MockError, Unimock};
 
@@ -41,6 +43,12 @@ pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
         return Ok(());
     }
 
+    // register the fact that verification is starting, making all other live clones into "escapees"
+    unimock
+        .shared_state
+        .verification_started
+        .store(true, Ordering::Relaxed);
+
     // skip verification if a known panic occured from unimock.
     #[cfg(not(feature = "std"))]
     if unimock.panicked.locked(|panicked| *panicked) {
@@ -55,8 +63,13 @@ pub(crate) fn teardown(unimock: &mut Unimock) -> Result<(), Vec<MockError>> {
 
     let strong_count = Arc::strong_count(&unimock.shared_state);
 
-    if strong_count > 1 {
-        panic!("Unimock cannot verify calls, because the original instance got dropped while there are clones still alive.");
+    if strong_count > 1
+        && !unimock
+            .shared_state
+            .ignore_escaped_clones
+            .load(Ordering::Relaxed)
+    {
+        panic!("Unimock cannot verify calls, because the original instance got dropped while there are escaped clones still alive. (use .ignore_escaped_clones() to disable this check)");
     }
 
     #[cfg(feature = "std")]
